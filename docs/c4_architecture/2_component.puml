@@ -1,0 +1,110 @@
+@startuml
+!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Context.puml
+!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Container.puml
+!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Component.puml
+
+LAYOUT_WITH_LEGEND()
+
+title "SwapCast System - Complete Component Architecture"
+
+Person(trader, "Trader", "Makes swaps on Uniswap v4 and includes price predictions")
+Person(admin, "Admin", "Can manually resolve edge case predictions")
+System_Ext(uniswap, "Uniswap v4", "Decentralized exchange protocol")
+System_Ext(chainlink_price, "Chainlink Price Feeds", "Decentralized oracle network for price data")
+System_Ext(chainlink_automation, "Chainlink Automation", "Decentralized service for checking expired predictions")
+
+' SwapCast Hook Components
+Container_Boundary(swapcast_hook, "SwapCast Hook Contract") {
+    Component(hook_interface, "Hook Interface", "Solidity", "Implements Uniswap v4 hook interface")
+    Component(data_parser, "Prediction Parser", "Solidity", "Extracts prediction parameters from transaction data")
+    Component(conviction_calculator, "Conviction Calculator", "Solidity", "Calculates conviction weight based on swap amount")
+}
+
+' Prediction Pool Components
+Container_Boundary(prediction_pool, "Prediction Pool Contract") {
+    Component(market_manager, "Market Manager", "Solidity", "Creates and manages prediction markets")
+    Component(position_manager, "Position Manager", "Solidity", "Manages prediction positions")
+    Component(market_registry, "Market Registry", "Solidity", "Stores active and resolved markets")
+    Component(odds_calculator, "Odds Calculator", "Solidity", "Calculates market odds based on position weights")
+    Component(market_resolver, "Market Resolver", "Solidity", "Updates market state when resolved")
+}
+
+' SwapCast NFT Components
+Container_Boundary(swapcast_nft, "SwapCast NFT Contract") {
+    Component(erc721, "ERC721 Implementation", "Solidity", "Implements NFT standard interface")
+    Component(metadata_manager, "Metadata Manager", "Solidity", "Manages prediction metadata")
+    Component(token_minter, "Token Minter", "Solidity", "Handles NFT minting process")
+    Component(token_burner, "Token Burner", "Solidity", "Handles NFT burning process")
+}
+
+' Oracle Resolver Components
+Container_Boundary(oracle_resolver, "Oracle Resolver Contract") {
+    Component(automation_interface, "Automation Interface", "Solidity", "Implements Chainlink Automation interface")
+    Component(chainlink_adapter, "Chainlink Adapter", "Solidity", "Interfaces with Chainlink price feeds")
+    Component(expired_checker, "Expired Checker", "Solidity", "Identifies expired predictions")
+    Component(admin_resolver, "Admin Resolver", "Solidity", "Handles manual resolution by admins")
+}
+
+' Reward Distributor Components
+Container_Boundary(reward_distributor, "Reward Distributor Contract") {
+    Component(claim_processor, "Claim Processor", "Solidity", "Processes reward claims")
+    Component(reward_calculator, "Reward Calculator", "Solidity", "Calculates rewards based on conviction weights")
+    Component(nft_verifier, "NFT Verifier", "Solidity", "Verifies NFT ownership and metadata")
+    Component(claim_registry, "Claim Registry", "Solidity", "Tracks processed claims")
+}
+
+' Frontend Components
+Container_Boundary(swapcast_ui, "SwapCast UI") {
+    Component(prediction_ui, "Prediction Interface", "React", "UI for creating predictions")
+    Component(position_viewer, "Position Viewer", "React", "Shows user's active positions")
+    Component(claim_ui, "Claim Interface", "React", "UI for claiming rewards")
+    Component(admin_ui, "Admin Interface", "React", "For manual resolution")
+}
+
+' External System Relationships
+Rel(trader, prediction_ui, "Creates predictions")
+Rel(trader, uniswap, "Performs swaps")
+Rel(trader, position_viewer, "Views positions")
+Rel(trader, claim_ui, "Claims rewards")
+Rel(admin, admin_ui, "Resolves edge cases")
+
+Rel(uniswap, hook_interface, "Calls afterSwap")
+Rel(chainlink_automation, automation_interface, "Triggers checks")
+Rel(chainlink_adapter, chainlink_price, "Gets price data")
+
+' SwapCast Hook Relationships
+Rel(hook_interface, data_parser, "Extracts prediction data")
+Rel(data_parser, conviction_calculator, "Calculates weight")
+Rel(conviction_calculator, position_manager, "Creates position")
+
+' Prediction Pool Relationships
+Rel(position_manager, market_manager, "Gets or creates market")
+Rel(market_manager, market_registry, "Stores market")
+Rel(position_manager, token_minter, "Requests NFT mint")
+Rel(market_manager, odds_calculator, "Updates odds")
+Rel(market_manager, automation_interface, "Registers for resolution")
+Rel(market_resolver, market_registry, "Updates state")
+
+' NFT Relationships
+Rel(token_minter, erc721, "Mints NFT")
+Rel(token_minter, metadata_manager, "Sets metadata")
+Rel(token_burner, erc721, "Burns NFT")
+Rel(position_viewer, erc721, "Views NFTs")
+
+' Oracle Relationships
+Rel(automation_interface, expired_checker, "Finds expired markets")
+Rel(expired_checker, chainlink_adapter, "Gets prices")
+Rel(chainlink_adapter, market_resolver, "Resolves market")
+Rel(admin_ui, admin_resolver, "Manual resolution")
+Rel(admin_resolver, market_resolver, "Updates market")
+
+' Reward Distributor Relationships
+Rel(claim_ui, claim_processor, "Initiates claim")
+Rel(claim_processor, nft_verifier, "Verifies ownership")
+Rel(nft_verifier, erc721, "Checks ownership")
+Rel(claim_processor, reward_calculator, "Calculates reward")
+Rel(reward_calculator, market_registry, "Gets market data")
+Rel(claim_processor, token_burner, "Burns NFT after claim")
+Rel(claim_processor, claim_registry, "Records claim")
+
+@enduml

@@ -1,0 +1,127 @@
+@startuml
+!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Sequence.puml
+
+title "SwapCast System - Complete Sequence Diagram"
+
+actor "Trader" as trader
+participant "Uniswap v4\nPool" as uniswap
+participant "SwapCast\nHook" as hook
+participant "Prediction\nPool" as pool
+participant "SwapCast\nNFT" as nft
+participant "Oracle\nResolver" as resolver
+participant "Chainlink\nPrice Feeds" as price_feeds
+participant "Chainlink\nAutomation" as automation
+participant "Reward\nDistributor" as distributor
+
+' Phase 1: Prediction Creation
+group Prediction Creation
+    trader -> uniswap : 1. swap(params) with prediction data
+    activate uniswap
+
+    uniswap -> uniswap : 2. Process swap
+    uniswap -> hook : 3. afterSwap(...)
+    activate hook
+
+    hook -> hook : 4. Parse prediction data
+    hook -> hook : 5. Calculate conviction weight
+    hook -> pool : 6. createPosition(...)
+    activate pool
+
+    pool -> pool : 7. Get or create market
+    pool -> resolver : 8. Register market for resolution
+    activate resolver
+    resolver --> pool : 9. Confirmation
+    deactivate resolver
+
+    pool -> nft : 10. mintPositionNFT(...)
+    activate nft
+    nft -> nft : 11. Store prediction metadata
+    nft --> pool : 12. Return NFT ID
+    deactivate nft
+
+    pool --> hook : 13. Return position ID
+    deactivate pool
+
+    hook --> uniswap : 14. Return afterSwap selector
+    deactivate hook
+
+    uniswap --> trader : 15. Swap and prediction completed
+    deactivate uniswap
+end
+
+' Phase 2: Prediction Resolution
+group Prediction Resolution (At Expiration)
+    automation -> resolver : 16. checkUpkeep()
+    activate resolver
+
+    resolver -> resolver : 17. Find expired markets
+    resolver --> automation : 18. (true, performData)
+    deactivate resolver
+
+    automation -> resolver : 19. performUpkeep(performData)
+    activate resolver
+
+    resolver -> price_feeds : 20. Get current price
+    activate price_feeds
+    price_feeds --> resolver : 21. Return price data
+    deactivate price_feeds
+
+    resolver -> resolver : 22. Determine outcome
+    resolver -> pool : 23. resolveMarket(marketId, outcome)
+    activate pool
+
+    pool -> pool : 24. Update market state
+    pool --> resolver : 25. Resolution completed
+    deactivate pool
+
+    resolver --> automation : 26. Upkeep completed
+    deactivate resolver
+end
+
+' Phase 3: Reward Claiming (Pull-based)
+group Reward Claiming (Pull-based)
+    trader -> distributor : 27. claimReward(nftId)
+    activate distributor
+
+    distributor -> distributor : 28. Check if already claimed
+    distributor -> nft : 29. Verify NFT ownership
+    activate nft
+    nft --> distributor : 30. Ownership confirmed
+    deactivate nft
+
+    distributor -> nft : 31. Get position metadata
+    activate nft
+    nft --> distributor : 32. Position details
+    deactivate nft
+
+    distributor -> pool : 33. Get market outcome
+    activate pool
+    pool --> distributor : 34. Market outcome data
+    deactivate pool
+
+    distributor -> distributor : 35. Verify winning position
+    distributor -> distributor : 36. Calculate reward amount
+
+    alt Position won
+        distributor -> nft : 37. burnNFT(nftId)
+        activate nft
+        nft --> distributor : 38. NFT burned
+        deactivate nft
+
+        distributor -> distributor : 39. Record claim in registry
+        note right: Funds remain in contract
+
+        distributor --> trader : 40. Return success with amount
+
+        trader -> distributor : 41. withdrawReward()
+        activate distributor
+        distributor -> trader : 42. Transfer reward funds
+        deactivate distributor
+    else Position lost or invalid
+        distributor --> trader : 43. Return failure (no reward)
+    end
+
+    deactivate distributor
+end
+
+@enduml
