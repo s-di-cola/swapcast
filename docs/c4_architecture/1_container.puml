@@ -20,6 +20,7 @@ System_Boundary(swapcast, "SwapCast System") {
     Container(swapcast_nft, "SwapCast NFT Contract", "Solidity", "ERC721 contract for prediction position tokens")
     Container(oracle_resolver, "Oracle Resolver Contract", "Solidity", "Resolves predictions using Chainlink data")
     Container(reward_distributor, "Reward Distributor Contract", "Solidity", "Calculates and distributes rewards to winners")
+    Container(treasury, "Treasury Contract", "Solidity", "Holds all prediction fees and pays out rewards to winners")
 
     ContainerDb(subgraph, "SwapCast Subgraph", "GraphQL", "Indexes prediction markets and positions for efficient querying")
 }
@@ -42,6 +43,9 @@ Rel(admin_ui, oracle_resolver, "Submits manual resolutions", "Web3")
 
 Rel(swapcast_hook, uniswap, "Hooks into swap transactions", "Solidity hooks")
 Rel(swapcast_hook, prediction_pool, "Creates prediction positions", "Function calls")
+Rel(prediction_pool, treasury, "Sends prediction fees", "Funds transfer")
+Rel(reward_distributor, treasury, "Instructs payout to winners", "Funds transfer")
+Rel(swapcast_ui, treasury, "Reads treasury balance and payouts", "Web3")
 
 Rel(prediction_pool, swapcast_nft, "Mints position NFTs", "Function calls")
 Rel(prediction_pool, oracle_resolver, "Registers markets for resolution", "Function calls")

@@ -11,11 +11,14 @@ Person(prediction_analyst, "Prediction Analyst", "Consumes market intelligence d
 Person(admin, "Admin", "Can manually resolve edge case predictions")
 
 System(swapcast, "SwapCast System", "Enables price predictions alongside swaps and rewards accurate predictors")
+System(treasury, "Treasury", "Holds all prediction fees and pays out rewards to winners")
 System_Ext(uniswap, "Uniswap v4", "Decentralized exchange protocol")
 System_Ext(chainlink_price, "Chainlink Price Feeds", "Decentralized oracle network for price data")
 System_Ext(chainlink_automation, "Chainlink Automation", "Decentralized service for checking expired predictions")
 
 Rel(trader, swapcast, "Makes predictions alongside swaps", "Web3")
+Rel(swapcast, treasury, "Sends prediction fees", "Funds transfer")
+Rel(treasury, swapcast, "Pays out rewards to winners", "Funds transfer")
 Rel(trader, uniswap, "Performs token swaps", "Web3")
 Rel(liquidity_provider, swapcast, "Provides initial liquidity", "Web3")
 Rel(prediction_analyst, swapcast, "Analyzes market sentiment data", "API/UI")

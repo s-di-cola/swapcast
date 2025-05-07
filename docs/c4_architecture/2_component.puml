@@ -53,6 +53,11 @@ Container_Boundary(reward_distributor, "Reward Distributor Contract") {
     Component(claim_registry, "Claim Registry", "Solidity", "Tracks processed claims")
 }
 
+' Treasury Components
+Container_Boundary(treasury, "Treasury Contract") {
+    Component(funds_manager, "Funds Manager", "Solidity", "Receives prediction fees and pays out rewards")
+}
+
 ' Frontend Components
 Container_Boundary(swapcast_ui, "SwapCast UI") {
     Component(prediction_ui, "Prediction Interface", "React", "UI for creating predictions")
@@ -81,7 +86,8 @@ Rel(conviction_calculator, position_manager, "Creates position")
 Rel(position_manager, market_manager, "Gets or creates market")
 Rel(market_manager, market_registry, "Stores market")
 Rel(position_manager, token_minter, "Requests NFT mint")
-Rel(market_manager, odds_calculator, "Updates odds")
+Rel(position_manager, odds_calculator, "Calculates odds for new positions")
+Rel(position_manager, funds_manager, "Sends prediction fees", "Funds transfer")
 Rel(market_manager, automation_interface, "Registers for resolution")
 Rel(market_resolver, market_registry, "Updates state")
 
