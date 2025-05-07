@@ -6,7 +6,7 @@ import "../src/PredictionPool.sol";
 
 contract MockNFT is SwapCastNFT {
     Metadata private _meta;
-    constructor() SwapCastNFT() {}
+    constructor() SwapCastNFT(address(0)) {}
     function setTestData(Metadata memory meta) public {
         _meta = meta;
     }

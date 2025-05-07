@@ -29,7 +29,7 @@ contract MockPool is PredictionPool {
 }
 
 contract MockNFT is SwapCastNFT {
-    constructor() SwapCastNFT() {}
+    constructor() SwapCastNFT(address(0)) {}
 }
 
 contract OracleResolverTest is Test {

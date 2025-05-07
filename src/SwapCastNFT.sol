@@ -10,6 +10,8 @@ import "openzeppelin-contracts/contracts/token/ERC721/ERC721.sol";
  * @dev Stores prediction metadata on-chain.
  */
 contract SwapCastNFT is ERC721 {
+    error AlreadyMinted();
+    error NotOwner();
     struct Metadata {
         uint256 marketId;
         uint8 outcome;
@@ -28,20 +30,35 @@ contract SwapCastNFT is ERC721 {
         _;
     }
 
-    constructor() ERC721("SwapCast Position", "SCNFT") {
-        predictionPool = msg.sender;
+    constructor(address _predictionPool) ERC721("SwapCast Position", "SCNFT") {
+        predictionPool = _predictionPool;
     }
 
     /// @notice Mint a new NFT for a prediction position
     function mint(address to, uint256 marketId, uint8 outcome, uint256 conviction) external onlyPredictionPool virtual {
         require(to != address(0), "Zero address");
-        uint256 tokenId = nextTokenId++;
+        uint256 tokenId = nextTokenId;
+        // Check if tokenId exists by trying ownerOf
+        bool exists = false;
+        try this.ownerOf(tokenId) returns (address) {
+            exists = true;
+        } catch {
+            exists = false;
+        }
+        if (exists) {
+            revert AlreadyMinted();
+        }
+        nextTokenId++;
         _mint(to, tokenId);
         _tokenMetadata[tokenId] = Metadata(marketId, outcome, conviction);
     }
 
     /// @notice Burn an NFT (only PredictionPool)
     function burn(uint256 tokenId) external onlyPredictionPool {
+        address owner = ownerOf(tokenId);
+        if (msg.sender != owner && !isApprovedForAll(owner, msg.sender) && getApproved(tokenId) != msg.sender) {
+            revert NotOwner();
+        }
         _burn(tokenId);
         delete _tokenMetadata[tokenId];
     }

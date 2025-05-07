@@ -7,7 +7,7 @@ import "../src/RewardDistributor.sol";
 contract MockNFT is SwapCastNFT {
     address private _holder;
     Metadata private _meta;
-    constructor() SwapCastNFT() {}
+    constructor() SwapCastNFT(address(0)) {}
     function setTestData(address holder, Metadata memory meta) public {
         _holder = holder;
         _meta = meta;

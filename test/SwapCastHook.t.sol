@@ -20,9 +20,14 @@ import "forge-std/console.sol";
 import {SwapCastHook} from "../src/SwapCastHook.sol";
 import {ImmutableState} from "../lib/v4-periphery/src/base/ImmutableState.sol";
 import {SwapCastNFT} from "../src/SwapCastNFT.sol";
+import {PredictionPool} from "../src/PredictionPool.sol";
+import {RewardDistributor} from "../src/RewardDistributor.sol";
 
 contract MockNFT is SwapCastNFT {
-    constructor() SwapCastNFT() {}
+    constructor() SwapCastNFT(address(0)) {}
+    function setPredictionPool(address pool) external {
+        predictionPool = pool;
+    }
 }
 
 contract TestSwapCastHook is Test, Deployers {
@@ -87,6 +92,51 @@ contract TestSwapCastHook is Test, Deployers {
     }
 
     // Add/expand tests here following this structure
+
+    function testAliceWinsBobLosesIntegration() public {
+        // Use Deployers helper to set up tokens
+        (Currency currency0, Currency currency1) = deployAndMint2Currencies();
+        // Deploy the NFT and prediction pool
+        MockNFT nft = new MockNFT();
+        PredictionPool pool = new PredictionPool(address(nft));
+        nft.setPredictionPool(address(pool));
+        RewardDistributor distributor = new RewardDistributor(address(pool), address(nft));
+        
+        // Fund distributor with ETH for reward payout
+        vm.deal(address(distributor), 10 ether);
+
+        // Create a market
+        uint256 endTime = block.timestamp + 1 days;
+        uint256 marketId = pool.createMarket("Alice vs Bob", endTime);
+
+        // Alice and Bob addresses
+        address alice = address(0xA11CE);
+        address bob = address(0xB0B);
+
+        // Alice and Bob place predictions (Alice: outcome 1, Bob: outcome 2)
+        vm.prank(alice);
+        pool.recordPrediction(alice, marketId, 1, 100);
+        vm.prank(bob);
+        pool.recordPrediction(bob, marketId, 0, 100);
+
+        // Warp to after market end and resolve in Alice's favor
+        vm.warp(endTime + 1);
+        pool.resolveMarket(marketId, 1);
+
+        // Alice claims reward (should succeed)
+        uint256 aliceBalanceBefore = alice.balance;
+        vm.prank(alice);
+        distributor.claim(0); // tokenId 0 should be Alice's
+        uint256 aliceBalanceAfter = alice.balance;
+        assertTrue(aliceBalanceAfter > aliceBalanceBefore, "Alice should get paid");
+        assertTrue(distributor.claimed(0));
+
+        // Bob tries to claim (should revert)
+        vm.prank(bob);
+        vm.expectRevert("Not winning outcome");
+        distributor.claim(1);
+    }
+
 
     function testDecodePredictionRevertsOnBadData() public {
         PoolKey memory key;

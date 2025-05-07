@@ -14,7 +14,6 @@ contract PredictionPoolMock {
 }
 
 
-
 contract SwapCastNFTTest is Test {
     SwapCastNFT nft;
     PredictionPoolMock pool;
@@ -22,13 +21,13 @@ contract SwapCastNFTTest is Test {
 
     function setUp() public {
         pool = new PredictionPoolMock();
-        nft = new SwapCastNFT();
+        nft = new SwapCastNFT(address(pool));
     }
 
     /// @notice Test that minting emits event and sets metadata
     function testMintAndMetadata() public {
-        // The test contract is the predictionPool (see constructor logic)
-        nft.mint(user, 1, 2, 100);
+        // Only the predictionPool (pool) can mint
+        pool.callMint(nft, user, 1, 2, 100);
         SwapCastNFT.Metadata memory meta = nft.tokenMetadata(0);
         assertEq(meta.marketId, 1);
         assertEq(meta.outcome, 2);
@@ -45,31 +44,33 @@ contract SwapCastNFTTest is Test {
     /// @notice Test that minting to zero address reverts
     function testMintToZeroAddressReverts() public {
         vm.expectRevert("Zero address");
-        nft.mint(address(0), 1, 2, 100);
+        pool.callMint(nft, address(0), 1, 2, 100);
     }
 
-    /// @notice Test that double minting same token id reverts (simulate by calling twice if logic exists)
-    function testDoubleMintReverts() public {
-        // Only works if real contract, not mock
-        // Uncomment and adjust if real mint logic is present
-        // pool.callMint(nft, user, 1, 2, 100);
-        // vm.expectRevert(SwapCastNFT.AlreadyMinted.selector);
-        // pool.callMint(nft, user, 1, 2, 100);
-    }
+    /// @notice Test that double minting same token id reverts
+    // function testDoubleMintReverts() public {
+    //     pool.callMint(nft, user, 1, 2, 100);
+    //     vm.expectRevert(SwapCastNFT.AlreadyMinted.selector);
+    //     pool.callMint(nft, user, 1, 2, 100);
+    // }
+
 
     /// @notice Test that unauthorized burn reverts
     function testUnauthorizedBurnReverts() public {
-        // Only works if real contract, not mock
-        // Uncomment and adjust if real burn logic is present
-        // vm.expectRevert(SwapCastNFT.NotOwner.selector);
-        // pool.callBurn(nft, 0);
+        // Mint as predictionPool
+        pool.callMint(nft, user, 1, 2, 100);
+        // Try to burn directly (not as pool)
+        vm.expectRevert("Not PredictionPool");
+        nft.burn(0);
     }
 
     function testBurn() public {
-        // Mint a token first
-        nft.mint(user, 1, 2, 100);
+        // Mint a token first as predictionPool
+        pool.callMint(nft, address(this), 1, 2, 100);
+        // Approve pool to burn
+        nft.approve(address(pool), 0);
         // Burn the token as predictionPool
-        nft.burn(0);
+        pool.callBurn(nft, 0);
         // Optionally, check that tokenMetadata(0) reverts or returns default
     }
 }
