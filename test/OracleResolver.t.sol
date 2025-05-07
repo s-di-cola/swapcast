@@ -1,11 +1,15 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.26;
 
+interface IChainlinkAggregator {
+    function latestAnswer() external view returns (int256);
+}
+
 event MarketResolved(uint256 indexed marketId, uint8 outcome);
 
 import "forge-std/Test.sol";
-import "../src/OracleResolver.sol";
-import "../src/PredictionPool.sol";
+import {OracleResolver} from "src/OracleResolver.sol";
+import {PredictionPool} from "src/PredictionPool.sol";
 
 contract MockAggregator is IChainlinkAggregator {
     int256 public answer;
@@ -19,7 +23,16 @@ contract MockAggregator is IChainlinkAggregator {
     }
 }
 
-import {MockNFT} from "./mocks/MockNFT.sol";
+import {SwapCastNFT} from "src/SwapCastNFT.sol";
+
+contract TestableSwapCastNFT is SwapCastNFT {
+    constructor(address _predictionPool) SwapCastNFT(_predictionPool) {}
+
+    function setPredictionPool(address _pool) public {
+        predictionPool = _pool;
+    }
+}
+
 import {MockPool} from "./mocks/MockPool.sol";
 
 contract OracleResolverTest is Test {
@@ -29,8 +42,9 @@ contract OracleResolverTest is Test {
     uint256 marketId = 1;
 
     function setUp() public {
-        MockNFT nft = new MockNFT();
+        TestableSwapCastNFT nft = new TestableSwapCastNFT(address(0));
         pool = new MockPool(address(nft));
+        nft.setPredictionPool(address(pool));
         resolver = new OracleResolver(address(pool));
         aggregator = new MockAggregator();
         pool.setTestData(PredictionPool.Market(1, "desc", 0, true, 1));

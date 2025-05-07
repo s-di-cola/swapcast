@@ -2,71 +2,111 @@
 pragma solidity ^0.8.26;
 
 import "forge-std/Test.sol";
-import "../src/RewardDistributor.sol";
+import "src/RewardDistributor.sol";
 
-import {MockNFT} from "./mocks/MockNFT.sol";
-import {MockPool} from "./mocks/MockPool.sol";
+import {SwapCastNFT} from "src/SwapCastNFT.sol";
+
+contract TestableSwapCastNFT is SwapCastNFT {
+    constructor(address _predictionPool) SwapCastNFT(_predictionPool) {}
+
+    function setPredictionPool(address _pool) public {
+        predictionPool = _pool;
+    }
+}
+
+import {PredictionPool} from "src/PredictionPool.sol";
 
 contract RewardDistributorTest is Test {
     RewardDistributor distributor;
-    MockNFT nft;
-    MockPool pool;
+    TestableSwapCastNFT nft;
+    PredictionPool pool;
     address user = address(0x123);
 
     function setUp() public {
-        nft = new MockNFT();
-        pool = new MockPool(address(nft));
+        nft = new TestableSwapCastNFT(address(0));
+        pool = new PredictionPool(address(nft));
+        nft.setPredictionPool(address(pool));
         distributor = new RewardDistributor(address(pool), address(nft));
-        nft.setTestData(user, SwapCastNFT.Metadata(1, 2, 10));
-        pool.setTestData(PredictionPool.Market(0, "desc", 0, true, 2));
+        // Create a market and mint an NFT to user via the pool
+        uint256 endTime = block.timestamp + 1 days;
+        uint256 marketId = pool.createMarket("desc", endTime);
+        pool.recordPrediction(user, marketId, 1, 10);
+        // Do not resolve here; resolve in test after time passes if needed
         vm.deal(address(distributor), 1 ether);
     }
 
     /// @notice Test that claiming a reward emits the correct event and sets claimed
     function testClaimReward() public {
+        // Advance time past endTime
+        uint256 endTime = block.timestamp + 1 days;
+        uint256 marketId = pool.createMarket("desc", endTime);
+        pool.recordPrediction(user, marketId, 1, 10);
+        uint256 tokenId = marketId;
+        vm.warp(endTime + 1);
+        pool.resolveMarket(marketId, 1);
         vm.expectEmit(true, true, false, true);
-        emit RewardDistributor.RewardClaimed(user, 0, 1e16);
+        emit RewardDistributor.RewardClaimed(user, tokenId, 1e16);
         vm.prank(user);
-        distributor.claim(0);
+        distributor.claim(tokenId);
         // Check claimed flag
-        assertTrue(distributor.claimed(0));
+        assertTrue(distributor.claimed(tokenId));
     }
 
     /// @notice Test that double claiming reverts with custom error
     function testDoubleClaimReverts() public {
+        uint256 endTime = block.timestamp + 1 days;
+        uint256 marketId = pool.createMarket("desc", endTime);
+        pool.recordPrediction(user, marketId, 1, 10);
+        uint256 tokenId = marketId;
+        vm.warp(endTime + 1);
+        pool.resolveMarket(marketId, 1);
         vm.prank(user);
-        distributor.claim(0);
+        distributor.claim(tokenId);
         vm.prank(user);
         vm.expectRevert("Already claimed");
-        distributor.claim(0);
+        distributor.claim(tokenId);
     }
 
     /// @notice Test that only the NFT holder can claim
     function testNonHolderCannotClaim() public {
+        uint256 endTime = block.timestamp + 1 days;
+        uint256 marketId = pool.createMarket("desc", endTime);
+        pool.recordPrediction(user, marketId, 1, 10);
+        uint256 tokenId = marketId;
+        vm.warp(endTime + 1);
+        pool.resolveMarket(marketId, 1);
         vm.prank(address(0x456));
         vm.expectRevert("Not NFT holder");
-        distributor.claim(0);
+        distributor.claim(tokenId);
     }
 
     /// @notice Test that cannot claim if market is unresolved
     function testCannotClaimUnresolvedMarket() public {
-        pool.setTestData(PredictionPool.Market(0, "desc", 0, false, 2));
+        uint256 endTime = block.timestamp + 1 days;
+        uint256 marketId = pool.createMarket("desc", endTime);
+        pool.recordPrediction(user, marketId, 1, 10);
+        uint256 tokenId = marketId;
+        // Do not resolve the market, keep it unresolved
         vm.prank(user);
         vm.expectRevert("Market not resolved");
-        distributor.claim(0);
+        distributor.claim(tokenId);
     }
 
     /// @notice Test that cannot claim if outcome is wrong
     function testCannotClaimWrongOutcome() public {
-        pool.setTestData(PredictionPool.Market(0, "desc", 0, true, 1));
+        uint256 endTime = block.timestamp + 1 days;
+        uint256 marketId = pool.createMarket("desc", endTime);
+        pool.recordPrediction(user, marketId, 0, 10);
+        uint256 tokenId = marketId;
+        vm.warp(endTime + 1);
+        pool.resolveMarket(marketId, 1);
         vm.prank(user);
         vm.expectRevert("Not winning outcome");
-        distributor.claim(0);
+        distributor.claim(tokenId);
     }
 
     /// @notice Test that zero address cannot claim
     function testZeroAddressCannotClaim() public {
-        nft.setTestData(address(0), SwapCastNFT.Metadata(1, 2, 10));
         vm.prank(address(0));
         vm.expectRevert("Zero address");
         distributor.claim(0);
@@ -79,16 +119,25 @@ contract RewardDistributorTest is Test {
     }
 
     function testMustBeWinningOutcome() public {
-        pool.setTestData(PredictionPool.Market(0, "desc", 0, true, 0));
+        uint256 endTime = block.timestamp + 1 days;
+        uint256 marketId = pool.createMarket("desc", endTime);
+        pool.recordPrediction(user, marketId, 0, 10);
+        uint256 tokenId = marketId;
+        vm.warp(endTime + 1);
+        pool.resolveMarket(marketId, 1);
         vm.prank(user);
         vm.expectRevert("Not winning outcome");
-        distributor.claim(0);
+        distributor.claim(tokenId);
     }
 
     function testMarketMustBeResolved() public {
-        pool.setTestData(PredictionPool.Market(0, "desc", 0, false, 2));
+        uint256 endTime = block.timestamp + 1 days;
+        uint256 marketId = pool.createMarket("desc", endTime);
+        pool.recordPrediction(user, marketId, 1, 10);
+        uint256 tokenId = marketId;
+        // Do not resolve the market, keep it unresolved
         vm.prank(user);
         vm.expectRevert("Market not resolved");
-        distributor.claim(0);
+        distributor.claim(tokenId);
     }
 }

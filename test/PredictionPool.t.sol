@@ -2,17 +2,26 @@
 pragma solidity ^0.8.26;
 
 import "forge-std/Test.sol";
-import "../src/PredictionPool.sol";
+import "src/PredictionPool.sol";
 
-import {MockNFT} from "./mocks/MockNFT.sol";
+import {SwapCastNFT} from "src/SwapCastNFT.sol";
+
+contract TestableSwapCastNFT is SwapCastNFT {
+    constructor(address _predictionPool) SwapCastNFT(_predictionPool) {}
+
+    function setPredictionPool(address _pool) public {
+        predictionPool = _pool;
+    }
+}
 
 contract PredictionPoolTest is Test {
     PredictionPool pool;
-    MockNFT nft;
+    TestableSwapCastNFT nft;
 
     function setUp() public {
-        nft = new MockNFT();
+        nft = new TestableSwapCastNFT(address(0));
         pool = new PredictionPool(address(nft));
+        nft.setPredictionPool(address(pool));
     }
 
     /// @notice Test that market creation emits the correct event and stores correct data

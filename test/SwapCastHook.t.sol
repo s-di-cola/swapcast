@@ -19,11 +19,19 @@ import {LiquidityAmounts} from "@uniswap/v4-core/test/utils/LiquidityAmounts.sol
 import "forge-std/console.sol";
 import {SwapCastHook} from "../src/SwapCastHook.sol";
 import {ImmutableState} from "../lib/v4-periphery/src/base/ImmutableState.sol";
-import {SwapCastNFT} from "../src/SwapCastNFT.sol";
-import {PredictionPool} from "../src/PredictionPool.sol";
-import {RewardDistributor} from "../src/RewardDistributor.sol";
+import {SwapCastNFT} from "src/SwapCastNFT.sol";
+import {PredictionPool} from "src/PredictionPool.sol";
+import {RewardDistributor} from "src/RewardDistributor.sol";
 
-import {MockNFT} from "./mocks/MockNFT.sol";
+import {SwapCastNFT} from "src/SwapCastNFT.sol";
+
+contract TestableSwapCastNFT is SwapCastNFT {
+    constructor(address _predictionPool) SwapCastNFT(_predictionPool) {}
+
+    function setPredictionPool(address _pool) public {
+        predictionPool = _pool;
+    }
+}
 
 contract TestSwapCastHook is Test, Deployers {
     MockERC20 token;
@@ -41,8 +49,8 @@ contract TestSwapCastHook is Test, Deployers {
         token.mint(address(this), 1000 ether);
         token.mint(address(1), 1000 ether);
 
-        // Deploy a mock NFT for SwapCastHook dependency
-        MockNFT nft = new MockNFT();
+        // Deploy a testable NFT for SwapCastHook dependency
+        TestableSwapCastNFT nft = new TestableSwapCastNFT(address(0));
         uint160 flags = uint160(Hooks.AFTER_SWAP_FLAG);
         deployCodeTo("SwapCastHook.sol", abi.encode(manager, address(nft)), address(flags));
         hook = SwapCastHook(address(flags));
@@ -85,9 +93,10 @@ contract TestSwapCastHook is Test, Deployers {
         // Use Deployers helper to set up tokens
         deployAndMint2Currencies(); // currencies unused, avoid warning
         // Deploy the NFT and prediction pool
-        MockNFT nft = new MockNFT();
+        TestableSwapCastNFT nft = new TestableSwapCastNFT(address(0));
         PredictionPool pool = new PredictionPool(address(nft));
         nft.setPredictionPool(address(pool));
+
         RewardDistributor distributor = new RewardDistributor(address(pool), address(nft));
 
         // Fund distributor with ETH for reward payout
