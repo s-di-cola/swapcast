@@ -23,7 +23,7 @@ contract TreasuryTest is Test {
 
     function testReceiveETH() public {
         vm.deal(address(this), 1 ether);
-        (bool sent, ) = address(treasury).call{value: 1 ether}("");
+        (bool sent,) = address(treasury).call{value: 1 ether}("");
         assertTrue(sent);
         assertEq(address(treasury).balance, 1 ether);
     }
@@ -31,7 +31,7 @@ contract TreasuryTest is Test {
     /// @notice Test that owner can withdraw and emits event
     function testOwnerWithdrawsETH() public {
         vm.deal(address(this), 1 ether);
-        (bool sent, ) = address(treasury).call{value: 1 ether}("");
+        (bool sent,) = address(treasury).call{value: 1 ether}("");
         assertTrue(sent);
         uint256 treasuryBalance = address(treasury).balance;
         vm.expectEmit(true, true, false, true);
@@ -45,7 +45,7 @@ contract TreasuryTest is Test {
     /// @notice Test that only owner can withdraw
     function testNonOwnerCannotWithdraw() public {
         vm.deal(address(this), 1 ether);
-        (bool sent, ) = address(treasury).call{value: 1 ether}("");
+        (bool sent,) = address(treasury).call{value: 1 ether}("");
         assertTrue(sent);
         vm.prank(nonOwner);
         vm.expectRevert("Not owner");
@@ -55,7 +55,7 @@ contract TreasuryTest is Test {
     /// @notice Test that withdrawing to zero address reverts
     function testWithdrawToZeroAddressReverts() public {
         vm.deal(address(this), 1 ether);
-        (bool sent, ) = address(treasury).call{value: 1 ether}("");
+        (bool sent,) = address(treasury).call{value: 1 ether}("");
         assertTrue(sent);
         vm.prank(owner);
         vm.expectRevert("Zero address");
