@@ -25,6 +25,7 @@ import {RewardDistributor} from "../src/RewardDistributor.sol";
 
 contract MockNFT is SwapCastNFT {
     constructor() SwapCastNFT(address(0)) {}
+
     function setPredictionPool(address pool) external {
         predictionPool = pool;
     }
@@ -57,7 +58,7 @@ contract TestSwapCastHook is Test, Deployers {
         token.approve(address(modifyLiquidityRouter), type(uint256).max);
 
         // Initialize a pool
-        (key, ) = initPool(
+        (key,) = initPool(
             ethCurrency,
             tokenCurrency,
             hook,
@@ -69,16 +70,9 @@ contract TestSwapCastHook is Test, Deployers {
         uint160 sqrtPriceAtTickLower = TickMath.getSqrtPriceAtTick(-60);
         uint160 sqrtPriceAtTickUpper = TickMath.getSqrtPriceAtTick(60);
         uint256 ethToAdd = 0.1 ether;
-        uint128 liquidityDelta = LiquidityAmounts.getLiquidityForAmount0(
-            SQRT_PRICE_1_1,
-            sqrtPriceAtTickUpper,
-            ethToAdd
-        );
-        uint256 tokenToAdd = LiquidityAmounts.getAmount1ForLiquidity(
-            sqrtPriceAtTickLower,
-            SQRT_PRICE_1_1,
-            liquidityDelta
-        );
+        uint128 liquidityDelta = LiquidityAmounts.getLiquidityForAmount0(SQRT_PRICE_1_1, sqrtPriceAtTickUpper, ethToAdd);
+        uint256 tokenToAdd =
+            LiquidityAmounts.getAmount1ForLiquidity(sqrtPriceAtTickLower, SQRT_PRICE_1_1, liquidityDelta);
         modifyLiquidityRouter.modifyLiquidity{value: ethToAdd}(
             key,
             ModifyLiquidityParams({
@@ -101,7 +95,7 @@ contract TestSwapCastHook is Test, Deployers {
         PredictionPool pool = new PredictionPool(address(nft));
         nft.setPredictionPool(address(pool));
         RewardDistributor distributor = new RewardDistributor(address(pool), address(nft));
-        
+
         // Fund distributor with ETH for reward payout
         vm.deal(address(distributor), 10 ether);
 
@@ -136,7 +130,6 @@ contract TestSwapCastHook is Test, Deployers {
         vm.expectRevert("Not winning outcome");
         distributor.claim(1);
     }
-
 
     function testDecodePredictionRevertsOnBadData() public {
         PoolKey memory key;

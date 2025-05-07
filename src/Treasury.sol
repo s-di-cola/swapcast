@@ -38,7 +38,7 @@ contract Treasury {
     function withdraw(address payable to, uint256 amount) external onlyOwner {
         require(to != address(0), "Zero address");
         require(address(this).balance >= amount, "Insufficient balance");
-        (bool sent, ) = to.call{value: amount}("");
+        (bool sent,) = to.call{value: amount}("");
         require(sent, "Withdraw failed");
         emit Withdraw(to, amount);
     }
@@ -51,4 +51,3 @@ contract Treasury {
         owner = newOwner;
     }
 }
-

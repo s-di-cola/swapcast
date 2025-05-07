@@ -6,13 +6,17 @@ import "../src/PredictionPool.sol";
 
 contract MockNFT is SwapCastNFT {
     Metadata private _meta;
+
     constructor() SwapCastNFT(address(0)) {}
+
     function setTestData(Metadata memory meta) public {
         _meta = meta;
     }
+
     function tokenMetadata(uint256) public view override returns (Metadata memory) {
         return _meta;
     }
+
     function mint(address to, uint256 marketId, uint8 outcome, uint256 conviction) public override {}
 }
 

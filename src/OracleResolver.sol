@@ -42,7 +42,10 @@ contract OracleResolver {
      * @param threshold The price threshold
      * @param resolveAbove Outcome if price is above threshold
      */
-    function registerMarketOracle(uint256 marketId, address aggregator, int256 threshold, uint8 resolveAbove) external onlyOwner {
+    function registerMarketOracle(uint256 marketId, address aggregator, int256 threshold, uint8 resolveAbove)
+        external
+        onlyOwner
+    {
         require(aggregator != address(0), "Zero address");
         require(marketOracles[marketId].aggregator == address(0), "Already registered");
         marketOracles[marketId] = MarketOracle(aggregator, marketId, resolveAbove, threshold);

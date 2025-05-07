@@ -7,12 +7,18 @@ import "../src/RewardDistributor.sol";
 contract MockNFT is SwapCastNFT {
     address private _holder;
     Metadata private _meta;
+
     constructor() SwapCastNFT(address(0)) {}
+
     function setTestData(address holder, Metadata memory meta) public {
         _holder = holder;
         _meta = meta;
     }
-    function ownerOf(uint256) public view override returns (address) { return _holder; }
+
+    function ownerOf(uint256) public view override returns (address) {
+        return _holder;
+    }
+
     function tokenMetadata(uint256) public view override returns (Metadata memory) {
         return _meta;
     }
@@ -20,10 +26,13 @@ contract MockNFT is SwapCastNFT {
 
 contract MockPool is PredictionPool {
     Market private _market;
+
     constructor(address _nft) PredictionPool(_nft) {}
+
     function setTestData(Market memory market) public {
         _market = market;
     }
+
     function markets(uint256) public view override returns (Market memory) {
         return _market;
     }

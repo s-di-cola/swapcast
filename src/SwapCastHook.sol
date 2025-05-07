@@ -60,29 +60,23 @@ contract SwapCastHook is BaseHook {
      * @dev Only afterSwap is enabled.
      * @return The permissions struct
      */
-    function getHookPermissions()
-        public
-        pure
-        override
-        returns (Hooks.Permissions memory)
-    {
-        return
-            Hooks.Permissions({
-                beforeInitialize: false,
-                afterInitialize: false,
-                beforeAddLiquidity: false,
-                beforeRemoveLiquidity: false,
-                afterAddLiquidity: false,
-                afterRemoveLiquidity: false,
-                beforeSwap: false,
-                afterSwap: true,
-                beforeDonate: false,
-                afterDonate: false,
-                beforeSwapReturnDelta: false,
-                afterSwapReturnDelta: false,
-                afterAddLiquidityReturnDelta: false,
-                afterRemoveLiquidityReturnDelta: false
-            });
+    function getHookPermissions() public pure override returns (Hooks.Permissions memory) {
+        return Hooks.Permissions({
+            beforeInitialize: false,
+            afterInitialize: false,
+            beforeAddLiquidity: false,
+            beforeRemoveLiquidity: false,
+            afterAddLiquidity: false,
+            afterRemoveLiquidity: false,
+            beforeSwap: false,
+            afterSwap: true,
+            beforeDonate: false,
+            afterDonate: false,
+            beforeSwapReturnDelta: false,
+            afterSwapReturnDelta: false,
+            afterAddLiquidityReturnDelta: false,
+            afterRemoveLiquidityReturnDelta: false
+        });
     }
 
     /**
@@ -130,7 +124,10 @@ contract SwapCastHook is BaseHook {
      * @return marketId The marketId
      * @return outcome The predicted outcome
      */
-    function _decodePrediction(bytes calldata hookData, address sender) internal returns (uint256 marketId, uint8 outcome) {
+    function _decodePrediction(bytes calldata hookData, address sender)
+        internal
+        returns (uint256 marketId, uint8 outcome)
+    {
         if (hookData.length != 33) {
             emit InvalidPrediction(sender, "Invalid prediction data length");
             revert InvalidPredictionData(hookData.length);
@@ -146,7 +143,11 @@ contract SwapCastHook is BaseHook {
      * @return amount1 The absolute value of amount1
      * @return conviction The sum of absolute values
      */
-    function _calculateConviction(BalanceDelta delta) internal pure returns (int128 amount0, int128 amount1, uint256 conviction) {
+    function _calculateConviction(BalanceDelta delta)
+        internal
+        pure
+        returns (int128 amount0, int128 amount1, uint256 conviction)
+    {
         int256 raw = BalanceDelta.unwrap(delta);
         amount0 = int128(raw >> 128);
         amount1 = int128(uint128(uint256(raw)));
@@ -154,5 +155,4 @@ contract SwapCastHook is BaseHook {
         uint128 abs1 = amount1 >= 0 ? uint128(uint64(uint128(amount1))) : uint128(uint64(uint128(-amount1)));
         conviction = uint256(abs0) + uint256(abs1);
     }
-
 }

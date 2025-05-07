@@ -18,6 +18,7 @@ contract PredictionPool {
         uint8 outcome;
     }
     /// @notice Struct representing a user's prediction position
+
     struct Position {
         address user;
         uint256 marketId;
@@ -60,8 +61,12 @@ contract PredictionPool {
      * @param id The market id
      * @return The Market struct
      */
-    function markets(uint256 id) public view virtual returns (Market memory) { return _markets[id]; }
+
+    function markets(uint256 id) public view virtual returns (Market memory) {
+        return _markets[id];
+    }
     /// @notice Mapping of marketId to all positions
+
     mapping(uint256 => Position[]) public positionsByMarket;
     /// @notice Tracks if a user has already predicted for a market
     mapping(uint256 => mapping(address => bool)) public hasPredicted;
@@ -183,5 +188,4 @@ contract PredictionPool {
         if (totalConviction == 0) return 0;
         odds = (outcomeConviction * 1e18) / totalConviction;
     }
-
-    }
+}

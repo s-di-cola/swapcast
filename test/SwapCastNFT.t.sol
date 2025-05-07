@@ -8,11 +8,11 @@ contract PredictionPoolMock {
     function callMint(SwapCastNFT nft, address to, uint256 marketId, uint8 outcome, uint256 conviction) public {
         nft.mint(to, marketId, outcome, conviction);
     }
+
     function callBurn(SwapCastNFT nft, uint256 tokenId) public {
         nft.burn(tokenId);
     }
 }
-
 
 contract SwapCastNFTTest is Test {
     SwapCastNFT nft;
@@ -53,7 +53,6 @@ contract SwapCastNFTTest is Test {
     //     vm.expectRevert(SwapCastNFT.AlreadyMinted.selector);
     //     pool.callMint(nft, user, 1, 2, 100);
     // }
-
 
     /// @notice Test that unauthorized burn reverts
     function testUnauthorizedBurnReverts() public {

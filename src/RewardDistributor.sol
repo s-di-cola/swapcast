@@ -44,7 +44,7 @@ contract RewardDistributor {
         require(winningOutcome == outcome, "Not winning outcome");
         claimed[tokenId] = true;
         uint256 reward = conviction * 1e15; // Example: 0.001 ETH per conviction unit
-        (bool sent, ) = msg.sender.call{value: reward}("");
+        (bool sent,) = msg.sender.call{value: reward}("");
         require(sent, "Reward transfer failed");
         emit RewardClaimed(msg.sender, tokenId, reward);
     }

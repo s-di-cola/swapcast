@@ -12,6 +12,7 @@ import "openzeppelin-contracts/contracts/token/ERC721/ERC721.sol";
 contract SwapCastNFT is ERC721 {
     error AlreadyMinted();
     error NotOwner();
+
     struct Metadata {
         uint256 marketId;
         uint8 outcome;
@@ -20,9 +21,11 @@ contract SwapCastNFT is ERC721 {
 
     uint256 public nextTokenId;
     mapping(uint256 => Metadata) internal _tokenMetadata;
+
     function tokenMetadata(uint256 tokenId) public view virtual returns (Metadata memory) {
         return _tokenMetadata[tokenId];
     }
+
     address public predictionPool;
 
     modifier onlyPredictionPool() {
@@ -35,7 +38,11 @@ contract SwapCastNFT is ERC721 {
     }
 
     /// @notice Mint a new NFT for a prediction position
-    function mint(address to, uint256 marketId, uint8 outcome, uint256 conviction) external onlyPredictionPool virtual {
+    function mint(address to, uint256 marketId, uint8 outcome, uint256 conviction)
+        external
+        virtual
+        onlyPredictionPool
+    {
         require(to != address(0), "Zero address");
         uint256 tokenId = nextTokenId;
         // Check if tokenId exists by trying ownerOf
@@ -66,15 +73,25 @@ contract SwapCastNFT is ERC721 {
     /// @notice Returns on-chain metadata as a string
     function tokenURI(uint256 tokenId) public view override returns (string memory) {
         Metadata memory m = _tokenMetadata[tokenId];
-        return string(abi.encodePacked(
-            "data:application/json,{",
-            '"name":"SwapCast Prediction #', _toString(tokenId), '",',
-            '"description":"Prediction on market ', _toString(m.marketId), '",',
-            '"attributes":[',
-            '{"trait_type":"Outcome","value":"', _toString(m.outcome), '"},',
-            '{"trait_type":"Conviction","value":"', _toString(m.conviction), '"}',
-            "]}"
-        ));
+        return string(
+            abi.encodePacked(
+                "data:application/json,{",
+                '"name":"SwapCast Prediction #',
+                _toString(tokenId),
+                '",',
+                '"description":"Prediction on market ',
+                _toString(m.marketId),
+                '",',
+                '"attributes":[',
+                '{"trait_type":"Outcome","value":"',
+                _toString(m.outcome),
+                '"},',
+                '{"trait_type":"Conviction","value":"',
+                _toString(m.conviction),
+                '"}',
+                "]}"
+            )
+        );
     }
 
     function _toString(uint256 value) internal pure returns (string memory) {

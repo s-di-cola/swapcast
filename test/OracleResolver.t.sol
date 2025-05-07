@@ -9,20 +9,29 @@ import "../src/PredictionPool.sol";
 
 contract MockAggregator is IChainlinkAggregator {
     int256 public answer;
-    function setLatestAnswer(int256 _ans) external { answer = _ans; }
-    function latestAnswer() external view override returns (int256) { return answer; }
+
+    function setLatestAnswer(int256 _ans) external {
+        answer = _ans;
+    }
+
+    function latestAnswer() external view override returns (int256) {
+        return answer;
+    }
 }
 
 contract MockPool is PredictionPool {
-
     Market private _market;
+
     constructor(address _nft) PredictionPool(_nft) {}
+
     function setTestData(Market memory market) public {
         _market = market;
     }
+
     function resolveMarket(uint256 marketId, uint8 outcome) public override {
         emit MarketResolved(marketId, outcome);
     }
+
     function markets(uint256) public view override returns (Market memory) {
         return _market;
     }
@@ -86,7 +95,7 @@ contract OracleResolverTest is Test {
         aggregator.setLatestAnswer(50);
         vm.expectEmit(true, false, false, true);
         emit MarketResolved(marketId, 0);
-        
+
         resolver.resolve(marketId);
     }
 }
