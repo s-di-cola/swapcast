@@ -23,13 +23,7 @@ import {SwapCastNFT} from "../src/SwapCastNFT.sol";
 import {PredictionPool} from "../src/PredictionPool.sol";
 import {RewardDistributor} from "../src/RewardDistributor.sol";
 
-contract MockNFT is SwapCastNFT {
-    constructor() SwapCastNFT(address(0)) {}
-
-    function setPredictionPool(address pool) external {
-        predictionPool = pool;
-    }
-}
+import {MockNFT} from "./mocks/MockNFT.sol";
 
 contract TestSwapCastHook is Test, Deployers {
     MockERC20 token;

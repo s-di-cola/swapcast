@@ -19,27 +19,8 @@ contract MockAggregator is IChainlinkAggregator {
     }
 }
 
-contract MockPool is PredictionPool {
-    Market private _market;
-
-    constructor(address _nft) PredictionPool(_nft) {}
-
-    function setTestData(Market memory market) public {
-        _market = market;
-    }
-
-    function resolveMarket(uint256 marketId, uint8 outcome) public override {
-        emit MarketResolved(marketId, outcome);
-    }
-
-    function markets(uint256) public view override returns (Market memory) {
-        return _market;
-    }
-}
-
-contract MockNFT is SwapCastNFT {
-    constructor() SwapCastNFT(address(0)) {}
-}
+import {MockNFT} from "./mocks/MockNFT.sol";
+import {MockPool} from "./mocks/MockPool.sol";
 
 contract OracleResolverTest is Test {
     OracleResolver resolver;
