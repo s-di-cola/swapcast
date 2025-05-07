@@ -71,8 +71,8 @@ contract TestSwapCastHook is Test, Deployers {
         uint160 sqrtPriceAtTickUpper = TickMath.getSqrtPriceAtTick(60);
         uint256 ethToAdd = 0.1 ether;
         uint128 liquidityDelta = LiquidityAmounts.getLiquidityForAmount0(SQRT_PRICE_1_1, sqrtPriceAtTickUpper, ethToAdd);
-        uint256 tokenToAdd =
-            LiquidityAmounts.getAmount1ForLiquidity(sqrtPriceAtTickLower, SQRT_PRICE_1_1, liquidityDelta);
+        // tokenToAdd is unused, so we omit it to avoid compiler warnings
+        LiquidityAmounts.getAmount1ForLiquidity(sqrtPriceAtTickLower, SQRT_PRICE_1_1, liquidityDelta);
         modifyLiquidityRouter.modifyLiquidity{value: ethToAdd}(
             key,
             ModifyLiquidityParams({
@@ -89,7 +89,7 @@ contract TestSwapCastHook is Test, Deployers {
 
     function testAliceWinsBobLosesIntegration() public {
         // Use Deployers helper to set up tokens
-        (Currency currency0, Currency currency1) = deployAndMint2Currencies();
+        deployAndMint2Currencies(); // currencies unused, avoid warning
         // Deploy the NFT and prediction pool
         MockNFT nft = new MockNFT();
         PredictionPool pool = new PredictionPool(address(nft));

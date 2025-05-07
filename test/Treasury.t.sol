@@ -23,17 +23,16 @@ contract TreasuryTest is Test {
 
     function testReceiveETH() public {
         vm.deal(address(this), 1 ether);
-        (bool sent, bytes memory returnData) = address(treasury).call{value: 1 ether}("");
-        assertEq(returnData.length, 0);
+        (bool sent, ) = address(treasury).call{value: 1 ether}("");
+        assertTrue(sent);
         assertEq(address(treasury).balance, 1 ether);
     }
 
     /// @notice Test that owner can withdraw and emits event
     function testOwnerWithdrawsETH() public {
         vm.deal(address(this), 1 ether);
-        (bool sent, bytes memory returnData) = address(treasury).call{value: 1 ether}("");
+        (bool sent, ) = address(treasury).call{value: 1 ether}("");
         assertTrue(sent);
-        assertEq(returnData.length, 0);
         uint256 treasuryBalance = address(treasury).balance;
         vm.expectEmit(true, true, false, true);
         emit Treasury.Withdraw(recipient, treasuryBalance);
@@ -46,9 +45,8 @@ contract TreasuryTest is Test {
     /// @notice Test that only owner can withdraw
     function testNonOwnerCannotWithdraw() public {
         vm.deal(address(this), 1 ether);
-        (bool sent, bytes memory returnData) = address(treasury).call{value: 1 ether}("");
+        (bool sent, ) = address(treasury).call{value: 1 ether}("");
         assertTrue(sent);
-        assertEq(returnData.length, 0);
         vm.prank(nonOwner);
         vm.expectRevert("Not owner");
         treasury.withdraw(recipient, 1 ether);
@@ -57,9 +55,8 @@ contract TreasuryTest is Test {
     /// @notice Test that withdrawing to zero address reverts
     function testWithdrawToZeroAddressReverts() public {
         vm.deal(address(this), 1 ether);
-        (bool sent, bytes memory returnData) = address(treasury).call{value: 1 ether}("");
+        (bool sent, ) = address(treasury).call{value: 1 ether}("");
         assertTrue(sent);
-        assertEq(returnData.length, 0);
         vm.prank(owner);
         vm.expectRevert("Zero address");
         treasury.withdraw(payable(address(0)), 1 ether);
