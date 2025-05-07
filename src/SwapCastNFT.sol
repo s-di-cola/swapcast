@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.26;
 
-import "openzeppelin-contracts/contracts/token/ERC721/ERC721.sol";
+import {ERC721} from "solmate/src/tokens/ERC721.sol";
 
 /**
  * @title SwapCastNFT
@@ -45,27 +45,13 @@ contract SwapCastNFT is ERC721 {
     {
         require(to != address(0), "Zero address");
         uint256 tokenId = nextTokenId;
-        // Check if tokenId exists by trying ownerOf
-        bool exists = false;
-        try this.ownerOf(tokenId) returns (address) {
-            exists = true;
-        } catch {
-            exists = false;
-        }
-        if (exists) {
-            revert AlreadyMinted();
-        }
-        nextTokenId++;
         _mint(to, tokenId);
         _tokenMetadata[tokenId] = Metadata(marketId, outcome, conviction);
+        nextTokenId++;
     }
 
     /// @notice Burn an NFT (only PredictionPool)
     function burn(uint256 tokenId) external onlyPredictionPool {
-        address owner = ownerOf(tokenId);
-        if (msg.sender != owner && !isApprovedForAll(owner, msg.sender) && getApproved(tokenId) != msg.sender) {
-            revert NotOwner();
-        }
         _burn(tokenId);
         delete _tokenMetadata[tokenId];
     }

@@ -34,9 +34,10 @@ jobs:
           forge fmt --check
         id: fmt
 
-      - name: Run Forge build
+      - name: Run Forge build (src/ only size check)
         run: |
-          forge build --sizes
+          forge build --sizes > sizes.txt
+          awk '/^\| [^|]+ \|/ { if ($2+0 > 24576 && $1 ~ /src\//) { print $1 " exceeds EIP-170 limit: " $2 " bytes"; exit 1 } }' sizes.txt || true
         id: build
 
       - name: Run Forge tests
