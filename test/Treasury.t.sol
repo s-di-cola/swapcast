@@ -4,7 +4,8 @@ pragma solidity ^0.8.26;
 event OwnershipTransferred(address indexed previousOwner, address indexed newOwner);
 
 import "forge-std/Test.sol";
-import "../src/Treasury.sol";
+import {Treasury} from "../src/Treasury.sol";
+import {Ownable} from "@openzeppelin/contracts/access/Ownable.sol";
 
 contract TreasuryTest is Test {
     Treasury treasury;
@@ -14,7 +15,7 @@ contract TreasuryTest is Test {
 
     function setUp() public {
         vm.prank(owner);
-        treasury = new Treasury();
+        treasury = new Treasury(owner);
     }
 
     function testOwnerIsDeployer() public view {
@@ -35,9 +36,9 @@ contract TreasuryTest is Test {
         assertTrue(sent);
         uint256 treasuryBalance = address(treasury).balance;
         vm.expectEmit(true, true, false, true);
-        emit Treasury.Withdraw(recipient, treasuryBalance);
+        emit Treasury.OwnerWithdrawal(recipient, treasuryBalance);
         vm.prank(owner);
-        treasury.withdraw(recipient, treasuryBalance);
+        treasury.withdraw(treasuryBalance, recipient);
         assertEq(address(treasury).balance, 0);
         assertEq(recipient.balance, treasuryBalance);
     }
@@ -48,8 +49,8 @@ contract TreasuryTest is Test {
         (bool sent,) = address(treasury).call{value: 1 ether}("");
         assertTrue(sent);
         vm.prank(nonOwner);
-        vm.expectRevert("Not owner");
-        treasury.withdraw(recipient, 1 ether);
+        vm.expectRevert(abi.encodeWithSelector(Ownable.OwnableUnauthorizedAccount.selector, nonOwner));
+        treasury.withdraw(1 ether, recipient);
     }
 
     /// @notice Test that withdrawing to zero address reverts
@@ -58,15 +59,23 @@ contract TreasuryTest is Test {
         (bool sent,) = address(treasury).call{value: 1 ether}("");
         assertTrue(sent);
         vm.prank(owner);
-        vm.expectRevert("Zero address");
-        treasury.withdraw(payable(address(0)), 1 ether);
+        vm.expectRevert(abi.encodeWithSelector(Treasury.ZeroAddress.selector, "Withdrawal address cannot be zero"));
+        treasury.withdraw(1 ether, payable(address(0)));
     }
 
     /// @notice Test that withdrawing with insufficient balance reverts
     function testWithdrawInsufficientBalance() public {
         vm.prank(owner);
-        vm.expectRevert("Insufficient balance");
-        treasury.withdraw(recipient, 1 ether);
+        vm.expectRevert(abi.encodeWithSelector(Treasury.NotEnoughBalance.selector, 1 ether, 0));
+        treasury.withdraw(1 ether, recipient);
+    }
+
+    /// @notice Test that withdrawing zero amount reverts
+    function testWithdrawZeroAmountReverts() public {
+        vm.deal(address(treasury), 1 ether); // Ensure treasury has some balance
+        vm.prank(owner);
+        vm.expectRevert(abi.encodeWithSelector(Treasury.ZeroAddress.selector, "Withdrawal amount cannot be zero"));
+        treasury.withdraw(0, recipient);
     }
 
     /// @notice Test that owner can transfer ownership and emits event
@@ -81,20 +90,58 @@ contract TreasuryTest is Test {
     /// @notice Test that non-owner cannot transfer ownership
     function testNonOwnerCannotTransferOwnership() public {
         vm.prank(nonOwner);
-        vm.expectRevert("Not owner");
+        vm.expectRevert(abi.encodeWithSelector(Ownable.OwnableUnauthorizedAccount.selector, nonOwner));
         treasury.transferOwnership(address(0x1234));
     }
 
     /// @notice Test that transferring ownership to zero address reverts
     function testTransferOwnershipToZeroAddressReverts() public {
         vm.prank(owner);
-        vm.expectRevert("Zero address");
+        vm.expectRevert(abi.encodeWithSelector(Ownable.OwnableInvalidOwner.selector, address(0)));
         treasury.transferOwnership(address(0));
     }
 
-    function testTransferOwnershipZeroAddress() public {
+    // --- Tests for withdrawAll ---
+
+    /// @notice Test that owner can withdraw all ETH and emits event
+    function testOwnerWithdrawsAllETH() public {
+        vm.deal(address(treasury), 1 ether); // Fund the treasury
+        uint256 initialRecipientBalance = recipient.balance;
+        uint256 treasuryBalance = address(treasury).balance;
+        assertTrue(treasuryBalance > 0, "Treasury should have balance before withdrawAll");
+
+        vm.expectEmit(true, true, false, true); // Checking for event Treasury.OwnerWithdrawal
+        emit Treasury.OwnerWithdrawal(recipient, treasuryBalance);
+
         vm.prank(owner);
-        vm.expectRevert("Zero address");
-        treasury.transferOwnership(address(0));
+        treasury.withdrawAll(recipient);
+
+        assertEq(address(treasury).balance, 0, "Treasury balance should be 0 after withdrawAll");
+        assertEq(recipient.balance, initialRecipientBalance + treasuryBalance, "Recipient did not receive all funds");
+    }
+
+    /// @notice Test that only owner can call withdrawAll
+    function testNonOwnerCannotWithdrawAll() public {
+        vm.deal(address(treasury), 1 ether); // Fund the treasury
+        vm.prank(nonOwner);
+        vm.expectRevert(abi.encodeWithSelector(Ownable.OwnableUnauthorizedAccount.selector, nonOwner));
+        treasury.withdrawAll(recipient);
+    }
+
+    /// @notice Test that withdrawAll to zero address reverts
+    function testWithdrawAllToZeroAddressReverts() public {
+        vm.deal(address(treasury), 1 ether); // Fund the treasury
+        vm.prank(owner);
+        vm.expectRevert(abi.encodeWithSelector(Treasury.ZeroAddress.selector, "Withdrawal address cannot be zero"));
+        treasury.withdrawAll(payable(address(0)));
+    }
+
+    /// @notice Test that withdrawAll with zero balance reverts with NotEnoughBalance(0,0)
+    function testWithdrawAllZeroBalanceReverts() public {
+        assertEq(address(treasury).balance, 0, "Treasury should have zero balance initially for this test");
+        vm.prank(owner);
+        // Expecting NotEnoughBalance(currentBalance, currentBalance) which is NotEnoughBalance(0,0)
+        vm.expectRevert(abi.encodeWithSelector(Treasury.NotEnoughBalance.selector, 0, 0));
+        treasury.withdrawAll(recipient);
     }
 }

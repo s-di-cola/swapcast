@@ -48,11 +48,7 @@ contract SwapCastHook is BaseHook {
      * @param convictionValueSent The amount of ETH (in wei) sent by the user as their conviction stake for this prediction.
      */
     event PredictionAttempted(
-        address indexed sender,
-        PoolId indexed poolId,
-        uint256 marketId,
-        uint8 outcome,
-        uint256 convictionValueSent
+        address indexed sender, PoolId indexed poolId, uint256 marketId, uint8 outcome, uint256 convictionValueSent
     );
     /**
      * @notice Emitted when a prediction is successfully recorded in the `PredictionPool` via this hook.
@@ -61,23 +57,14 @@ contract SwapCastHook is BaseHook {
      * @param outcome The outcome that was recorded.
      * @param convictionValue The amount of ETH (in wei) staked as conviction, successfully transferred to the PredictionPool.
      */
-    event PredictionRecorded(
-        address indexed sender,
-        uint256 marketId,
-        uint8 outcome,
-        uint256 convictionValue
-    );
+    event PredictionRecorded(address indexed sender, uint256 marketId, uint8 outcome, uint256 convictionValue);
     /**
      * @notice Emitted if an attempt to record a prediction in the `PredictionPool` fails.
      * @param sender The address of the user whose prediction attempt failed.
      * @param marketId The market ID for which the prediction attempt failed.
      * @param reason A string describing the reason for the failure, typically from the `PredictionPool` or this hook.
      */
-    event PredictionFailed(
-        address indexed sender,
-        uint256 marketId,
-        string reason
-    );
+    event PredictionFailed(address indexed sender, uint256 marketId, string reason);
 
     /**
      * @notice Reverts if the provided `hookData` has an unexpected length.
@@ -165,8 +152,8 @@ contract SwapCastHook is BaseHook {
     function _afterSwap(
         address sender,
         PoolKey calldata key,
-        SwapParams calldata /*params*/,
-        BalanceDelta /*delta*/,
+        SwapParams calldata, /*params*/
+        BalanceDelta, /*delta*/
         bytes calldata hookData
     ) internal override returns (bytes4 hookReturnData, int128 currencyDelta) {
         if (hookData.length == 0) {
@@ -178,9 +165,9 @@ contract SwapCastHook is BaseHook {
         if (hookData.length != PREDICTION_HOOK_DATA_LENGTH) {
             revert InvalidHookDataLength(hookData.length, PREDICTION_HOOK_DATA_LENGTH);
         }
-        
+
         uint256 convictionValueSent = msg.value; // ETH sent with the swap call, forwarded by PoolManager to the hook.
-        
+
         // Decode marketId and outcome from hookData.
         // Assumes hookData is abi.encode(uint256 marketId, uint8 outcome).
         (uint256 marketId, uint8 outcome) = abi.decode(hookData, (uint256, uint8));

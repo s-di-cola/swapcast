@@ -12,7 +12,7 @@ pragma solidity ^0.8.26;
 interface ISwapCastNFT {
     /**
      * @notice Mints a new NFT representing a prediction.
-     * @dev This function should be implemented by the SwapCastNFT contract and be callable 
+     * @dev This function should be implemented by the SwapCastNFT contract and be callable
      *      by an authorized PredictionPool contract. It is responsible for creating a new NFT
      *      and associating it with the provided prediction details.
      * @param _to The address to mint the NFT to.
@@ -21,12 +21,9 @@ interface ISwapCastNFT {
      * @param _convictionStake The amount of conviction (e.g., in wei) staked on this prediction.
      * @return tokenId The unique ID of the newly minted token.
      */
-    function mint(
-        address _to,
-        uint256 _marketId,
-        uint8 _outcome,
-        uint256 _convictionStake
-    ) external returns (uint256 tokenId);
+    function mint(address _to, uint256 _marketId, uint8 _outcome, uint256 _convictionStake)
+        external
+        returns (uint256 tokenId);
 
     /**
      * @notice Burns an existing NFT.
@@ -47,13 +44,8 @@ interface ISwapCastNFT {
      * @return convictionStake The conviction stake amount recorded for this prediction NFT.
      * @return owner The current owner of the NFT.
      */
-    function getPredictionDetails(uint256 _tokenId) 
-        external 
-        view 
-        returns (
-            uint256 marketId,
-            uint8 outcome,
-            uint256 convictionStake,
-            address owner
-        );
+    function getPredictionDetails(uint256 _tokenId)
+        external
+        view
+        returns (uint256 marketId, uint8 outcome, uint256 convictionStake, address owner);
 }

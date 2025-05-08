@@ -1,146 +1,104 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.26;
 
-import "forge-std/Test.sol";
-import "src/RewardDistributor.sol";
-
-import {SwapCastNFT} from "src/SwapCastNFT.sol";
-import {PredictionPool} from "src/PredictionPool.sol";
-
-contract TestableSwapCastNFT is SwapCastNFT {
-
-    address public predictionPool;
-
-    constructor(address _predictionPool) SwapCastNFT(_predictionPool) {}
-
-    function setPredictionPool(address _pool) public {
-        predictionPool = _pool;
-    }
-}
-
+import {Test, console} from "forge-std/Test.sol";
+import {RewardDistributor} from "../src/RewardDistributor.sol";
+import {MockPredictionPoolForDistributor} from "./mocks/MockPredictionPoolForDistributor.sol";
+import {Ownable} from "@openzeppelin/contracts/access/Ownable.sol";
 
 contract RewardDistributorTest is Test {
     RewardDistributor distributor;
-    TestableSwapCastNFT nft;
-    PredictionPool pool;
+    MockPredictionPoolForDistributor mockPool;
+
+    address owner = address(this);
     address user = address(0x123);
+    address nonOwner = address(0x456);
 
     function setUp() public {
-        nft = new TestableSwapCastNFT(address(0));
-        pool = new PredictionPool(address(nft));
-        nft.setPredictionPool(address(pool));
-        distributor = new RewardDistributor(address(pool), address(nft));
-        // Create a market and mint an NFT to user via the pool
-        uint256 endTime = block.timestamp + 1 days;
-        uint256 marketId = pool.createMarket("desc", endTime);
-        pool.recordPrediction(user, marketId, 1, 10);
-        // Do not resolve here; resolve in test after time passes if needed
-        vm.deal(address(distributor), 1 ether);
+        mockPool = new MockPredictionPoolForDistributor();
+        distributor = new RewardDistributor(owner, address(mockPool));
     }
 
-    /// @notice Test that claiming a reward emits the correct event and sets claimed
-    function testClaimReward() public {
-        // Advance time past endTime
-        uint256 endTime = block.timestamp + 1 days;
-        uint256 marketId = pool.createMarket("desc", endTime);
-        pool.recordPrediction(user, marketId, 1, 10);
-        uint256 tokenId = marketId;
-        vm.warp(endTime + 1);
-        pool.resolveMarket(marketId, 1);
-        vm.expectEmit(true, true, false, true);
-        emit RewardDistributor.RewardClaimed(user, tokenId, 1e16);
-        vm.prank(user);
-        distributor.claim(tokenId);
-        // Check claimed flag
-        assertTrue(distributor.claimed(tokenId));
+    // --- Constructor Tests ---
+
+    function test_Constructor_SetsPredictionPool() public view {
+        assertEq(
+            address(distributor.predictionPool()),
+            address(mockPool),
+            "PredictionPool address not set correctly in constructor"
+        );
     }
 
-    /// @notice Test that double claiming reverts with custom error
-    function testDoubleClaimReverts() public {
-        uint256 endTime = block.timestamp + 1 days;
-        uint256 marketId = pool.createMarket("desc", endTime);
-        pool.recordPrediction(user, marketId, 1, 10);
-        uint256 tokenId = marketId;
-        vm.warp(endTime + 1);
-        pool.resolveMarket(marketId, 1);
-        vm.prank(user);
-        distributor.claim(tokenId);
-        vm.prank(user);
-        vm.expectRevert("Already claimed");
-        distributor.claim(tokenId);
+    function test_Constructor_SetsOwner() public view {
+        assertEq(distributor.owner(), owner, "Owner not set correctly in constructor");
     }
 
-    /// @notice Test that only the NFT holder can claim
-    function testNonHolderCannotClaim() public {
-        uint256 endTime = block.timestamp + 1 days;
-        uint256 marketId = pool.createMarket("desc", endTime);
-        pool.recordPrediction(user, marketId, 1, 10);
-        uint256 tokenId = marketId;
-        vm.warp(endTime + 1);
-        pool.resolveMarket(marketId, 1);
-        vm.prank(address(0x456));
-        vm.expectRevert("Not NFT holder");
-        distributor.claim(tokenId);
+    function test_Constructor_RevertsIfPredictionPoolIsZeroAddress() public {
+        vm.expectRevert(RewardDistributor.ZeroAddress.selector);
+        new RewardDistributor(owner, address(0));
     }
 
-    /// @notice Test that cannot claim if market is unresolved
-    function testCannotClaimUnresolvedMarket() public {
-        uint256 endTime = block.timestamp + 1 days;
-        uint256 marketId = pool.createMarket("desc", endTime);
-        pool.recordPrediction(user, marketId, 1, 10);
-        uint256 tokenId = marketId;
-        // Do not resolve the market, keep it unresolved
-        vm.prank(user);
-        vm.expectRevert("Market not resolved");
-        distributor.claim(tokenId);
+    function test_Constructor_EmitsPredictionPoolAddressSet() public {
+        vm.expectEmit(true, true, true, true); // Check all: from, to, old, new
+        emit RewardDistributor.PredictionPoolAddressSet(address(0), address(mockPool));
+        // Re-deploy within the test to capture its specific emission
+        new RewardDistributor(owner, address(mockPool));
     }
 
-    /// @notice Test that cannot claim if outcome is wrong
-    function testCannotClaimWrongOutcome() public {
-        uint256 endTime = block.timestamp + 1 days;
-        uint256 marketId = pool.createMarket("desc", endTime);
-        pool.recordPrediction(user, marketId, 0, 10);
-        uint256 tokenId = marketId;
-        vm.warp(endTime + 1);
-        pool.resolveMarket(marketId, 1);
-        vm.prank(user);
-        vm.expectRevert("Not winning outcome");
-        distributor.claim(tokenId);
+    // --- setPredictionPoolAddress Tests ---
+
+    function test_SetPredictionPoolAddress_UpdatesAddress() public {
+        MockPredictionPoolForDistributor newMockPool = new MockPredictionPoolForDistributor();
+        vm.prank(owner);
+        distributor.setPredictionPoolAddress(address(newMockPool));
+        assertEq(address(distributor.predictionPool()), address(newMockPool), "PredictionPool address not updated");
     }
 
-    /// @notice Test that zero address cannot claim
-    function testZeroAddressCannotClaim() public {
-        vm.prank(address(0));
-        vm.expectRevert("Zero address");
-        distributor.claim(0);
+    function test_SetPredictionPoolAddress_EmitsEvent() public {
+        MockPredictionPoolForDistributor newMockPool = new MockPredictionPoolForDistributor();
+        address oldPoolAddress = address(mockPool);
+
+        vm.prank(owner);
+        vm.expectEmit(true, true, true, true);
+        emit RewardDistributor.PredictionPoolAddressSet(oldPoolAddress, address(newMockPool));
+        distributor.setPredictionPoolAddress(address(newMockPool));
     }
 
-    function testOnlyNFTHolderCanClaim() public {
-        vm.prank(address(0xBEEF));
-        vm.expectRevert("Not NFT holder");
-        distributor.claim(0);
+    function test_SetPredictionPoolAddress_RevertsIfNewAddressIsZero() public {
+        vm.prank(owner);
+        vm.expectRevert(RewardDistributor.ZeroAddress.selector);
+        distributor.setPredictionPoolAddress(address(0));
     }
 
-    function testMustBeWinningOutcome() public {
-        uint256 endTime = block.timestamp + 1 days;
-        uint256 marketId = pool.createMarket("desc", endTime);
-        pool.recordPrediction(user, marketId, 0, 10);
-        uint256 tokenId = marketId;
-        vm.warp(endTime + 1);
-        pool.resolveMarket(marketId, 1);
-        vm.prank(user);
-        vm.expectRevert("Not winning outcome");
-        distributor.claim(tokenId);
+    function test_SetPredictionPoolAddress_RevertsIfNotOwner() public {
+        MockPredictionPoolForDistributor newMockPool = new MockPredictionPoolForDistributor();
+        vm.prank(nonOwner);
+        vm.expectRevert(abi.encodeWithSelector(Ownable.OwnableUnauthorizedAccount.selector, nonOwner));
+        distributor.setPredictionPoolAddress(address(newMockPool));
     }
 
-    function testMarketMustBeResolved() public {
-        uint256 endTime = block.timestamp + 1 days;
-        uint256 marketId = pool.createMarket("desc", endTime);
-        pool.recordPrediction(user, marketId, 1, 10);
-        uint256 tokenId = marketId;
-        // Do not resolve the market, keep it unresolved
-        vm.prank(user);
-        vm.expectRevert("Market not resolved");
-        distributor.claim(tokenId);
+    // --- claimReward Tests ---
+
+    function test_ClaimReward_CallsPredictionPool() public {
+        uint256 tokenIdToClaim = 1;
+
+        // Sanity check: ensure mockPool hasn't been called yet
+        assertFalse(mockPool.claimRewardCalled(), "MockPool claimRewardCalled should be false initially");
+
+        // No vm.prank needed as claimReward in RewardDistributor is public
+        distributor.claimReward(tokenIdToClaim);
+
+        assertTrue(mockPool.claimRewardCalled(), "PredictionPool.claimReward was not called");
+        assertEq(mockPool.lastTokenIdClaimed(), tokenIdToClaim, "TokenId passed to PredictionPool was incorrect");
+        // Check that the RewardDistributor contract itself was the caller to the mock pool
+        assertEq(mockPool.callerOfClaimReward(), address(distributor), "Caller to mock pool was not RewardDistributor");
+    }
+
+    function test_ClaimReward_RevertsWithClaimFailedInPool_IfPoolReverts() public {
+        uint256 tokenIdToClaim = 2;
+        mockPool.setShouldRevertOnClaim(true);
+
+        vm.expectRevert(RewardDistributor.ClaimFailedInPool.selector);
+        distributor.claimReward(tokenIdToClaim);
     }
 }

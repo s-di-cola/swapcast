@@ -19,7 +19,13 @@ import {ISwapCastNFT} from "./interfaces/ISwapCastNFT.sol";
  *      and IERC721Receiver to potentially receive NFTs if ever needed, though not actively used for receiving.
  *      It implements various interfaces to define its role in the SwapCast ecosystem.
  */
-contract PredictionPool is IPredictionPool, IPredictionPoolForDistributor, IPredictionPoolForResolver, Ownable, IERC721Receiver {
+contract PredictionPool is
+    IPredictionPool,
+    IPredictionPoolForDistributor,
+    IPredictionPoolForResolver,
+    Ownable,
+    IERC721Receiver
+{
     /**
      * @notice The address of the SwapCastNFT contract used for minting and burning prediction NFTs.
      */
@@ -115,39 +121,73 @@ contract PredictionPool is IPredictionPool, IPredictionPoolForDistributor, IPred
 
     // --- Custom Errors ---
 
-    /** @dev Reverts if an operation is attempted on a market ID that does not correspond to an existing market. */
+    /**
+     * @dev Reverts if an operation is attempted on a market ID that does not correspond to an existing market.
+     */
     error MarketDoesNotExist(uint256 marketId);
-    /** @dev Reverts if an attempt is made to create a market with an ID that already exists. */
+    /**
+     * @dev Reverts if an attempt is made to create a market with an ID that already exists.
+     */
     error MarketAlreadyExists(uint256 marketId);
-    /** @dev Reverts if an operation (like making a prediction) is attempted on a market that has already been resolved. */
+    /**
+     * @dev Reverts if an operation (like making a prediction) is attempted on a market that has already been resolved.
+     */
     error MarketAlreadyResolved(uint256 marketId);
-    /** @dev Reverts if an operation (like claiming a reward) is attempted on a market that has not yet been resolved. */
+    /**
+     * @dev Reverts if an operation (like claiming a reward) is attempted on a market that has not yet been resolved.
+     */
     error MarketNotResolved(uint256 marketId);
-    /** @dev Reverts if a user attempts to make more than one prediction in the same market. */
+    /**
+     * @dev Reverts if a user attempts to make more than one prediction in the same market.
+     */
     error AlreadyPredicted(uint256 marketId, address user);
-    /** @dev Reverts if an invalid outcome (not 0 or 1) is provided. */
+    /**
+     * @dev Reverts if an invalid outcome (not 0 or 1) is provided.
+     */
     error InvalidOutcome(uint8 outcome);
-    /** @dev Reverts if an attempt is made to set protocol fee basis points to an invalid value (e.g., >10000). */
+    /**
+     * @dev Reverts if an attempt is made to set protocol fee basis points to an invalid value (e.g., >10000).
+     */
     error InvalidFeeBasisPoints(uint256 fee);
-    /** @dev Reverts if a required address input (e.g., treasury, NFT contract) is the zero address. */
+    /**
+     * @dev Reverts if a required address input (e.g., treasury, NFT contract) is the zero address.
+     */
     error ZeroAddressInput();
-    /** @dev Reverts if a monetary amount (e.g., stake, fee) that must be positive is zero. */
+    /**
+     * @dev Reverts if a monetary amount (e.g., stake, fee) that must be positive is zero.
+     */
     error AmountCannotBeZero();
-    /** @dev Reverts if the stake amount (net of fees) is below the configured minimum stake amount. */
+    /**
+     * @dev Reverts if the stake amount (net of fees) is below the configured minimum stake amount.
+     */
     error StakeBelowMinimum(uint256 sentAmount, uint256 minRequiredAmount);
-    /** @dev Reverts if an NFT transfer operation fails (though NFT minting/burning is handled by SwapCastNFT). */
+    /**
+     * @dev Reverts if an NFT transfer operation fails (though NFT minting/burning is handled by SwapCastNFT).
+     */
     error NFTTransferFailed(); // Potentially for future use if PredictionPool directly handles NFTs.
-    /** @dev Reverts if a user attempts to claim a reward with an NFT that does not correspond to the winning outcome. */
+    /**
+     * @dev Reverts if a user attempts to claim a reward with an NFT that does not correspond to the winning outcome.
+     */
     error NotWinningNFT();
-    /** @dev Reverts during reward claim if there was no stake for the winning outcome (should be rare). */
+    /**
+     * @dev Reverts during reward claim if there was no stake for the winning outcome (should be rare).
+     */
     error ClaimFailedNoStakeForOutcome();
-    /** @dev Reverts if the transfer of ETH for a reward fails. */
+    /**
+     * @dev Reverts if the transfer of ETH for a reward fails.
+     */
     error RewardTransferFailed();
-    /** @dev Reverts if a function is called by an address that is not the designated RewardDistributor contract. */
+    /**
+     * @dev Reverts if a function is called by an address that is not the designated RewardDistributor contract.
+     */
     error NotRewardDistributor();
-    /** @dev Reverts if an invalid market ID (e.g. 0) is provided. */
+    /**
+     * @dev Reverts if an invalid market ID (e.g. 0) is provided.
+     */
     error InvalidMarketId();
-    /** @dev Reverts if the caller of a function is not the designated OracleResolver contract. */
+    /**
+     * @dev Reverts if the caller of a function is not the designated OracleResolver contract.
+     */
     error NotOracleResolver();
 
     /**
@@ -193,7 +233,10 @@ contract PredictionPool is IPredictionPool, IPredictionPoolForDistributor, IPred
         address _rewardDistributorAddress,
         uint256 _initialMinStakeAmount
     ) Ownable(_initialOwner) {
-        if (_swapCastNFTAddress == address(0) || _treasuryAddress == address(0) || _oracleResolverAddress == address(0) || _rewardDistributorAddress == address(0)) revert ZeroAddressInput();
+        if (
+            _swapCastNFTAddress == address(0) || _treasuryAddress == address(0) || _oracleResolverAddress == address(0)
+                || _rewardDistributorAddress == address(0)
+        ) revert ZeroAddressInput();
         if (_initialFeeBasisPoints > 10000) revert InvalidFeeBasisPoints(_initialFeeBasisPoints); // Max 100%
 
         swapCastNFT = ISwapCastNFT(_swapCastNFTAddress);
@@ -236,7 +279,7 @@ contract PredictionPool is IPredictionPool, IPredictionPoolForDistributor, IPred
      * @param _newTreasuryAddress The new address for collecting protocol fees. Cannot be the zero address.
      * @param _newFeeBasisPoints The new fee percentage in basis points. Cannot exceed 10000 (100%).
      */
-    function setFeeConfiguration(address _newTreasuryAddress, uint256 _newFeeBasisPoints) external  onlyOwner {
+    function setFeeConfiguration(address _newTreasuryAddress, uint256 _newFeeBasisPoints) external onlyOwner {
         if (_newTreasuryAddress == address(0)) revert ZeroAddressInput();
         if (_newFeeBasisPoints > 10000) revert InvalidFeeBasisPoints(_newFeeBasisPoints);
 
@@ -267,17 +310,14 @@ contract PredictionPool is IPredictionPool, IPredictionPoolForDistributor, IPred
      * @param _marketId The ID of the market to predict on.
      * @param _outcome The predicted outcome (0 for Bearish, 1 for Bullish).
      */
-    function recordPrediction(
-        address _user,
-        uint256 _marketId,
-        uint8 _outcome
-    ) external payable override {
+    function recordPrediction(address _user, uint256 _marketId, uint8 _outcome) external payable override {
+        if (_user == address(0)) revert ZeroAddressInput();
+        if (msg.value == 0) revert AmountCannotBeZero();
+        if (_outcome > 1) revert InvalidOutcome(_outcome);
         Market storage market = markets[_marketId];
         if (!market.exists) revert MarketDoesNotExist(_marketId);
         if (market.resolved) revert MarketAlreadyResolved(_marketId);
         if (market.userPredictionCount[_user] > 0) revert AlreadyPredicted(_marketId, _user);
-        if (_outcome > 1) revert InvalidOutcome(_outcome);
-        if (msg.value == 0) revert AmountCannotBeZero(); // Must send some ETH
 
         uint256 totalStakeSent = msg.value;
         uint256 protocolFee = (totalStakeSent * protocolFeeBasisPoints) / 10000;
@@ -288,7 +328,7 @@ contract PredictionPool is IPredictionPool, IPredictionPoolForDistributor, IPred
 
         // Send fee to treasury
         if (protocolFee > 0) {
-            (bool success, ) = payable(treasuryAddress).call{value: protocolFee}("");
+            (bool success,) = payable(treasuryAddress).call{value: protocolFee}("");
             if (!success) revert RewardTransferFailed(); // Re-use or new error FeeTransferFailed
             emit FeePaid(_marketId, _user, protocolFee);
         }
@@ -317,7 +357,12 @@ contract PredictionPool is IPredictionPool, IPredictionPoolForDistributor, IPred
      * @param _winningOutcome The winning outcome (0 or 1).
      * @param _oraclePrice The price reported by the oracle at the time of resolution.
      */
-    function resolveMarket(uint256 _marketId, uint8 _winningOutcome, int256 _oraclePrice) external override virtual onlyOracleResolver {
+    function resolveMarket(uint256 _marketId, uint8 _winningOutcome, int256 _oraclePrice)
+        external
+        virtual
+        override
+        onlyOracleResolver
+    {
         Market storage market = markets[_marketId];
         if (!market.exists) revert MarketDoesNotExist(_marketId);
         if (market.resolved) revert MarketAlreadyResolved(_marketId);
@@ -326,7 +371,8 @@ contract PredictionPool is IPredictionPool, IPredictionPoolForDistributor, IPred
         market.resolved = true;
         market.winningOutcome = _winningOutcome;
 
-        uint256 prizePool = markets[_marketId].totalConvictionStakeOutcome0 + markets[_marketId].totalConvictionStakeOutcome1;
+        uint256 prizePool =
+            markets[_marketId].totalConvictionStakeOutcome0 + markets[_marketId].totalConvictionStakeOutcome1;
 
         emit MarketResolved(_marketId, _winningOutcome, _oraclePrice, prizePool);
     }
@@ -343,11 +389,12 @@ contract PredictionPool is IPredictionPool, IPredictionPoolForDistributor, IPred
      *      This function is restricted by the `onlyRewardDistributor` modifier.
      * @param _tokenId The ID of the SwapCastNFT representing the user's prediction.
      */
-    function claimReward(uint256 _tokenId) external override virtual onlyRewardDistributor {
+    function claimReward(uint256 _tokenId) external virtual override onlyRewardDistributor {
         // Access control: Now restricted to onlyRewardDistributor.
         // The RewardDistributor contract is expected to handle NFT ownership verification prior to calling this.
 
-        (uint256 marketId, uint8 predictionOutcome, uint256 userConvictionStake, address nftOwner) = swapCastNFT.getPredictionDetails(_tokenId);
+        (uint256 marketId, uint8 predictionOutcome, uint256 userConvictionStake, address nftOwner) =
+            swapCastNFT.getPredictionDetails(_tokenId);
 
         Market storage market = markets[marketId];
         if (!market.resolved) revert MarketNotResolved(marketId);
@@ -358,14 +405,19 @@ contract PredictionPool is IPredictionPool, IPredictionPoolForDistributor, IPred
 
         if (market.winningOutcome == 0) {
             if (market.totalConvictionStakeOutcome0 == 0) revert ClaimFailedNoStakeForOutcome(); // Should not be reachable if user won with outcome 0
-            if (market.totalConvictionStakeOutcome1 > 0) { // Only add from losing pool if it has funds
-                uint256 shareOfLosingPool = (userConvictionStake * market.totalConvictionStakeOutcome1) / market.totalConvictionStakeOutcome0;
+            if (market.totalConvictionStakeOutcome1 > 0) {
+                // Only add from losing pool if it has funds
+                uint256 shareOfLosingPool =
+                    (userConvictionStake * market.totalConvictionStakeOutcome1) / market.totalConvictionStakeOutcome0;
                 rewardAmount += shareOfLosingPool;
             }
-        } else { // winningOutcome == 1
+        } else {
+            // winningOutcome == 1
             if (market.totalConvictionStakeOutcome1 == 0) revert ClaimFailedNoStakeForOutcome(); // Should not be reachable if user won with outcome 1
-            if (market.totalConvictionStakeOutcome0 > 0) { // Only add from losing pool if it has funds
-                uint256 shareOfLosingPool = (userConvictionStake * market.totalConvictionStakeOutcome0) / market.totalConvictionStakeOutcome1;
+            if (market.totalConvictionStakeOutcome0 > 0) {
+                // Only add from losing pool if it has funds
+                uint256 shareOfLosingPool =
+                    (userConvictionStake * market.totalConvictionStakeOutcome0) / market.totalConvictionStakeOutcome1;
                 rewardAmount += shareOfLosingPool;
             }
         }
@@ -373,8 +425,9 @@ contract PredictionPool is IPredictionPool, IPredictionPoolForDistributor, IPred
         // Burn the NFT. SwapCastNFT.burn is restricted to be called by this PredictionPool contract.
         swapCastNFT.burn(_tokenId);
 
-        if (rewardAmount > 0) { // Should always be > 0 if userConvictionStake > 0
-            (bool success, ) = payable(nftOwner).call{value: rewardAmount}("");
+        if (rewardAmount > 0) {
+            // Should always be > 0 if userConvictionStake > 0
+            (bool success,) = payable(nftOwner).call{value: rewardAmount}("");
             if (!success) revert RewardTransferFailed();
         }
 
@@ -391,7 +444,18 @@ contract PredictionPool is IPredictionPool, IPredictionPoolForDistributor, IPred
      * @return totalConvictionStakeOutcome0_ Total stake on outcome 0.
      * @return totalConvictionStakeOutcome1_ Total stake on outcome 1.
      */
-    function getMarketDetails(uint256 _marketId) external view returns (uint256 marketId_, bool exists_, bool resolved_, uint8 winningOutcome_, uint256 totalConvictionStakeOutcome0_, uint256 totalConvictionStakeOutcome1_) {
+    function getMarketDetails(uint256 _marketId)
+        external
+        view
+        returns (
+            uint256 marketId_,
+            bool exists_,
+            bool resolved_,
+            uint8 winningOutcome_,
+            uint256 totalConvictionStakeOutcome0_,
+            uint256 totalConvictionStakeOutcome1_
+        )
+    {
         Market storage market = markets[_marketId];
         return (
             market.marketId,

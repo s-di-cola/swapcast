@@ -33,7 +33,7 @@ contract SwapCastNFT is ERC721, Ownable, ISwapCastNFT {
      */
     struct PredictionMetadata {
         uint256 marketId;
-        uint8 outcome; 
+        uint8 outcome;
         uint256 convictionStake;
         uint256 mintedAt;
     }
@@ -43,7 +43,7 @@ contract SwapCastNFT is ERC721, Ownable, ISwapCastNFT {
      * @dev Publicly accessible, allowing anyone to query the metadata for a given token ID using the auto-generated getter `tokenPredictionMetadata(uint256 tokenId)`.
      */
     mapping(uint256 => PredictionMetadata) public tokenPredictionMetadata;
-    
+
     /**
      * @notice Counter for the next token ID to be minted, ensuring unique token IDs.
      * @dev Starts at 0. Incremented after each mint operation. Private to control ID assignment strictly through `mint()`.
@@ -64,7 +64,9 @@ contract SwapCastNFT is ERC721, Ownable, ISwapCastNFT {
      * @param outcome The outcome predicted by the user.
      * @param convictionStake The conviction stake amount associated with this prediction.
      */
-    event PositionNFTMinted(address indexed owner, uint256 indexed tokenId, uint256 marketId, uint8 outcome, uint256 convictionStake);
+    event PositionNFTMinted(
+        address indexed owner, uint256 indexed tokenId, uint256 marketId, uint8 outcome, uint256 convictionStake
+    );
     /**
      * @notice Emitted when a prediction NFT (position) is burned, typically after a claim or resolution.
      * @param tokenId The unique ID of the burned NFT.
@@ -130,12 +132,12 @@ contract SwapCastNFT is ERC721, Ownable, ISwapCastNFT {
      * @param _convictionStake The conviction stake amount for this prediction.
      * @return tokenId The ID of the newly minted NFT.
      */
-    function mint(
-        address _to,
-        uint256 _marketId,
-        uint8 _outcome,
-        uint256 _convictionStake
-    ) external override onlyPredictionPool returns (uint256) {
+    function mint(address _to, uint256 _marketId, uint8 _outcome, uint256 _convictionStake)
+        external
+        override
+        onlyPredictionPool
+        returns (uint256)
+    {
         uint256 tokenId = _nextTokenId;
         _nextTokenId++; // Increment for the next mint
 
@@ -178,16 +180,11 @@ contract SwapCastNFT is ERC721, Ownable, ISwapCastNFT {
      * @return convictionStake The conviction stake amount.
      * @return owner_ The current owner of the NFT.
      */
-    function getPredictionDetails(uint256 _tokenId) 
-        external 
-        view 
-        override 
-        returns (
-            uint256 marketId,
-            uint8 outcome,
-            uint256 convictionStake,
-            address owner_
-        )
+    function getPredictionDetails(uint256 _tokenId)
+        external
+        view
+        override
+        returns (uint256 marketId, uint8 outcome, uint256 convictionStake, address owner_)
     {
         if (_ownerOf(_tokenId) == address(0)) revert NonExistentToken(_tokenId);
         PredictionMetadata storage meta = tokenPredictionMetadata[_tokenId];
@@ -217,7 +214,7 @@ contract SwapCastNFT is ERC721, Ownable, ISwapCastNFT {
             outcomeStr = "Bullish"; // Example outcome string
         } else {
             // Fallback for other potential outcome values, or could revert if outcomes are strictly 0 or 1.
-            outcomeStr = "Undefined/Other"; 
+            outcomeStr = "Undefined/Other";
         }
 
         // Structured JSON Metadata Generation using helper functions
@@ -226,7 +223,8 @@ contract SwapCastNFT is ERC721, Ownable, ISwapCastNFT {
         string memory namePart = string.concat('"name": "SwapCast Position NFT #', Strings.toString(_tokenId));
         namePart = string.concat(namePart, '"'); // Close name string
 
-        string memory descPart = '"description": "A SwapCast prediction position NFT representing a user\'s conviction on a specific market outcome."';
+        string memory descPart =
+            '"description": "A SwapCast prediction position NFT representing a user\'s conviction on a specific market outcome."';
 
         // 2. Use helper functions for attributes
         string memory marketIdAttr = _formatJsonAttributeUintValue("Market ID", meta.marketId);
@@ -236,30 +234,30 @@ contract SwapCastNFT is ERC721, Ownable, ISwapCastNFT {
 
         // 3. Combine attributes into an array string (pairwise concatenation)
         string memory attributesArrayContents = marketIdAttr; // Start with the first
-        attributesArrayContents = string.concat(attributesArrayContents, ',');
+        attributesArrayContents = string.concat(attributesArrayContents, ",");
         attributesArrayContents = string.concat(attributesArrayContents, outcomeAttr);
-        attributesArrayContents = string.concat(attributesArrayContents, ',');
+        attributesArrayContents = string.concat(attributesArrayContents, ",");
         attributesArrayContents = string.concat(attributesArrayContents, stakeAttr);
-        attributesArrayContents = string.concat(attributesArrayContents, ',');
+        attributesArrayContents = string.concat(attributesArrayContents, ",");
         attributesArrayContents = string.concat(attributesArrayContents, mintedAtAttr);
 
         string memory attributesPart = string.concat('"attributes": [', attributesArrayContents);
-        attributesPart = string.concat(attributesPart, ']');
+        attributesPart = string.concat(attributesPart, "]");
 
         // 4. Assemble final JSON payload (pairwise concatenation)
         // Example: {"name":"...","description":"...","attributes":[{"trait_type":"...","value":"..."},...]}
-        string memory json_payload = string.concat('{', namePart);
-        json_payload = string.concat(json_payload, ',');
+        string memory json_payload = string.concat("{", namePart);
+        json_payload = string.concat(json_payload, ",");
         json_payload = string.concat(json_payload, descPart);
-        json_payload = string.concat(json_payload, ',');
+        json_payload = string.concat(json_payload, ",");
         // TODO (V2/Future): Consider adding an 'image' field if SVG or other on-chain image data generation is desired.
         // This would involve more complex string manipulation and higher gas costs.
-        // json_payload = string.concat(json_payload, '"image": "data:image/svg+xml;base64,...",'); 
+        // json_payload = string.concat(json_payload, '"image": "data:image/svg+xml;base64,...",');
         json_payload = string.concat(json_payload, attributesPart);
-        json_payload = string.concat(json_payload, '}'); 
+        json_payload = string.concat(json_payload, "}");
 
         string memory finalJson = Base64.encode(bytes(json_payload));
-        return string.concat('data:application/json;base64,', finalJson);
+        return string.concat("data:application/json;base64,", finalJson);
     }
 
     // --- Internal Helper Functions for JSON Construction ---
@@ -271,7 +269,11 @@ contract SwapCastNFT is ERC721, Ownable, ISwapCastNFT {
      * @param _value The string value of the trait (e.g., "Bullish").
      * @return A string representing the JSON attribute object (e.g., '{"trait_type": "Predicted Outcome", "value": "Bullish"}').
      */
-    function _formatJsonAttributeStringValue(string memory _traitType, string memory _value) internal pure returns (string memory) {
+    function _formatJsonAttributeStringValue(string memory _traitType, string memory _value)
+        internal
+        pure
+        returns (string memory)
+    {
         string memory part1 = '{"trait_type": "';
         part1 = string.concat(part1, _traitType);
         part1 = string.concat(part1, '", "value": "');
@@ -286,11 +288,15 @@ contract SwapCastNFT is ERC721, Ownable, ISwapCastNFT {
      * @param _value The uint256 value of the trait.
      * @return A string representing the JSON attribute object (e.g., '{"trait_type": "Market ID", "value": 123}').
      */
-    function _formatJsonAttributeUintValue(string memory _traitType, uint256 _value) internal pure returns (string memory) {
+    function _formatJsonAttributeUintValue(string memory _traitType, uint256 _value)
+        internal
+        pure
+        returns (string memory)
+    {
         string memory part1 = '{"trait_type": "';
         part1 = string.concat(part1, _traitType);
         part1 = string.concat(part1, '", "value": '); // Note: No quotes around uint value in JSON
         part1 = string.concat(part1, Strings.toString(_value));
-        return string.concat(part1, '}');
+        return string.concat(part1, "}");
     }
 }

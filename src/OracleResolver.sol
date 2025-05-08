@@ -54,11 +54,7 @@ contract OracleResolver is Ownable {
      * @param aggregator The address of the Chainlink price feed aggregator.
      * @param priceThreshold The price threshold set for this market's resolution.
      */
-    event OracleRegistered(
-        uint256 indexed marketId,
-        address indexed aggregator,
-        uint256 priceThreshold
-    );
+    event OracleRegistered(uint256 indexed marketId, address indexed aggregator, uint256 priceThreshold);
 
     /**
      * @notice Emitted when a market is successfully resolved by this contract.
@@ -66,26 +62,36 @@ contract OracleResolver is Ownable {
      * @param price The price reported by the oracle at the time of resolution.
      * @param winningOutcome The determined winning outcome (0 or 1).
      */
-    event MarketResolved(
-        uint256 indexed marketId,
-        int256 price,
-        uint8 winningOutcome
-    );
+    event MarketResolved(uint256 indexed marketId, int256 price, uint8 winningOutcome);
 
-    /** @notice Emitted when the `maxPriceStalenessSeconds` value is updated by the owner. */
+    /**
+     * @notice Emitted when the `maxPriceStalenessSeconds` value is updated by the owner.
+     */
     event MaxPriceStalenessSet(uint256 oldStalenessSeconds, uint256 newStalenessSeconds);
 
-    /** @notice Reverts if an attempt is made to resolve a market for which no oracle is registered. */
+    /**
+     * @notice Reverts if an attempt is made to resolve a market for which no oracle is registered.
+     */
     error OracleNotRegistered(uint256 marketId);
-    /** @notice Reverts if an attempt is made to register an oracle for a market that already has one registered. */
+    /**
+     * @notice Reverts if an attempt is made to register an oracle for a market that already has one registered.
+     */
     error OracleAlreadyRegistered(uint256 marketId);
-    /** @notice Reverts if an attempt is made to register an oracle with a zero address for the aggregator. */
+    /**
+     * @notice Reverts if an attempt is made to register an oracle with a zero address for the aggregator.
+     */
     error InvalidAggregatorAddress();
-    /** @notice Reverts if the PredictionPool address provided during construction is the zero address. */
+    /**
+     * @notice Reverts if the PredictionPool address provided during construction is the zero address.
+     */
     error PredictionPoolZeroAddress();
-    /** @notice Reverts if the call to `PredictionPool.resolveMarket()` fails during market resolution. */
+    /**
+     * @notice Reverts if the call to `PredictionPool.resolveMarket()` fails during market resolution.
+     */
     error ResolutionFailedInPool(uint256 marketId);
-    /** @notice Reverts if the Chainlink price feed data is older than `maxPriceStalenessSeconds`. */
+    /**
+     * @notice Reverts if the Chainlink price feed data is older than `maxPriceStalenessSeconds`.
+     */
     error PriceIsStale(uint256 marketId, uint256 lastUpdatedAt, uint256 currentBlockTimestamp);
 
     /**
@@ -94,9 +100,7 @@ contract OracleResolver is Ownable {
      *                               This address is stored immutably.
      * @param initialOwner The initial owner of this OracleResolver contract.
      */
-    constructor(address _predictionPoolAddress, address initialOwner)
-        Ownable(initialOwner)
-    {
+    constructor(address _predictionPoolAddress, address initialOwner) Ownable(initialOwner) {
         if (_predictionPoolAddress == address(0)) revert PredictionPoolZeroAddress();
         predictionPool = IPredictionPoolForResolver(_predictionPoolAddress);
         maxPriceStalenessSeconds = 3600; // Default to 1 hour
@@ -112,19 +116,12 @@ contract OracleResolver is Ownable {
      * @param _priceThreshold The price threshold. If the oracle reports a price at or above this value,
      *                        outcome 0 is considered the winner; otherwise, outcome 1 wins.
      */
-    function registerOracle(
-        uint256 _marketId,
-        address _aggregator,
-        uint256 _priceThreshold
-    ) external onlyOwner {
+    function registerOracle(uint256 _marketId, address _aggregator, uint256 _priceThreshold) external onlyOwner {
         if (marketOracles[_marketId].isRegistered) revert OracleAlreadyRegistered(_marketId);
         if (_aggregator == address(0)) revert InvalidAggregatorAddress();
 
-        marketOracles[_marketId] = MarketOracle({
-            aggregator: _aggregator,
-            priceThreshold: _priceThreshold,
-            isRegistered: true
-        });
+        marketOracles[_marketId] =
+            MarketOracle({aggregator: _aggregator, priceThreshold: _priceThreshold, isRegistered: true});
 
         emit OracleRegistered(_marketId, _aggregator, _priceThreshold);
     }
@@ -156,7 +153,7 @@ contract OracleResolver is Ownable {
         if (!mo.isRegistered) revert OracleNotRegistered(_marketId);
 
         // Fetch the latest price from the Chainlink oracle
-        (, int256 price, , uint256 lastUpdatedAt, ) = AggregatorV3Interface(mo.aggregator).latestRoundData();
+        (, int256 price,, uint256 lastUpdatedAt,) = AggregatorV3Interface(mo.aggregator).latestRoundData();
 
         if (block.timestamp - lastUpdatedAt > maxPriceStalenessSeconds) {
             revert PriceIsStale(_marketId, lastUpdatedAt, block.timestamp);

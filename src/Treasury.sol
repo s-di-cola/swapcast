@@ -24,7 +24,9 @@ contract Treasury is Ownable {
      */
     event OwnerWithdrawal(address indexed to, uint256 amount);
 
-    /** @notice Reverts if an ETH withdrawal call (e.g., to the owner's address) fails. */
+    /**
+     * @notice Reverts if an ETH withdrawal call (e.g., to the owner's address) fails.
+     */
     error WithdrawalFailed();
     /**
      * @notice Reverts if a withdrawal is attempted for an amount greater than the Treasury's current balance.
@@ -42,9 +44,7 @@ contract Treasury is Ownable {
      * @notice Contract constructor.
      * @param initialOwner The initial owner of this Treasury contract, who will have withdrawal privileges.
      */
-    constructor(address initialOwner)
-        Ownable(initialOwner)
-    {}
+    constructor(address initialOwner) Ownable(initialOwner) {}
 
     /**
      * @notice Allows the Treasury to receive ETH. This is the primary mechanism for fee deposits.
@@ -69,12 +69,12 @@ contract Treasury is Ownable {
      */
     function withdraw(uint256 _amount, address payable _to) external onlyOwner {
         if (_to == address(0)) revert ZeroAddress("Withdrawal address cannot be zero");
-        
+
         uint256 balance = address(this).balance;
         if (_amount == 0) revert ZeroAddress("Withdrawal amount cannot be zero"); // Added check for zero amount
         if (_amount > balance) revert NotEnoughBalance(_amount, balance);
 
-        (bool success, ) = _to.call{value: _amount}("");
+        (bool success,) = _to.call{value: _amount}("");
         if (!success) revert WithdrawalFailed();
 
         emit OwnerWithdrawal(_to, _amount);
@@ -96,7 +96,7 @@ contract Treasury is Ownable {
         // However, NotEnoughBalance(0,0) will correctly prevent a zero-value transfer from emitting an event if that's the intent.
         if (balance == 0) revert NotEnoughBalance(balance, balance); // Using balance for both params for clarity
 
-        (bool success, ) = _to.call{value: balance}("");
+        (bool success,) = _to.call{value: balance}("");
         if (!success) revert WithdrawalFailed();
 
         emit OwnerWithdrawal(_to, balance);
