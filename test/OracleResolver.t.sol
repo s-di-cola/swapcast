@@ -26,7 +26,9 @@ contract MockAggregator is IChainlinkAggregator {
 import {SwapCastNFT} from "src/SwapCastNFT.sol";
 
 contract TestableSwapCastNFT is SwapCastNFT {
-    constructor(address _predictionPool) SwapCastNFT(_predictionPool) {}
+    address public predictionPool;
+
+    constructor(address _initialOwner, string memory _name, string memory _symbol) SwapCastNFT(_initialOwner, _name, _symbol) {}
 
     function setPredictionPool(address _pool) public {
         predictionPool = _pool;
@@ -42,32 +44,32 @@ contract OracleResolverTest is Test {
     uint256 marketId = 1;
 
     function setUp() public {
-        TestableSwapCastNFT nft = new TestableSwapCastNFT(address(0));
-        pool = new MockPool(address(nft));
+        TestableSwapCastNFT nft = new TestableSwapCastNFT(address(this), "TestNFT", "TNFT");
+        pool = new MockPool(address(nft), address(0x12345), 100, address(this));
         nft.setPredictionPool(address(pool));
-        resolver = new OracleResolver(address(pool));
+        resolver = new OracleResolver(address(pool), address(this));
         aggregator = new MockAggregator();
-        pool.setTestData(PredictionPool.Market(1, "desc", 0, true, 1));
-        resolver.registerMarketOracle(marketId, address(aggregator), 100, 1);
+        pool.setTestData(marketId, true, false, 0, 100 * 10**18, 50 * 10**18);
+        resolver.registerOracle(marketId, address(aggregator), 100);
     }
 
     /// @notice Test that only owner can register market oracle
     function testOnlyOwnerCanRegister() public {
         vm.prank(address(0xBEEF));
-        vm.expectRevert("Not owner");
-        resolver.registerMarketOracle(2, address(aggregator), 100, 1);
+        vm.expectRevert("Ownable: caller is not the owner");
+        resolver.registerOracle(2, address(aggregator), 100);
     }
 
     /// @notice Test that registering with zero address aggregator reverts
     function testRegisterZeroAddressAggregatorReverts() public {
-        vm.expectRevert("Zero address");
-        resolver.registerMarketOracle(2, address(0), 100, 1);
+        vm.expectRevert(OracleResolver.InvalidAggregatorAddress.selector);
+        resolver.registerOracle(2, address(0), 100);
     }
 
     /// @notice Test that duplicate registration reverts
     function testDuplicateRegistrationReverts() public {
-        vm.expectRevert("Already registered");
-        resolver.registerMarketOracle(marketId, address(aggregator), 100, 1);
+        vm.expectRevert(OracleResolver.OracleAlreadyRegistered.selector);
+        resolver.registerOracle(marketId, address(aggregator), 100);
     }
 
     /// @notice Test that resolving above threshold emits MarketResolved event
@@ -75,14 +77,14 @@ contract OracleResolverTest is Test {
         aggregator.setLatestAnswer(150);
         vm.expectEmit(true, false, false, true);
         emit MarketResolved(marketId, 1);
-        resolver.resolve(marketId);
+        resolver.resolveMarket(marketId);
     }
 
     /// @notice Test that resolving without oracle reverts with custom error
     function testResolveWithoutOracleReverts() public {
-        OracleResolver newResolver = new OracleResolver(address(pool));
-        vm.expectRevert("No oracle");
-        newResolver.resolve(marketId);
+        OracleResolver newResolver = new OracleResolver(address(pool), address(this));
+        vm.expectRevert(OracleResolver.OracleNotRegistered.selector);
+        newResolver.resolveMarket(marketId);
     }
 
     /// @notice Test that resolving below threshold emits MarketResolved event
@@ -91,6 +93,6 @@ contract OracleResolverTest is Test {
         vm.expectEmit(true, false, false, true);
         emit MarketResolved(marketId, 0);
 
-        resolver.resolve(marketId);
+        resolver.resolveMarket(marketId);
     }
 }

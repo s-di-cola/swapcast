@@ -92,11 +92,11 @@ SwapCast is composed of several modular contracts that together provide a secure
 ### Key Components
 
 - **SwapCast Hook Contract:** Intercepts Uniswap v4 swap transactions, extracts prediction data, and creates positions.
-- **PredictionPool:** Manages prediction markets, positions, and NFT issuance.
+- **PredictionPool:** Manages prediction markets, positions, stakes, and NFT issuance, and pays rewards.
 - **SwapCastNFT:** ERC721 NFT representing prediction positions, with full on-chain metadata.
 - **OracleResolver:** Registers and resolves prediction markets using Chainlink Automation and price feeds.
-- **RewardDistributor:** Handles reward claim logic, validates claims, and instructs the Treasury to pay out rewards.
-- **Treasury:** Sole holder of all prediction fees; executes payouts based on RewardDistributor instructions.
+- **RewardDistributor:** Handles reward claim logic and validates claims, interacting with the PredictionPool for reward payouts.
+- **Treasury:** Collects and holds all protocol fees from predictions made in the PredictionPool.
 - **Chainlink Automation:** Triggers market resolution at the due date.
 
 ---
@@ -105,18 +105,15 @@ SwapCast is composed of several modular contracts that together provide a secure
 
 1. **Prediction Creation:**
     - User pays a prediction fee (e.g., 1% of swap) during swap.
-    - **PredictionPool** receives the fee and immediately transfers it to the **Treasury** contract, which holds all prediction funds securely.
+    - **PredictionPool** receives the user's total stake (which includes the implicit protocol fee). It then transfers the calculated protocol fee to the **Treasury** contract. The remaining net stake is held within the **PredictionPool** for potential reward payouts.
 
 2. **Market Resolution:**
-    - Chainlink Automation triggers OracleResolver to resolve expired markets.
-    - PredictionPool updates market outcome.
+    - **OracleResolver** (triggered by Chainlink Automation or Admin) determines the winning outcome.
+    - **PredictionPool** updates the market status (e.g., "Bullish Wins").
 
-3. **Reward Claiming:**
-    - Winner submits claim to RewardDistributor with their NFT.
-    - RewardDistributor verifies claim and instructs Treasury to pay out the reward to the winner.
-    - **Treasury** executes the transfer directly to the winner, based on RewardDistributor's instruction.
-
-This separation ensures security, transparency, and upgradability of funds management. The Treasury is the sole holder of all prediction fees and executes all payouts, while RewardDistributor is responsible for validating claims and orchestrating rewards.
+3. **Reward Claim:**
+    - Winner calls `claimReward` via the **RewardDistributor** (or dApp).
+    - **RewardDistributor** verifies the claim with the **PredictionPool**. The **PredictionPool**, holding the stakes, then executes the reward transfer directly to the winner and burns the associated NFT.
 
 ---
 

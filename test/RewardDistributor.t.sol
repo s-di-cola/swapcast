@@ -5,8 +5,12 @@ import "forge-std/Test.sol";
 import "src/RewardDistributor.sol";
 
 import {SwapCastNFT} from "src/SwapCastNFT.sol";
+import {PredictionPool} from "src/PredictionPool.sol";
 
 contract TestableSwapCastNFT is SwapCastNFT {
+
+    address public predictionPool;
+
     constructor(address _predictionPool) SwapCastNFT(_predictionPool) {}
 
     function setPredictionPool(address _pool) public {
@@ -14,7 +18,6 @@ contract TestableSwapCastNFT is SwapCastNFT {
     }
 }
 
-import {PredictionPool} from "src/PredictionPool.sol";
 
 contract RewardDistributorTest is Test {
     RewardDistributor distributor;

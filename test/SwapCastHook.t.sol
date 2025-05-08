@@ -28,6 +28,8 @@ import {SwapCastNFT} from "src/SwapCastNFT.sol";
 contract TestableSwapCastNFT is SwapCastNFT {
     constructor(address _predictionPool) SwapCastNFT(_predictionPool) {}
 
+    address public predictionPool;
+
     function setPredictionPool(address _pool) public {
         predictionPool = _pool;
     }
