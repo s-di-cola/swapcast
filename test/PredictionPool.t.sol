@@ -9,6 +9,7 @@ import {ISwapCastNFT} from "../src/interfaces/ISwapCastNFT.sol";
 import {Ownable} from "@openzeppelin/contracts/access/Ownable.sol";
 import {Vm} from "forge-std/Vm.sol";
 import {FullMath} from "@uniswap/v4-core/src/libraries/FullMath.sol";
+import {PredictionTypes} from "../src/types/PredictionTypes.sol";
 
 contract MockRevertingReceiver is Test {
     event Received(uint256 amount);
@@ -24,7 +25,9 @@ contract PredictionPoolTest is Test {
     event FeeConfigurationChanged(address indexed newTreasuryAddress, uint256 newFeeBasisPoints);
     event MinStakeAmountChanged(uint256 newMinStakeAmount);
     event MarketCreated(uint256 indexed marketId);
-    event MarketResolved(uint256 indexed marketId, uint8 winningOutcome, int256 price, uint256 totalPrizePool);
+    event MarketResolved(
+        uint256 indexed marketId, PredictionTypes.Outcome winningOutcome, int256 price, uint256 totalPrizePool
+    );
     event RewardClaimed(address indexed user, uint256 indexed tokenId, uint256 rewardAmount);
 
     event DisplayLog(
@@ -116,7 +119,7 @@ contract PredictionPoolTest is Test {
             uint256 retMarketId,
             bool retMarketExists,
             bool retMarketResolved,
-            uint8 retMarketWinningOutcome,
+            PredictionTypes.Outcome retMarketWinningOutcome,
             uint256 retMarketTotalStake0,
             uint256 retMarketTotalStake1
         ) = pool.markets(marketIdToCreate);
@@ -124,7 +127,11 @@ contract PredictionPoolTest is Test {
         assertTrue(retMarketExists, "Market should exist after creation");
         assertEq(retMarketId, marketIdToCreate, "Stored marketId mismatch with key");
         assertFalse(retMarketResolved, "Market should not be resolved initially");
-        assertEq(retMarketWinningOutcome, 0, "Winning outcome should be 0 initially");
+        assertEq(
+            uint8(retMarketWinningOutcome),
+            uint8(PredictionTypes.Outcome.Bearish),
+            "Winning outcome should be Bearish initially"
+        );
         assertEq(retMarketTotalStake0, 0, "Total stake for outcome 0 should be 0");
         assertEq(retMarketTotalStake1, 0, "Total stake for outcome 1 should be 0");
     }
@@ -148,7 +155,7 @@ contract PredictionPoolTest is Test {
     function testRecordPrediction() public {
         uint256 marketIdToTest = 1;
         address predictor = user1;
-        uint8 outcome = 0;
+        PredictionTypes.Outcome outcome = PredictionTypes.Outcome.Bearish;
         uint256 stakeAmount = 0.02 ether;
 
         vm.prank(owner);
@@ -171,7 +178,7 @@ contract PredictionPoolTest is Test {
         uint256 nonExistentMarketId = 99;
         uint256 stakeAmount = initialMinStakeAmount;
         address predictor = user1;
-        uint8 outcomeToPredict = 0;
+        PredictionTypes.Outcome outcomeToPredict = PredictionTypes.Outcome.Bearish;
 
         vm.prank(predictor);
         vm.expectRevert(abi.encodeWithSelector(PredictionPool.MarketDoesNotExist.selector, nonExistentMarketId));
@@ -185,7 +192,7 @@ contract PredictionPoolTest is Test {
         pool.createMarket(marketIdToTest);
 
         address predictor = user1;
-        uint8 outcomeToPredict = 0;
+        PredictionTypes.Outcome outcomeToPredict = PredictionTypes.Outcome.Bearish;
 
         vm.prank(predictor);
         vm.expectRevert(PredictionPool.AmountCannotBeZero.selector);
@@ -204,7 +211,7 @@ contract PredictionPoolTest is Test {
         uint256 stakeAmountSent = 100 wei;
 
         address predictor = user1;
-        uint8 outcomeToPredict = 0;
+        PredictionTypes.Outcome outcomeToPredict = PredictionTypes.Outcome.Bearish;
 
         vm.prank(predictor);
         vm.expectRevert(PredictionPool.AmountCannotBeZero.selector);
@@ -220,11 +227,11 @@ contract PredictionPoolTest is Test {
         vm.prank(owner);
         pool.createMarket(marketIdToTest);
         vm.prank(oracleResolverAddress);
-        pool.resolveMarket(marketIdToTest, 0, 0);
+        pool.resolveMarket(marketIdToTest, PredictionTypes.Outcome.Bearish, 0);
 
         vm.expectRevert(abi.encodeWithSelector(PredictionPool.MarketAlreadyResolved.selector, marketIdToTest));
         vm.deal(address(pool), 100 wei); // Fund the pool
-        pool.recordPrediction(address(1), marketIdToTest, 0, uint128(100 wei));
+        pool.recordPrediction(address(1), marketIdToTest, PredictionTypes.Outcome.Bearish, uint128(100 wei));
     }
 
     function testDuplicatePredictionReverts() public {
@@ -233,27 +240,18 @@ contract PredictionPoolTest is Test {
         pool.createMarket(marketIdToTest);
 
         vm.deal(address(pool), 0.1 ether); // Fund the pool
-        pool.recordPrediction(address(1), marketIdToTest, 0, uint128(0.1 ether));
+        pool.recordPrediction(address(1), marketIdToTest, PredictionTypes.Outcome.Bearish, uint128(0.1 ether));
 
         vm.expectRevert(abi.encodeWithSelector(PredictionPool.AlreadyPredicted.selector, marketIdToTest, address(1)));
         vm.deal(address(pool), 0.1 ether); // Fund the pool
-        pool.recordPrediction(address(1), marketIdToTest, 1, uint128(0.1 ether));
-    }
-
-    function testInvalidOutcomeReverts() public {
-        uint256 marketIdToTest = 4;
-        vm.prank(owner);
-        pool.createMarket(marketIdToTest);
-        vm.expectRevert(abi.encodeWithSelector(PredictionPool.InvalidOutcome.selector, 3));
-        vm.deal(address(pool), 100 wei); // Fund the pool
-        pool.recordPrediction(address(1), marketIdToTest, 3, uint128(100 wei));
+        pool.recordPrediction(address(1), marketIdToTest, PredictionTypes.Outcome.Bullish, uint128(0.1 ether));
     }
 
     function testZeroUserAddressPredictionReverts() public {
         uint256 marketId = 5;
         address zeroUser = address(0);
         uint256 stake = 0.1 ether;
-        uint8 outcome = 0;
+        PredictionTypes.Outcome outcome = PredictionTypes.Outcome.Bearish;
 
         vm.prank(owner);
         pool.createMarket(marketId);
@@ -272,8 +270,8 @@ contract PredictionPoolTest is Test {
         vm.prank(oracleResolverAddress);
 
         vm.expectEmit(true, true, true, true);
-        emit MarketResolved(marketIdToTest, 0, 0, 0);
-        pool.resolveMarket(marketIdToTest, 0, 0);
+        emit MarketResolved(marketIdToTest, PredictionTypes.Outcome.Bearish, 0, 0);
+        pool.resolveMarket(marketIdToTest, PredictionTypes.Outcome.Bearish, 0);
 
         (,, bool retMarketResolved,,,) = pool.markets(marketIdToTest);
         assertTrue(retMarketResolved, "Market should be resolved");
@@ -286,14 +284,14 @@ contract PredictionPoolTest is Test {
 
         vm.prank(user1);
         vm.deal(address(pool), 1 ether); // Fund the pool
-        pool.recordPrediction(user1, marketIdToTest, 0, uint128(1 ether));
+        pool.recordPrediction(user1, marketIdToTest, PredictionTypes.Outcome.Bearish, uint128(1 ether));
         vm.prank(user2);
         vm.deal(address(pool), 2 ether); // Fund the pool
-        pool.recordPrediction(user2, marketIdToTest, 1, uint128(2 ether));
+        pool.recordPrediction(user2, marketIdToTest, PredictionTypes.Outcome.Bullish, uint128(2 ether));
 
         uint256 expectedStake0 = (1 ether * (10000 - initialFeeBasisPoints)) / 10000;
         uint256 expectedStake1 = (2 ether * (10000 - initialFeeBasisPoints)) / 10000;
-        uint8 winningOutcomeToSet = 1;
+        PredictionTypes.Outcome winningOutcomeToSet = PredictionTypes.Outcome.Bullish;
         int256 expectedOraclePrice = 1000;
         uint256 expectedTotalPrizePool = expectedStake0 + expectedStake1;
 
@@ -303,13 +301,19 @@ contract PredictionPoolTest is Test {
         emit MarketResolved(marketIdToTest, winningOutcomeToSet, expectedOraclePrice, expectedTotalPrizePool);
         pool.resolveMarket(marketIdToTest, winningOutcomeToSet, expectedOraclePrice);
 
-        (uint256 mId, bool mExists, bool mResolved, uint8 mOutcomeFromMarket, uint256 mFinalTs0, uint256 mFinalTs1) =
-            pool.markets(marketIdToTest);
+        (
+            uint256 mId,
+            bool mExists,
+            bool mResolved,
+            PredictionTypes.Outcome mOutcomeFromMarket,
+            uint256 mFinalTs0,
+            uint256 mFinalTs1
+        ) = pool.markets(marketIdToTest);
 
         assertTrue(mExists, "Market should still exist");
         assertEq(mId, marketIdToTest, "Market ID mismatch in struct");
         assertTrue(mResolved, "Market should be resolved");
-        assertEq(mOutcomeFromMarket, winningOutcomeToSet, "Winning outcome mismatch in struct");
+        assertEq(uint8(mOutcomeFromMarket), uint8(winningOutcomeToSet), "Winning outcome mismatch in struct");
         assertEq(mFinalTs0, expectedStake0, "Total stake 0 in struct mismatch");
         assertEq(mFinalTs1, expectedStake1, "Total stake 1 in struct mismatch");
     }
@@ -321,7 +325,7 @@ contract PredictionPoolTest is Test {
 
         vm.prank(user1);
         vm.expectRevert(PredictionPool.NotOracleResolver.selector);
-        pool.resolveMarket(marketIdToTest, 1, 0);
+        pool.resolveMarket(marketIdToTest, PredictionTypes.Outcome.Bullish, 0);
     }
 
     function testResolveMarket_Reverts_NotOracleResolver_Owner() public {
@@ -331,14 +335,14 @@ contract PredictionPoolTest is Test {
 
         vm.prank(owner);
         vm.expectRevert(PredictionPool.NotOracleResolver.selector);
-        pool.resolveMarket(marketIdToTest, 1, 0);
+        pool.resolveMarket(marketIdToTest, PredictionTypes.Outcome.Bullish, 0);
     }
 
     function testResolveMarket_Reverts_MarketDoesNotExist() public {
         uint256 nonExistentMarketId = 99;
         vm.prank(oracleResolverAddress);
         vm.expectRevert(abi.encodeWithSelector(PredictionPool.MarketDoesNotExist.selector, nonExistentMarketId));
-        pool.resolveMarket(nonExistentMarketId, 1, 0);
+        pool.resolveMarket(nonExistentMarketId, PredictionTypes.Outcome.Bullish, 0);
     }
 
     function testResolveMarket_Reverts_MarketAlreadyResolved() public {
@@ -347,22 +351,32 @@ contract PredictionPoolTest is Test {
         pool.createMarket(marketIdToTest);
 
         vm.prank(oracleResolverAddress);
-        pool.resolveMarket(marketIdToTest, 0, 0);
+        pool.resolveMarket(marketIdToTest, PredictionTypes.Outcome.Bearish, 0);
 
         vm.prank(oracleResolverAddress);
         vm.expectRevert(abi.encodeWithSelector(PredictionPool.MarketAlreadyResolved.selector, marketIdToTest));
-        pool.resolveMarket(marketIdToTest, 1, 0);
+        pool.resolveMarket(marketIdToTest, PredictionTypes.Outcome.Bullish, 0);
     }
 
-    function testResolveMarket_Reverts_InvalidOutcome() public {
+    function testResolveMarket_EnumSafety() public {
         uint256 marketIdToTest = 6;
         vm.prank(owner);
         pool.createMarket(marketIdToTest);
 
-        uint8 invalidOutcome = 2;
+        // Test that we can use both enum values
+        vm.startPrank(oracleResolverAddress);
+
+        // Should work with Bearish
+        pool.resolveMarket(marketIdToTest, PredictionTypes.Outcome.Bearish, 0);
+
+        // Create another market to test Bullish
+        uint256 marketIdToTest2 = 7;
+        vm.stopPrank();
+        vm.prank(owner);
+        pool.createMarket(marketIdToTest2);
+
         vm.prank(oracleResolverAddress);
-        vm.expectRevert(abi.encodeWithSelector(PredictionPool.InvalidOutcome.selector, invalidOutcome));
-        pool.resolveMarket(marketIdToTest, invalidOutcome, 0);
+        pool.resolveMarket(marketIdToTest2, PredictionTypes.Outcome.Bullish, 0);
     }
 
     function testSetFeeConfiguration_Successful() public {
@@ -393,7 +407,7 @@ contract PredictionPoolTest is Test {
         uint256 marketId = 10;
         address winner = user1;
         uint256 winnerStake = 2 ether;
-        uint8 winningOutcome = 0;
+        PredictionTypes.Outcome winningOutcome = PredictionTypes.Outcome.Bearish;
 
         vm.prank(owner);
         pool.createMarket(marketId);
@@ -432,8 +446,8 @@ contract PredictionPoolTest is Test {
         address loser = user2;
         uint256 winnerStake = 2 ether;
         uint256 loserStake = 1 ether;
-        uint8 winningOutcome = 0;
-        uint8 losingOutcome = 1;
+        PredictionTypes.Outcome winningOutcome = PredictionTypes.Outcome.Bearish;
+        PredictionTypes.Outcome losingOutcome = PredictionTypes.Outcome.Bullish;
 
         vm.prank(owner);
         pool.createMarket(marketId);
@@ -456,13 +470,10 @@ contract PredictionPoolTest is Test {
         uint256 poolInitialBalance = address(pool).balance;
 
         uint256 expectedPayout = winnerNetStake + loserNetStake;
-        
-        // Store the current pool balance before adding funds
-        uint256 poolBalanceBeforeAddingFunds = address(pool).balance;
-        
+
         // Ensure the pool has enough balance to make the transfer
         vm.deal(address(pool), expectedPayout);
-        
+
         // Update the pool initial balance after adding funds
         poolInitialBalance = address(pool).balance;
 
@@ -487,8 +498,8 @@ contract PredictionPoolTest is Test {
         uint256 winner2Stake = 3 ether;
         uint256 loserStake = 4 ether;
 
-        uint8 winningOutcome = 0;
-        uint8 losingOutcome = 1;
+        PredictionTypes.Outcome winningOutcome = PredictionTypes.Outcome.Bearish;
+        PredictionTypes.Outcome losingOutcome = PredictionTypes.Outcome.Bullish;
 
         vm.prank(owner);
         pool.createMarket(marketId);
@@ -519,16 +530,14 @@ contract PredictionPoolTest is Test {
         uint256 poolBalanceBeforeWinner1Claim = address(pool).balance;
         uint256 winner1ShareOfLosing = FullMath.mulDiv(winner1NetStake, loserNetStake, totalNetWinningStake);
         uint256 winner1ExpectedPayout = winner1NetStake + winner1ShareOfLosing;
-        
-        // Store the current pool balance before adding funds
-        uint256 poolBalanceBeforeAddingFunds = address(pool).balance;
-        
+
         // Calculate total needed funds for both winners
-        uint256 totalNeededFunds = winner1ExpectedPayout + winner2NetStake + FullMath.mulDiv(winner2NetStake, loserNetStake, totalNetWinningStake);
-        
+        uint256 totalNeededFunds = winner1ExpectedPayout + winner2NetStake
+            + FullMath.mulDiv(winner2NetStake, loserNetStake, totalNetWinningStake);
+
         // Ensure the pool has enough balance to make the transfer
         vm.deal(address(pool), totalNeededFunds);
-        
+
         // Update the pool balance after adding funds
         poolBalanceBeforeWinner1Claim = address(pool).balance;
 
@@ -551,7 +560,7 @@ contract PredictionPoolTest is Test {
         uint256 winner2ShareOfLosing = FullMath.mulDiv(winner2NetStake, loserNetStake, totalNetWinningStake);
 
         uint256 winner2ExpectedPayout = winner2NetStake + winner2ShareOfLosing;
-        
+
         // The pool should already have enough balance from the previous vm.deal, but let's ensure it
         if (address(pool).balance < winner2ExpectedPayout) {
             vm.deal(address(pool), winner2ExpectedPayout);
@@ -584,7 +593,7 @@ contract PredictionPoolTest is Test {
         uint256 marketId = 13;
         address predictor = user1;
         uint256 stake = 1 ether;
-        uint8 outcome = 0;
+        PredictionTypes.Outcome outcome = PredictionTypes.Outcome.Bearish;
 
         vm.prank(owner);
         pool.createMarket(marketId);
@@ -609,7 +618,7 @@ contract PredictionPoolTest is Test {
         vm.prank(owner);
         pool.createMarket(marketId);
         vm.prank(oracleResolverAddress);
-        pool.resolveMarket(marketId, 0, 1000);
+        pool.resolveMarket(marketId, PredictionTypes.Outcome.Bearish, 1000);
 
         vm.prank(rewardDistributorAddress);
         vm.expectRevert(abi.encodeWithSelector(MockSwapCastNFT.TokenDoesNotExist.selector, nonExistentTokenId));
@@ -620,7 +629,7 @@ contract PredictionPoolTest is Test {
         uint256 marketId = 15;
         address predictor = user1;
         uint256 stake = 1 ether;
-        uint8 outcome = 0;
+        PredictionTypes.Outcome outcome = PredictionTypes.Outcome.Bearish;
 
         vm.prank(owner);
         pool.createMarket(marketId);
@@ -639,8 +648,8 @@ contract PredictionPoolTest is Test {
         uint256 marketId = 16;
         address predictor = user1;
         uint256 stake = 1 ether;
-        uint8 predictedOutcome = 0;
-        uint8 actualWinningOutcome = 1;
+        PredictionTypes.Outcome predictedOutcome = PredictionTypes.Outcome.Bearish;
+        PredictionTypes.Outcome actualWinningOutcome = PredictionTypes.Outcome.Bullish;
 
         vm.prank(owner);
         pool.createMarket(marketId);
@@ -672,16 +681,16 @@ contract PredictionPoolTest is Test {
 
         vm.prank(predictorAccount);
         vm.deal(address(pool), 1 ether); // Fund the pool
-        pool.recordPrediction(predictorAccount, marketIdToTest, 0, uint128(1 ether));
+        pool.recordPrediction(predictorAccount, marketIdToTest, PredictionTypes.Outcome.Bearish, uint128(1 ether));
 
         vm.prank(oracleResolverAddress);
-        pool.resolveMarket(marketIdToTest, 0, 1000);
+        pool.resolveMarket(marketIdToTest, PredictionTypes.Outcome.Bearish, 1000);
 
         uint256 netStake = (1 ether * (10000 - initialFeeBasisPoints)) / 10000;
         vm.mockCall(
             address(mockNft),
             abi.encodeWithSelector(ISwapCastNFT.getPredictionDetails.selector, tokenIdToClaim),
-            abi.encode(marketIdToTest, 0, netStake, predictorAccount)
+            abi.encode(marketIdToTest, PredictionTypes.Outcome.Bearish, netStake, predictorAccount)
         );
 
         vm.prank(rewardDistributorAddress);
@@ -696,7 +705,7 @@ contract PredictionPoolTest is Test {
         vm.prank(owner);
         pool.createMarket(1);
         vm.prank(oracleResolverAddress);
-        pool.resolveMarket(1, 0, 1000);
+        pool.resolveMarket(1, PredictionTypes.Outcome.Bullish, 0);
 
         vm.prank(owner);
         pool.createMarket(nonExistentMarketIdForNFT);
@@ -704,7 +713,7 @@ contract PredictionPoolTest is Test {
         vm.mockCall(
             address(mockNft),
             abi.encodeWithSelector(ISwapCastNFT.getPredictionDetails.selector, tokenIdForNonExistentMarket),
-            abi.encode(nonExistentMarketIdForNFT, 0, 1 ether, user1)
+            abi.encode(nonExistentMarketIdForNFT, PredictionTypes.Outcome.Bearish, 1 ether, user1)
         );
 
         vm.prank(rewardDistributorAddress);

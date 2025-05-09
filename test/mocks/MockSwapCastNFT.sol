@@ -4,11 +4,12 @@ pragma solidity ^0.8.26;
 import {ISwapCastNFT} from "../../src/interfaces/ISwapCastNFT.sol";
 import {IERC721Receiver} from "@openzeppelin/contracts/token/ERC721/IERC721Receiver.sol";
 import {Ownable} from "@openzeppelin/contracts/access/Ownable.sol";
+import {PredictionTypes} from "../../src/types/PredictionTypes.sol";
 
 contract MockSwapCastNFT is ISwapCastNFT, Ownable {
     struct PredictionNFT {
         uint256 marketId;
-        uint8 outcome;
+        PredictionTypes.Outcome outcome;
         uint256 convictionStake;
         address owner;
         bool exists;
@@ -23,7 +24,11 @@ contract MockSwapCastNFT is ISwapCastNFT, Ownable {
 
     // --- Events for testing ---
     event NFTMinted(
-        address indexed to, uint256 indexed tokenId, uint256 marketId, uint8 outcome, uint256 convictionStake
+        address indexed to,
+        uint256 indexed tokenId,
+        uint256 marketId,
+        PredictionTypes.Outcome outcome,
+        uint256 convictionStake
     );
     event NFTBurned(uint256 indexed tokenId);
 
@@ -43,7 +48,7 @@ contract MockSwapCastNFT is ISwapCastNFT, Ownable {
     }
 
     // --- ISwapCastNFT Implementation ---
-    function mint(address _to, uint256 _marketId, uint8 _outcome, uint256 _convictionStake)
+    function mint(address _to, uint256 _marketId, PredictionTypes.Outcome _outcome, uint256 _convictionStake)
         external
         override
         returns (uint256 tokenId)
@@ -96,7 +101,7 @@ contract MockSwapCastNFT is ISwapCastNFT, Ownable {
         external
         view
         override
-        returns (uint256 marketId, uint8 outcome, uint256 convictionStake, address owner)
+        returns (uint256 marketId, PredictionTypes.Outcome outcome, uint256 convictionStake, address owner)
     {
         if (shouldRevertOnGetPredictionDetails) {
             revert("MockSwapCastNFT: GetPredictionDetails reverted as instructed");

@@ -4,6 +4,7 @@ pragma solidity ^0.8.26;
 import {Ownable} from "@openzeppelin/contracts/access/Ownable.sol";
 import {IPredictionPoolForResolver} from "./interfaces/IPredictionPoolForResolver.sol";
 import {AggregatorV3Interface} from "@chainlink/contracts/v0.8/interfaces/AggregatorV3Interface.sol";
+import {PredictionTypes} from "./types/PredictionTypes.sol";
 
 /**
  * @title OracleResolver
@@ -62,7 +63,7 @@ contract OracleResolver is Ownable {
      * @param price The price reported by the oracle at the time of resolution.
      * @param winningOutcome The determined winning outcome (0 or 1).
      */
-    event MarketResolved(uint256 indexed marketId, int256 price, uint8 winningOutcome);
+    event MarketResolved(uint256 indexed marketId, int256 price, PredictionTypes.Outcome winningOutcome);
 
     /**
      * @notice Emitted when the `maxPriceStalenessSeconds` value is updated by the owner.
@@ -159,14 +160,14 @@ contract OracleResolver is Ownable {
             revert PriceIsStale(_marketId, lastUpdatedAt, block.timestamp);
         }
 
-        uint8 winningOutcome;
+        PredictionTypes.Outcome winningOutcome;
         // Note: Chainlink prices can be negative for certain data types, but for typical asset prices,
         // they are positive. Casting `price` (int256) to `uint256` is safe if positive prices are expected.
         // `priceThreshold` is uint256, implying positive comparison values.
         if (uint256(price) >= mo.priceThreshold) {
-            winningOutcome = 0; // e.g., Price will be AT or ABOVE X
+            winningOutcome = PredictionTypes.Outcome.Bearish; // e.g., Price will be AT or ABOVE X
         } else {
-            winningOutcome = 1; // e.g., Price will be BELOW X
+            winningOutcome = PredictionTypes.Outcome.Bullish; // e.g., Price will be BELOW X
         }
 
         try predictionPool.resolveMarket(_marketId, winningOutcome, price) {

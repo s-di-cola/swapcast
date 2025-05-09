@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: UNLICENSED
+// SPDX-License-Identifier: MIT
 pragma solidity ^0.8.26;
 
 import {Test} from "forge-std/Test.sol";
@@ -27,7 +27,7 @@ contract TestSwapCastHook is Test, Deployers {
 
     // Define the ERC721 Transfer event
     event Transfer(address indexed from, address indexed to, uint256 indexed tokenId);
-    
+
     error WrappedError(address target, bytes4 selector, bytes reason, bytes details);
 
     SwapCastHook internal hook;
@@ -62,7 +62,7 @@ contract TestSwapCastHook is Test, Deployers {
         uint160 flags = uint160(Hooks.AFTER_SWAP_FLAG);
         deployCodeTo("SwapCastHook.sol", abi.encode(manager, address(pool)), address(flags));
         hook = SwapCastHook(payable(address(flags)));
-        
+
         poolKey = PoolKey({
             currency0: currency0,
             currency1: currency1,
@@ -99,20 +99,16 @@ contract TestSwapCastHook is Test, Deployers {
         vm.deal(address(pool), convictionStake);
 
         bytes memory hookData = abi.encodePacked(marketId, predictedOutcome, convictionStake);
-        SwapParams memory swapParams = SwapParams({
-            zeroForOne: true,
-            amountSpecified: int256(1 ether),
-            sqrtPriceLimitX96: 4295128739 + 1
-        });
-        PoolSwapTest.TestSettings memory settings = PoolSwapTest.TestSettings({takeClaims: false, settleUsingBurn: false});
+        SwapParams memory swapParams =
+            SwapParams({zeroForOne: true, amountSpecified: int256(1 ether), sqrtPriceLimitX96: 4295128739 + 1});
+        PoolSwapTest.TestSettings memory settings =
+            PoolSwapTest.TestSettings({takeClaims: false, settleUsingBurn: false});
 
         uint256 protocolFeeBps = pool.protocolFeeBasisPoints();
         uint256 expectedFee = (convictionStake * protocolFeeBps) / 10000;
         uint256 expectedNetStake = convictionStake - expectedFee;
 
-        swapRouter.swap{value: convictionStake}(
-            poolKey, swapParams, settings, hookData
-        );
+        swapRouter.swap{value: convictionStake}(poolKey, swapParams, settings, hookData);
 
         address actualOwner = nft.ownerOf(0);
         assertTrue(actualOwner != address(0), "NFT not minted");
@@ -150,8 +146,9 @@ contract TestSwapCastHook is Test, Deployers {
             SwapParams({zeroForOne: true, amountSpecified: -0.05 ether, sqrtPriceLimitX96: TickMath.MIN_SQRT_PRICE + 1});
         bytes memory badHookData = new bytes(10); // Malformed hookData (10 bytes instead of expected 49)
         vm.deal(address(this), 1 ether);
-        
-        bytes memory expectedReason = abi.encodeWithSelector(SwapCastHook.InvalidHookDataLength.selector, badHookData.length, 49);
+
+        bytes memory expectedReason =
+            abi.encodeWithSelector(SwapCastHook.InvalidHookDataLength.selector, badHookData.length, 49);
         bytes4 hookCallFailedSelector = bytes4(keccak256(bytes("HookCallFailed()")));
         bytes4 afterSwapSelector = IHooks.afterSwap.selector;
 
@@ -214,7 +211,7 @@ contract TestSwapCastHook is Test, Deployers {
         // When we try to record a prediction for a non-existent market,
         // the SwapCastHook should catch the error from PredictionPool and revert with PredictionRecordingFailed
         bytes4 expectedSelector = SwapCastHook.PredictionRecordingFailed.selector;
-        
+
         vm.expectRevert(
             abi.encodeWithSelector(
                 WrappedError.selector,
@@ -224,14 +221,10 @@ contract TestSwapCastHook is Test, Deployers {
                 abi.encodePacked(bytes4(keccak256(bytes("HookCallFailed()"))))
             )
         );
-        
+
         swapRouter.swap{value: msgValue}(
             poolKey,
-            SwapParams({
-                zeroForOne: true,
-                amountSpecified: -1e18,
-                sqrtPriceLimitX96: TickMath.MIN_SQRT_PRICE + 1
-            }),
+            SwapParams({zeroForOne: true, amountSpecified: -1e18, sqrtPriceLimitX96: TickMath.MIN_SQRT_PRICE + 1}),
             PoolSwapTest.TestSettings({takeClaims: false, settleUsingBurn: false}),
             hookData
         );

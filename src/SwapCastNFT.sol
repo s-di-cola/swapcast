@@ -6,6 +6,7 @@ import {Ownable} from "@openzeppelin/contracts/access/Ownable.sol";
 import {Base64} from "@openzeppelin/contracts/utils/Base64.sol";
 import {Strings} from "@openzeppelin/contracts/utils/Strings.sol";
 import {ISwapCastNFT} from "./interfaces/ISwapCastNFT.sol";
+import {PredictionTypes} from "./types/PredictionTypes.sol";
 
 /**
  * @title SwapCastNFT
@@ -27,13 +28,13 @@ contract SwapCastNFT is ERC721, Ownable, ISwapCastNFT {
     /**
      * @notice Stores the detailed metadata associated with each prediction NFT.
      * @param marketId The unique identifier of the market this prediction pertains to.
-     * @param outcome The predicted outcome (e.g., 0 for Bearish, 1 for Bullish, or other scheme as defined by the market).
+     * @param outcome The predicted outcome (Bearish or Bullish).
      * @param convictionStake The amount of value (e.g., in Wei) staked on this prediction, representing its conviction.
      * @param mintedAt The Unix timestamp indicating when the NFT was minted.
      */
     struct PredictionMetadata {
         uint256 marketId;
-        uint8 outcome;
+        PredictionTypes.Outcome outcome;
         uint256 convictionStake;
         uint256 mintedAt;
     }
@@ -59,13 +60,17 @@ contract SwapCastNFT is ERC721, Ownable, ISwapCastNFT {
     /**
      * @notice Emitted when a new prediction NFT (position) is minted.
      * @param owner The address receiving the minted NFT (the predictor).
-     * @param tokenId The unique ID of the minted NFT.
-     * @param marketId The market ID associated with this prediction.
-     * @param outcome The outcome predicted by the user.
-     * @param convictionStake The conviction stake amount associated with this prediction.
+     * @param tokenId The unique identifier of the minted NFT.
+     * @param marketId The market ID for which the prediction is made.
+     * @param outcome The predicted outcome (Bearish or Bullish).
+     * @param convictionStake The amount of conviction (stake) declared for this prediction.
      */
     event PositionNFTMinted(
-        address indexed owner, uint256 indexed tokenId, uint256 marketId, uint8 outcome, uint256 convictionStake
+        address indexed owner,
+        uint256 indexed tokenId,
+        uint256 marketId,
+        PredictionTypes.Outcome outcome,
+        uint256 convictionStake
     );
     /**
      * @notice Emitted when a prediction NFT (position) is burned, typically after a claim or resolution.
@@ -132,7 +137,7 @@ contract SwapCastNFT is ERC721, Ownable, ISwapCastNFT {
      * @param _convictionStake The conviction stake amount for this prediction.
      * @return tokenId The ID of the newly minted NFT.
      */
-    function mint(address _to, uint256 _marketId, uint8 _outcome, uint256 _convictionStake)
+    function mint(address _to, uint256 _marketId, PredictionTypes.Outcome _outcome, uint256 _convictionStake)
         external
         override
         onlyPredictionPool
@@ -184,7 +189,7 @@ contract SwapCastNFT is ERC721, Ownable, ISwapCastNFT {
         external
         view
         override
-        returns (uint256 marketId, uint8 outcome, uint256 convictionStake, address owner_)
+        returns (uint256 marketId, PredictionTypes.Outcome outcome, uint256 convictionStake, address owner_)
     {
         if (_ownerOf(_tokenId) == address(0)) revert NonExistentToken(_tokenId);
         PredictionMetadata storage meta = tokenPredictionMetadata[_tokenId];
@@ -208,9 +213,9 @@ contract SwapCastNFT is ERC721, Ownable, ISwapCastNFT {
         PredictionMetadata memory meta = tokenPredictionMetadata[_tokenId];
 
         string memory outcomeStr;
-        if (meta.outcome == 0) {
+        if (meta.outcome == PredictionTypes.Outcome.Bearish) {
             outcomeStr = "Bearish"; // Example outcome string
-        } else if (meta.outcome == 1) {
+        } else if (meta.outcome == PredictionTypes.Outcome.Bullish) {
             outcomeStr = "Bullish"; // Example outcome string
         } else {
             // Fallback for other potential outcome values, or could revert if outcomes are strictly 0 or 1.

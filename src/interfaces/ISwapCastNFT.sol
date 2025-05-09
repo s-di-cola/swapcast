@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.26;
 
+import {PredictionTypes} from "../types/PredictionTypes.sol";
+
 /**
  * @title ISwapCastNFT
  * @author SwapCast Developers
@@ -17,11 +19,11 @@ interface ISwapCastNFT {
      *      and associating it with the provided prediction details.
      * @param _to The address to mint the NFT to.
      * @param _marketId The ID of the market the prediction is for.
-     * @param _outcome The predicted outcome (e.g., 0 for Bearish, 1 for Bullish).
+     * @param _outcome The predicted outcome (Bearish or Bullish).
      * @param _convictionStake The amount of conviction (e.g., in wei) staked on this prediction.
      * @return tokenId The unique ID of the newly minted token.
      */
-    function mint(address _to, uint256 _marketId, uint8 _outcome, uint256 _convictionStake)
+    function mint(address _to, uint256 _marketId, PredictionTypes.Outcome _outcome, uint256 _convictionStake)
         external
         returns (uint256 tokenId);
 
@@ -40,12 +42,12 @@ interface ISwapCastNFT {
      *      It should be implemented by the SwapCastNFT contract.
      * @param _tokenId The ID of the token to query.
      * @return marketId The market ID associated with the NFT.
-     * @return outcome The predicted outcome stored in the NFT (e.g., 0 or 1).
+     * @return outcome The predicted outcome stored in the NFT (Bearish or Bullish).
      * @return convictionStake The conviction stake amount recorded for this prediction NFT.
      * @return owner The current owner of the NFT.
      */
     function getPredictionDetails(uint256 _tokenId)
         external
         view
-        returns (uint256 marketId, uint8 outcome, uint256 convictionStake, address owner);
+        returns (uint256 marketId, PredictionTypes.Outcome outcome, uint256 convictionStake, address owner);
 }

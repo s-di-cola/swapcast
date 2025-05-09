@@ -1,18 +1,18 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.26;
 
-import "forge-std/Test.sol";
-import {SwapCastNFT} from "../src/SwapCastNFT.sol";
-
-// Define PredictionOutcome enum for test clarity
-enum PredictionOutcome {
-    Bearish, // 0
-    Bullish // 1
-
-}
+import {Test} from "forge-std/Test.sol";
+import {SwapCastNFT} from "src/SwapCastNFT.sol";
+import {PredictionTypes} from "src/types/PredictionTypes.sol";
 
 contract PredictionPoolMock {
-    function callMint(SwapCastNFT nft, address to, uint256 marketId, uint8 outcome, uint256 convictionStake) public {
+    function callMint(
+        SwapCastNFT nft,
+        address to,
+        uint256 marketId,
+        PredictionTypes.Outcome outcome,
+        uint256 convictionStake
+    ) public {
         nft.mint(to, marketId, outcome, convictionStake);
     }
 
@@ -38,10 +38,11 @@ contract SwapCastNFTTest is Test {
 
     /// @notice Test that minting emits event and sets metadata
     function testMintAndMetadata() public {
-        pool.callMint(nft, user, 1, 2, 100);
-        (uint256 marketId, uint8 outcome, uint256 convictionStake, uint256 mintedAt) = nft.tokenPredictionMetadata(0);
+        pool.callMint(nft, user, 1, PredictionTypes.Outcome.Bullish, 100);
+        (uint256 marketId, PredictionTypes.Outcome outcome, uint256 convictionStake, uint256 mintedAt) =
+            nft.tokenPredictionMetadata(0);
         assertEq(marketId, 1, "Market ID mismatch");
-        assertEq(outcome, 2, "Outcome mismatch");
+        assertEq(uint8(outcome), uint8(PredictionTypes.Outcome.Bullish), "Outcome mismatch");
         assertEq(convictionStake, 100, "Conviction stake mismatch");
         assertTrue(mintedAt > 0, "MintedAt should be set");
     }
@@ -50,19 +51,19 @@ contract SwapCastNFTTest is Test {
     function testOnlyPredictionPoolCanMint() public {
         vm.prank(address(0xBEEF)); // Prank as a non-pool address
         vm.expectRevert(SwapCastNFT.NotPredictionPool.selector);
-        nft.mint(user, 1, 2, 100);
+        nft.mint(user, 1, PredictionTypes.Outcome.Bullish, 100);
     }
 
     /// @notice Test that minting to zero address reverts
     function testMintToZeroAddressReverts() public {
         // Reverts with ERC721InvalidReceiver(address receiver)
         vm.expectRevert(abi.encodeWithSignature("ERC721InvalidReceiver(address)", address(0)));
-        pool.callMint(nft, address(0), 1, 2, 100);
+        pool.callMint(nft, address(0), 1, PredictionTypes.Outcome.Bullish, 100);
     }
 
     /// @notice Test that unauthorized burn reverts
     function testUnauthorizedBurnReverts() public {
-        pool.callMint(nft, user, 1, 2, 100); // Mint a token first
+        pool.callMint(nft, user, 1, PredictionTypes.Outcome.Bullish, 100); // Mint a token first
         vm.prank(address(0xBEEF)); // Prank as a non-pool address
         vm.expectRevert(SwapCastNFT.NotPredictionPool.selector);
         nft.burn(0);
@@ -77,7 +78,7 @@ contract SwapCastNFTTest is Test {
 
     /// @notice Test successful burn by PredictionPool
     function testBurnByPredictionPool() public {
-        pool.callMint(nft, user, 1, 2, 100); // Mint token 0
+        pool.callMint(nft, user, 1, PredictionTypes.Outcome.Bullish, 100); // Mint token 0
         // No need to approve, prediction pool is authorized implicitly by design
         pool.callBurn(nft, 0); // Burn as predictionPool
         // Check that token is no longer owned / URI reverts
@@ -122,13 +123,12 @@ contract SwapCastNFTTest is Test {
     function testTokenURISuccess() public {
         string memory expectedPrefix = "data:application/json;base64,";
         uint256 marketId = 77;
-        uint8 outcome = uint8(PredictionOutcome.Bullish);
         uint256 convictionStake = 1e18;
         uint256 mintTimestamp = 1; // Mock timestamp
 
         vm.store(address(nft), bytes32(uint256(4)), bytes32(uint256(mintTimestamp))); // Mock block.timestamp for _mintTimestamp
         nft.setPredictionPoolAddress(address(this));
-        uint256 tokenId = nft.mint(address(this), marketId, outcome, convictionStake); // Mint NFT #0
+        uint256 tokenId = nft.mint(address(this), marketId, PredictionTypes.Outcome.Bullish, convictionStake); // Mint NFT #0
 
         string memory uri = nft.tokenURI(tokenId);
 

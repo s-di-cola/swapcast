@@ -7,8 +7,7 @@ import {IPredictionPool} from "./interfaces/IPredictionPool.sol";
 import {IPredictionPoolForDistributor} from "./interfaces/IPredictionPoolForDistributor.sol";
 import {IPredictionPoolForResolver} from "./interfaces/IPredictionPoolForResolver.sol";
 import {ISwapCastNFT} from "./interfaces/ISwapCastNFT.sol";
-import {console} from "forge-std/console.sol";
-
+import {PredictionTypes} from "./types/PredictionTypes.sol";
 /**
  * @title PredictionPool
  * @author Your Name/Organization
@@ -20,6 +19,7 @@ import {console} from "forge-std/console.sol";
  *      and IERC721Receiver to potentially receive NFTs if ever needed, though not actively used for receiving.
  *      It implements various interfaces to define its role in the SwapCast ecosystem.
  */
+
 contract PredictionPool is
     IPredictionPool,
     IPredictionPoolForDistributor,
@@ -69,9 +69,9 @@ contract PredictionPool is
         uint256 marketId; // Redundant if key is marketId, but good for clarity if struct is passed around
         bool exists;
         bool resolved;
-        uint8 winningOutcome;
-        uint256 totalConvictionStakeOutcome0;
-        uint256 totalConvictionStakeOutcome1;
+        PredictionTypes.Outcome winningOutcome;
+        uint256 totalConvictionStakeOutcome0; // Bearish outcome
+        uint256 totalConvictionStakeOutcome1; // Bullish outcome
         mapping(address => uint256) userPredictionCount; // Value could be 1 if predicted, or the stake amount if needed elsewhere.
     }
 
@@ -119,7 +119,9 @@ contract PredictionPool is
      * @param outcome The predicted outcome (0 or 1).
      * @param stakeAmount The amount of ETH staked as conviction.
      */
-    event StakeRecorded(uint256 indexed marketId, address indexed user, uint8 outcome, uint256 stakeAmount);
+    event StakeRecorded(
+        uint256 indexed marketId, address indexed user, PredictionTypes.Outcome outcome, uint256 stakeAmount
+    );
 
     /**
      * @notice Emitted when a user successfully claims their reward for a winning prediction.
@@ -223,7 +225,9 @@ contract PredictionPool is
      *      Reverts with {NotRewardDistributor} if called by any other address.
      */
     modifier onlyRewardDistributor() {
-        if (msg.sender != rewardDistributorAddress) revert NotRewardDistributor();
+        if (msg.sender != rewardDistributorAddress) {
+            revert NotRewardDistributor();
+        }
         _;
     }
 
@@ -250,7 +254,9 @@ contract PredictionPool is
             _swapCastNFTAddress == address(0) || _treasuryAddress == address(0) || _oracleResolverAddress == address(0)
                 || _rewardDistributorAddress == address(0)
         ) revert ZeroAddressInput();
-        if (_initialFeeBasisPoints > 10000) revert InvalidFeeBasisPoints(_initialFeeBasisPoints); // Max 100%
+        if (_initialFeeBasisPoints > 10000) {
+            revert InvalidFeeBasisPoints(_initialFeeBasisPoints);
+        } // Max 100%
 
         swapCastNFT = ISwapCastNFT(_swapCastNFTAddress);
         treasuryAddress = _treasuryAddress;
@@ -277,7 +283,7 @@ contract PredictionPool is
         market.marketId = _marketId;
         market.exists = true;
         market.resolved = false;
-        market.winningOutcome = 0; // Default, has no meaning until resolved
+        market.winningOutcome = PredictionTypes.Outcome.Bearish; // Default, has no meaning until resolved
         market.totalConvictionStakeOutcome0 = 0;
         market.totalConvictionStakeOutcome1 = 0;
         // userPredictionCount mapping is implicitly initialized
@@ -294,7 +300,9 @@ contract PredictionPool is
      */
     function setFeeConfiguration(address _newTreasuryAddress, uint256 _newFeeBasisPoints) external onlyOwner {
         if (_newTreasuryAddress == address(0)) revert ZeroAddressInput();
-        if (_newFeeBasisPoints > 10000) revert InvalidFeeBasisPoints(_newFeeBasisPoints);
+        if (_newFeeBasisPoints > 10000) {
+            revert InvalidFeeBasisPoints(_newFeeBasisPoints);
+        }
 
         treasuryAddress = _newTreasuryAddress;
         protocolFeeBasisPoints = _newFeeBasisPoints;
@@ -338,28 +346,24 @@ contract PredictionPool is
      *      Emits {FeePaid} and {StakeRecorded} events (defined in IPredictionPool).
      * @param _user The address of the user making the prediction (can be different from msg.sender if using meta-transactions).
      * @param _marketId The ID of the market to predict on.
-     * @param _outcome The predicted outcome (0 for Bearish, 1 for Bullish).
+     * @param _outcome The predicted outcome (Bearish or Bullish).
      * @param _convictionStakeDeclared The amount of ETH staked as conviction.
      */
     function recordPrediction(
         address _user,
         uint256 _marketId,
-        uint8 _outcome,
+        PredictionTypes.Outcome _outcome,
         uint128 _convictionStakeDeclared
     ) external override {
-        console.log("PredictionPool.recordPrediction called by:", _user);
-        console.log("Attempting to record prediction for marketId:", _marketId);
-        console.log("Predicted outcome:", _outcome);
-        console.log("Declared conviction stake:", _convictionStakeDeclared);
-
         if (_user == address(0)) revert ZeroAddressInput();
         if (_convictionStakeDeclared == 0) revert AmountCannotBeZero(); // Stake declared in hookData must be non-zero
-        if (_outcome > 1) revert InvalidOutcome(_outcome);
+        // No need to validate outcome range since enum restricts to valid values
         Market storage market = markets[_marketId];
-        console.log("Market ID:", _marketId, "Exists?", market.exists);
         if (!market.exists) revert MarketDoesNotExist(_marketId);
         if (market.resolved) revert MarketAlreadyResolved(_marketId);
-        if (market.userPredictionCount[_user] > 0) revert AlreadyPredicted(_marketId, _user);
+        if (market.userPredictionCount[_user] > 0) {
+            revert AlreadyPredicted(_marketId, _user);
+        }
 
         if (shouldRevertOnRecord) {
             if (customErrorSelectorOnRecord != bytes4(0)) {
@@ -380,7 +384,9 @@ contract PredictionPool is
         uint256 stakeAmount = totalStakeSent - protocolFee;
 
         if (stakeAmount == 0) revert AmountCannotBeZero(); // Net stake must be > 0 (handles cases where fee is 100%)
-        if (stakeAmount < minStakeAmount) revert StakeBelowMinimum(stakeAmount, minStakeAmount);
+        if (stakeAmount < minStakeAmount) {
+            revert StakeBelowMinimum(stakeAmount, minStakeAmount);
+        }
 
         // Send fee to treasury
         if (protocolFee > 0) {
@@ -391,7 +397,7 @@ contract PredictionPool is
 
         // Update market state
         market.userPredictionCount[_user] = stakeAmount; // Or simply 1 if not storing stake amount here
-        if (_outcome == 0) {
+        if (_outcome == PredictionTypes.Outcome.Bearish) {
             market.totalConvictionStakeOutcome0 += stakeAmount;
         } else {
             market.totalConvictionStakeOutcome1 += stakeAmount;
@@ -410,10 +416,10 @@ contract PredictionPool is
      *      This implementation uses the `onlyOracleResolver` modifier.
      *      Emits a {MarketResolved} event (defined in IPredictionPoolForResolver).
      * @param _marketId The ID of the market to resolve.
-     * @param _winningOutcome The winning outcome (0 or 1).
+     * @param _winningOutcome The winning outcome (Bearish or Bullish).
      * @param _oraclePrice The price reported by the oracle at the time of resolution.
      */
-    function resolveMarket(uint256 _marketId, uint8 _winningOutcome, int256 _oraclePrice)
+    function resolveMarket(uint256 _marketId, PredictionTypes.Outcome _winningOutcome, int256 _oraclePrice)
         external
         virtual
         override
@@ -422,7 +428,7 @@ contract PredictionPool is
         Market storage market = markets[_marketId];
         if (!market.exists) revert MarketDoesNotExist(_marketId);
         if (market.resolved) revert MarketAlreadyResolved(_marketId);
-        if (_winningOutcome > 1) revert InvalidOutcome(_winningOutcome); // Assuming binary outcomes 0 or 1 for winning
+        // No need to validate outcome range since enum restricts to valid values
 
         market.resolved = true;
         market.winningOutcome = _winningOutcome;
@@ -449,7 +455,7 @@ contract PredictionPool is
         // Access control: Now restricted to onlyRewardDistributor.
         // The RewardDistributor contract is expected to handle NFT ownership verification prior to calling this.
 
-        (uint256 marketId, uint8 predictionOutcome, uint256 userConvictionStake, address nftOwner) =
+        (uint256 marketId, PredictionTypes.Outcome predictionOutcome, uint256 userConvictionStake, address nftOwner) =
             swapCastNFT.getPredictionDetails(_tokenId);
 
         Market storage market = markets[marketId];
@@ -459,8 +465,10 @@ contract PredictionPool is
 
         uint256 rewardAmount = userConvictionStake; // User always gets their stake back if they won.
 
-        if (market.winningOutcome == 0) {
-            if (market.totalConvictionStakeOutcome0 == 0) revert ClaimFailedNoStakeForOutcome(); // Should not be reachable if user won with outcome 0
+        if (market.winningOutcome == PredictionTypes.Outcome.Bearish) {
+            if (market.totalConvictionStakeOutcome0 == 0) {
+                revert ClaimFailedNoStakeForOutcome();
+            } // Should not be reachable if user won with Bearish outcome
             if (market.totalConvictionStakeOutcome1 > 0) {
                 // Only add from losing pool if it has funds
                 uint256 shareOfLosingPool =
@@ -468,8 +476,10 @@ contract PredictionPool is
                 rewardAmount += shareOfLosingPool;
             }
         } else {
-            // winningOutcome == 1
-            if (market.totalConvictionStakeOutcome1 == 0) revert ClaimFailedNoStakeForOutcome(); // Should not be reachable if user won with outcome 1
+            // winningOutcome == Bullish
+            if (market.totalConvictionStakeOutcome1 == 0) {
+                revert ClaimFailedNoStakeForOutcome();
+            } // Should not be reachable if user won with Bullish outcome
             if (market.totalConvictionStakeOutcome0 > 0) {
                 // Only add from losing pool if it has funds
                 uint256 shareOfLosingPool =
@@ -486,7 +496,7 @@ contract PredictionPool is
             (bool success,) = payable(nftOwner).call{value: rewardAmount}("");
             if (!success) revert RewardTransferFailed();
         }
-        
+
         // Always emit the event after burning the NFT, regardless of reward amount
         emit RewardClaimed(nftOwner, _tokenId, rewardAmount);
     }
@@ -508,7 +518,7 @@ contract PredictionPool is
             uint256 marketId_,
             bool exists_,
             bool resolved_,
-            uint8 winningOutcome_,
+            PredictionTypes.Outcome winningOutcome_,
             uint256 totalConvictionStakeOutcome0_,
             uint256 totalConvictionStakeOutcome1_
         )
