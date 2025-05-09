@@ -101,11 +101,16 @@ contract OracleResolver is Ownable {
      *                               This address is stored immutably.
      * @param initialOwner The initial owner of this OracleResolver contract.
      */
-    constructor(address _predictionPoolAddress, address initialOwner) Ownable(initialOwner) {
+    constructor(address _predictionPoolAddress, address initialOwner) {
         if (_predictionPoolAddress == address(0)) revert PredictionPoolZeroAddress();
         predictionPool = IPredictionPoolForResolver(_predictionPoolAddress);
         maxPriceStalenessSeconds = 3600; // Default to 1 hour
         emit MaxPriceStalenessSet(0, maxPriceStalenessSeconds);
+
+        // Transfer ownership to the initialOwner if it's not the deployer
+        if (initialOwner != msg.sender) {
+            transferOwnership(initialOwner);
+        }
     }
 
     /**

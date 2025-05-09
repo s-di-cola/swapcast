@@ -99,10 +99,12 @@ contract SwapCastNFT is ERC721, Ownable, ISwapCastNFT {
      * @param _name The name of the NFT collection (e.g., "SwapCast Positions"). Passed to the ERC721 constructor.
      * @param _symbol The symbol of the NFT collection (e.g., "SCPOS"). Passed to the ERC721 constructor.
      */
-    constructor(address _initialOwner, string memory _name, string memory _symbol)
-        ERC721(_name, _symbol)
-        Ownable(_initialOwner)
-    {}
+    constructor(address _initialOwner, string memory _name, string memory _symbol) ERC721(_name, _symbol) {
+        // Transfer ownership to the initialOwner if it's not the deployer
+        if (_initialOwner != msg.sender) {
+            transferOwnership(_initialOwner);
+        }
+    }
 
     /**
      * @notice Sets or updates the address of the PredictionPool contract authorized to mint/burn NFTs.

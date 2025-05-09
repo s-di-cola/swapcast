@@ -76,7 +76,7 @@ contract OracleResolverTest is Test {
 
     function testRegisterOracle_RevertsIfNotOwner() public {
         vm.prank(user1);
-        vm.expectRevert(abi.encodeWithSelector(Ownable.OwnableUnauthorizedAccount.selector, user1));
+        vm.expectRevert("Ownable: caller is not the owner");
         oracleResolver.registerOracle(DEFAULT_MARKET_ID, address(mockAggregatorEthUsd), DEFAULT_PRICE_THRESHOLD);
     }
 
@@ -111,7 +111,7 @@ contract OracleResolverTest is Test {
         uint256 newStaleness = 7200;
 
         vm.prank(user1);
-        vm.expectRevert(abi.encodeWithSelector(Ownable.OwnableUnauthorizedAccount.selector, user1));
+        vm.expectRevert("Ownable: caller is not the owner");
         oracleResolver.setMaxPriceStaleness(newStaleness);
     }
 

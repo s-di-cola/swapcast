@@ -8,6 +8,9 @@ import {IPredictionPoolForDistributor} from "./interfaces/IPredictionPoolForDist
 import {IPredictionPoolForResolver} from "./interfaces/IPredictionPoolForResolver.sol";
 import {ISwapCastNFT} from "./interfaces/ISwapCastNFT.sol";
 import {PredictionTypes} from "./types/PredictionTypes.sol";
+import {ILogAutomation, Log} from "@chainlink/contracts/v0.8/automation/interfaces/ILogAutomation.sol";
+import {AggregatorV3Interface} from "@chainlink/contracts/v0.8/interfaces/AggregatorV3Interface.sol";
+
 /**
  * @title PredictionPool
  * @author Your Name/Organization
@@ -19,11 +22,11 @@ import {PredictionTypes} from "./types/PredictionTypes.sol";
  *      and IERC721Receiver to potentially receive NFTs if ever needed, though not actively used for receiving.
  *      It implements various interfaces to define its role in the SwapCast ecosystem.
  */
-
 contract PredictionPool is
     IPredictionPool,
     IPredictionPoolForDistributor,
     IPredictionPoolForResolver,
+    ILogAutomation,
     Ownable,
     IERC721Receiver
 {
@@ -46,6 +49,14 @@ contract PredictionPool is
     uint256 public minStakeAmount;
 
     /**
+     * @notice Maximum acceptable delay (in seconds) for a Chainlink price feed update.
+     * @dev If a price feed's `updatedAt` timestamp is older than `block.timestamp - maxPriceStalenessSeconds`,
+     *      the price is considered stale, and market resolution will be prevented.
+     *      Defaulted to 1 hour, settable by the owner.
+     */
+    uint256 public maxPriceStalenessSeconds = 3600; // Default to 1 hour
+
+    /**
      * @notice For testing: if true, the `recordPrediction` function will revert with `revertMessageOnRecord`.
      */
     bool public shouldRevertOnRecord;
@@ -64,6 +75,9 @@ contract PredictionPool is
      * @param totalConvictionStakeOutcome0 The total ETH staked on outcome 0 (e.g., Bearish).
      * @param totalConvictionStakeOutcome1 The total ETH staked on outcome 1 (e.g., Bullish).
      * @param userPredictionCount A mapping to track if a user has already predicted in this market (typically to enforce one prediction per user).
+     * @param expirationTime The timestamp when this market expires and should be resolved.
+     * @param priceAggregator The Chainlink price feed aggregator address for this market.
+     * @param priceThreshold The price threshold for determining the winning outcome.
      */
     struct Market {
         uint256 marketId; // Redundant if key is marketId, but good for clarity if struct is passed around
@@ -73,6 +87,9 @@ contract PredictionPool is
         uint256 totalConvictionStakeOutcome0; // Bearish outcome
         uint256 totalConvictionStakeOutcome1; // Bullish outcome
         mapping(address => uint256) userPredictionCount; // Value could be 1 if predicted, or the stake amount if needed elsewhere.
+        uint256 expirationTime; // When the market expires and should be resolved
+        address priceAggregator; // Chainlink price feed address
+        uint256 priceThreshold; // Price threshold for determining outcome
     }
 
     /**
@@ -82,6 +99,14 @@ contract PredictionPool is
 
     // --- Events ---
     // Events from interfaces (MarketCreated, MarketResolved, PredictionRecorded, FeePaid, RewardClaimed) are implicitly part of this contract's ABI.
+
+    /**
+     * @notice Emitted when a market reaches its expiration time and is ready for resolution.
+     * @dev This event is monitored by Chainlink Automation for log-triggered resolution.
+     * @param marketId The ID of the market that has expired.
+     * @param expirationTime The timestamp when the market expired.
+     */
+    event MarketExpired(uint256 indexed marketId, uint256 expirationTime);
 
     /**
      * @notice Emitted when a new market is created by the owner.
@@ -167,6 +192,10 @@ contract PredictionPool is
      */
     error ZeroAddressInput();
     /**
+     * @dev Reverts if an attempt is made to create a market with an invalid expiration time.
+     */
+    error InvalidExpirationTime();
+    /**
      * @dev Reverts if a monetary amount (e.g., stake, fee) that must be positive is zero.
      */
     error AmountCannotBeZero();
@@ -249,7 +278,7 @@ contract PredictionPool is
         address _oracleResolverAddress,
         address _rewardDistributorAddress,
         uint256 _initialMinStakeAmount
-    ) Ownable(_initialOwner) {
+    ) {
         if (
             _swapCastNFTAddress == address(0) || _treasuryAddress == address(0) || _oracleResolverAddress == address(0)
                 || _rewardDistributorAddress == address(0)
@@ -267,6 +296,11 @@ contract PredictionPool is
 
         emit FeeConfigurationChanged(_treasuryAddress, _initialFeeBasisPoints); // Also consider emitting min stake changed if needed
         emit MinStakeAmountChanged(_initialMinStakeAmount); // Emit initial min stake
+
+        // Transfer ownership to the initialOwner if it's not the deployer
+        if (_initialOwner != msg.sender) {
+            transferOwnership(_initialOwner);
+        }
     }
 
     /**
@@ -287,6 +321,37 @@ contract PredictionPool is
         market.totalConvictionStakeOutcome0 = 0;
         market.totalConvictionStakeOutcome1 = 0;
         // userPredictionCount mapping is implicitly initialized
+
+        emit MarketCreated(_marketId);
+    }
+
+    /**
+     * @notice Creates a market with expiration time and price feed information for automated resolution.
+     * @dev Only callable by the contract owner. Emits a {MarketCreated} event on success.
+     * @param _marketId The unique identifier for the new market. Must be non-zero.
+     * @param _expirationTime The timestamp when this market expires and should be resolved.
+     * @param _priceAggregator The Chainlink price feed aggregator address for this market.
+     * @param _priceThreshold The price threshold for determining the winning outcome.
+     */
+    function createMarketWithOracle(
+        uint256 _marketId,
+        uint256 _expirationTime,
+        address _priceAggregator,
+        uint256 _priceThreshold
+    ) external onlyOwner {
+        if (_marketId == 0) revert InvalidMarketId();
+        if (markets[_marketId].exists) revert MarketAlreadyExists(_marketId);
+        // Allow current timestamp as expiration time for testing purposes
+        if (_expirationTime < block.timestamp) revert InvalidExpirationTime();
+        if (_priceAggregator == address(0)) revert ZeroAddressInput();
+
+        Market storage market = markets[_marketId];
+        market.marketId = _marketId;
+        market.exists = true;
+        market.resolved = false;
+        market.expirationTime = _expirationTime;
+        market.priceAggregator = _priceAggregator;
+        market.priceThreshold = _priceThreshold;
 
         emit MarketCreated(_marketId);
     }
@@ -423,20 +488,23 @@ contract PredictionPool is
         external
         virtual
         override
-        onlyOracleResolver
     {
+        // Allow calls from OracleResolver or from this contract via performUpkeep
+        if (msg.sender != oracleResolverAddress && msg.sender != address(this)) {
+            revert NotOracleResolver();
+        }
+
         Market storage market = markets[_marketId];
+
         if (!market.exists) revert MarketDoesNotExist(_marketId);
         if (market.resolved) revert MarketAlreadyResolved(_marketId);
-        // No need to validate outcome range since enum restricts to valid values
 
         market.resolved = true;
         market.winningOutcome = _winningOutcome;
 
-        uint256 prizePool =
-            markets[_marketId].totalConvictionStakeOutcome0 + markets[_marketId].totalConvictionStakeOutcome1;
+        uint256 totalPrizePool = market.totalConvictionStakeOutcome0 + market.totalConvictionStakeOutcome1;
 
-        emit MarketResolved(_marketId, _winningOutcome, _oraclePrice, prizePool);
+        emit MarketResolved(_marketId, _winningOutcome, _oraclePrice, totalPrizePool);
     }
 
     // --- IPredictionPoolForDistributor Implementation ---
@@ -510,6 +578,9 @@ contract PredictionPool is
      * @return winningOutcome_ The winning outcome, if resolved.
      * @return totalConvictionStakeOutcome0_ Total stake on outcome 0.
      * @return totalConvictionStakeOutcome1_ Total stake on outcome 1.
+     * @return expirationTime_ The timestamp when this market expires.
+     * @return priceAggregator_ The Chainlink price feed aggregator address.
+     * @return priceThreshold_ The price threshold for determining the outcome.
      */
     function getMarketDetails(uint256 _marketId)
         external
@@ -520,7 +591,10 @@ contract PredictionPool is
             bool resolved_,
             PredictionTypes.Outcome winningOutcome_,
             uint256 totalConvictionStakeOutcome0_,
-            uint256 totalConvictionStakeOutcome1_
+            uint256 totalConvictionStakeOutcome1_,
+            uint256 expirationTime_,
+            address priceAggregator_,
+            uint256 priceThreshold_
         )
     {
         Market storage market = markets[_marketId];
@@ -530,7 +604,10 @@ contract PredictionPool is
             market.resolved,
             market.winningOutcome,
             market.totalConvictionStakeOutcome0,
-            market.totalConvictionStakeOutcome1
+            market.totalConvictionStakeOutcome1,
+            market.expirationTime,
+            market.priceAggregator,
+            market.priceThreshold
         );
     }
 
@@ -558,5 +635,94 @@ contract PredictionPool is
         bytes calldata // data - Additional data with no specified format
     ) external pure override returns (bytes4) {
         return IERC721Receiver.onERC721Received.selector;
+    }
+
+    /**
+     * @notice Checks if a market has expired and needs resolution.
+     * @dev Called by Chainlink Automation when a MarketExpired event is detected.
+     * @param log The log data containing the MarketExpired event.
+     * @return upkeepNeeded Boolean indicating if the market should be resolved.
+     * @return performData Encoded data to be used in performUpkeep.
+     */
+    function checkLog(Log calldata log, bytes memory)
+        external
+        view
+        override
+        returns (bool upkeepNeeded, bytes memory performData)
+    {
+        // Extract marketId from the event's topics (it should be the first indexed parameter)
+        uint256 marketId = uint256(log.topics[1]);
+
+        // Check if this market exists and isn't already resolved
+        Market storage market = markets[marketId];
+        if (!market.exists || market.resolved || market.priceAggregator == address(0)) {
+            return (false, "");
+        }
+
+        // Market exists, has oracle data, and needs resolution
+        upkeepNeeded = true;
+        performData = abi.encode(marketId);
+
+        return (upkeepNeeded, performData);
+    }
+
+    /**
+     * @notice Resolves a market after it has expired.
+     * @dev Called by Chainlink Automation after checkLog returns upkeepNeeded=true.
+     * @param performData The encoded market ID to be resolved.
+     */
+    function performUpkeep(bytes calldata performData) external override {
+        uint256 marketId = abi.decode(performData, (uint256));
+
+        // Get the market data
+        Market storage market = markets[marketId];
+        if (!market.exists || market.resolved) {
+            return; // Safety check
+        }
+
+        // Fetch the latest price from the Chainlink oracle
+        (, int256 price,, uint256 lastUpdatedAt,) = AggregatorV3Interface(market.priceAggregator).latestRoundData();
+
+        // Check if the price is stale
+        if (block.timestamp - lastUpdatedAt > maxPriceStalenessSeconds) {
+            return; // Skip resolution if price is stale, will retry later
+        }
+
+        // Determine the winning outcome based on the price threshold
+        PredictionTypes.Outcome winningOutcome;
+        if (uint256(price) >= market.priceThreshold) {
+            winningOutcome = PredictionTypes.Outcome.Bearish; // Price is AT or ABOVE threshold
+        } else {
+            winningOutcome = PredictionTypes.Outcome.Bullish; // Price is BELOW threshold
+        }
+
+        // Resolve the market
+        this.resolveMarket(marketId, winningOutcome, price);
+    }
+
+    /**
+     * @notice Checks if a market has expired and emits the MarketExpired event if needed.
+     * @dev This function should be called periodically to check for expired markets.
+     * @param _marketId The ID of the market to check.
+     */
+    function checkMarketExpiration(uint256 _marketId) external {
+        Market storage market = markets[_marketId];
+
+        if (!market.exists || market.resolved) {
+            revert MarketDoesNotExist(_marketId);
+        }
+
+        if (market.expirationTime > 0 && block.timestamp >= market.expirationTime) {
+            emit MarketExpired(_marketId, block.timestamp);
+        }
+    }
+
+    /**
+     * @notice Sets the maximum allowed staleness period for oracle price feeds.
+     * @dev Only callable by the contract owner.
+     * @param _newStalenessSeconds The new staleness period in seconds (e.g., 3600 for 1 hour).
+     */
+    function setMaxPriceStaleness(uint256 _newStalenessSeconds) external onlyOwner {
+        maxPriceStalenessSeconds = _newStalenessSeconds;
     }
 }

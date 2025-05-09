@@ -56,8 +56,8 @@ contract SwapCastNFTTest is Test {
 
     /// @notice Test that minting to zero address reverts
     function testMintToZeroAddressReverts() public {
-        // Reverts with ERC721InvalidReceiver(address receiver)
-        vm.expectRevert(abi.encodeWithSignature("ERC721InvalidReceiver(address)", address(0)));
+        // Reverts with ERC721 error message for mint to zero address
+        vm.expectRevert("ERC721: mint to the zero address");
         pool.callMint(nft, address(0), 1, PredictionTypes.Outcome.Bullish, 100);
     }
 
@@ -71,8 +71,8 @@ contract SwapCastNFTTest is Test {
 
     /// @notice Test burning a non-existent token (if it's meant to revert)
     function testBurnNonExistentToken() public {
-        // Reverts with ERC721NonexistentToken(uint256 tokenId)
-        vm.expectRevert(abi.encodeWithSignature("ERC721NonexistentToken(uint256)", 0));
+        // Reverts with ERC721 error message for non-existent token
+        vm.expectRevert("ERC721: invalid token ID");
         pool.callBurn(nft, 0); // Attempt to burn token 0 which doesn't exist yet
     }
 
@@ -82,7 +82,7 @@ contract SwapCastNFTTest is Test {
         // No need to approve, prediction pool is authorized implicitly by design
         pool.callBurn(nft, 0); // Burn as predictionPool
         // Check that token is no longer owned / URI reverts
-        vm.expectRevert(abi.encodeWithSignature("ERC721NonexistentToken(uint256)", 0));
+        vm.expectRevert("ERC721: invalid token ID");
         nft.ownerOf(0);
     }
 
@@ -107,8 +107,8 @@ contract SwapCastNFTTest is Test {
     function testNonOwnerCannotSetPredictionPoolAddress() public {
         address attacker = address(0xDEAD);
         vm.prank(attacker);
-        // Standard Ownable error: OwnableUnauthorizedAccount(address account)
-        vm.expectRevert(abi.encodeWithSignature("OwnableUnauthorizedAccount(address)", attacker));
+        // Standard Ownable error for older version
+        vm.expectRevert("Ownable: caller is not the owner");
         nft.setPredictionPoolAddress(address(0xABCD));
     }
 

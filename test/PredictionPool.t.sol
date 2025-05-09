@@ -91,7 +91,9 @@ contract PredictionPoolTest is Test {
         vm.deal(user3, 10 ether);
         vm.deal(owner, 1 ether);
 
-        mockNft = new MockSwapCastNFT(owner);
+        vm.startPrank(owner);
+        mockNft = new MockSwapCastNFT();
+        vm.stopPrank();
 
         pool = new PredictionPool(
             address(mockNft),
@@ -116,24 +118,26 @@ contract PredictionPoolTest is Test {
         pool.createMarket(marketIdToCreate);
 
         (
-            uint256 retMarketId,
-            bool retMarketExists,
-            bool retMarketResolved,
-            PredictionTypes.Outcome retMarketWinningOutcome,
-            uint256 retMarketTotalStake0,
-            uint256 retMarketTotalStake1
-        ) = pool.markets(marketIdToCreate);
+            uint256 marketId_,
+            bool exists_,
+            bool resolved_,
+            PredictionTypes.Outcome winningOutcome_,
+            uint256 totalConvictionStakeOutcome0_,
+            uint256 totalConvictionStakeOutcome1_,
+            ,
+            ,
+        ) = pool.getMarketDetails(marketIdToCreate);
 
-        assertTrue(retMarketExists, "Market should exist after creation");
-        assertEq(retMarketId, marketIdToCreate, "Stored marketId mismatch with key");
-        assertFalse(retMarketResolved, "Market should not be resolved initially");
+        assertTrue(exists_, "Market should exist after creation");
+        assertEq(marketId_, marketIdToCreate, "Stored marketId mismatch with key");
+        assertFalse(resolved_, "Market should not be resolved initially");
         assertEq(
-            uint8(retMarketWinningOutcome),
+            uint8(winningOutcome_),
             uint8(PredictionTypes.Outcome.Bearish),
             "Winning outcome should be Bearish initially"
         );
-        assertEq(retMarketTotalStake0, 0, "Total stake for outcome 0 should be 0");
-        assertEq(retMarketTotalStake1, 0, "Total stake for outcome 1 should be 0");
+        assertEq(totalConvictionStakeOutcome0_, 0, "Total stake for outcome 0 should be 0");
+        assertEq(totalConvictionStakeOutcome1_, 0, "Total stake for outcome 1 should be 0");
     }
 
     function testCreateMarket_Reverts_ZeroMarketId() public {
@@ -273,7 +277,7 @@ contract PredictionPoolTest is Test {
         emit MarketResolved(marketIdToTest, PredictionTypes.Outcome.Bearish, 0, 0);
         pool.resolveMarket(marketIdToTest, PredictionTypes.Outcome.Bearish, 0);
 
-        (,, bool retMarketResolved,,,) = pool.markets(marketIdToTest);
+        (,, bool retMarketResolved,,,,,,) = pool.getMarketDetails(marketIdToTest);
         assertTrue(retMarketResolved, "Market should be resolved");
     }
 
@@ -307,8 +311,10 @@ contract PredictionPoolTest is Test {
             bool mResolved,
             PredictionTypes.Outcome mOutcomeFromMarket,
             uint256 mFinalTs0,
-            uint256 mFinalTs1
-        ) = pool.markets(marketIdToTest);
+            uint256 mFinalTs1,
+            ,
+            ,
+        ) = pool.getMarketDetails(marketIdToTest);
 
         assertTrue(mExists, "Market should still exist");
         assertEq(mId, marketIdToTest, "Market ID mismatch in struct");

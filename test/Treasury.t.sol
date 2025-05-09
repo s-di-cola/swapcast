@@ -49,7 +49,7 @@ contract TreasuryTest is Test {
         (bool sent,) = address(treasury).call{value: 1 ether}("");
         assertTrue(sent);
         vm.prank(nonOwner);
-        vm.expectRevert(abi.encodeWithSelector(Ownable.OwnableUnauthorizedAccount.selector, nonOwner));
+        vm.expectRevert("Ownable: caller is not the owner");
         treasury.withdraw(1 ether, recipient);
     }
 
@@ -90,14 +90,14 @@ contract TreasuryTest is Test {
     /// @notice Test that non-owner cannot transfer ownership
     function testNonOwnerCannotTransferOwnership() public {
         vm.prank(nonOwner);
-        vm.expectRevert(abi.encodeWithSelector(Ownable.OwnableUnauthorizedAccount.selector, nonOwner));
+        vm.expectRevert("Ownable: caller is not the owner");
         treasury.transferOwnership(address(0x1234));
     }
 
     /// @notice Test that transferring ownership to zero address reverts
     function testTransferOwnershipToZeroAddressReverts() public {
         vm.prank(owner);
-        vm.expectRevert(abi.encodeWithSelector(Ownable.OwnableInvalidOwner.selector, address(0)));
+        vm.expectRevert("Ownable: new owner is the zero address");
         treasury.transferOwnership(address(0));
     }
 
@@ -124,7 +124,7 @@ contract TreasuryTest is Test {
     function testNonOwnerCannotWithdrawAll() public {
         vm.deal(address(treasury), 1 ether); // Fund the treasury
         vm.prank(nonOwner);
-        vm.expectRevert(abi.encodeWithSelector(Ownable.OwnableUnauthorizedAccount.selector, nonOwner));
+        vm.expectRevert("Ownable: caller is not the owner");
         treasury.withdrawAll(recipient);
     }
 

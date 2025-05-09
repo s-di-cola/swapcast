@@ -119,8 +119,11 @@ contract TestSwapCastHook is Test, Deployers {
             , // resolved
             , // winningOutcome
             uint256 totalStakeOutcome0,
-            uint256 totalStakeOutcome1
-        ) = pool.markets(marketId);
+            uint256 totalStakeOutcome1,
+            , // expirationTime
+            , // priceAggregator
+                // priceThreshold
+        ) = pool.getMarketDetails(marketId);
 
         if (predictedOutcome == 0) {
             assertEq(totalStakeOutcome0, expectedNetStake, "Total stake for outcome 0 mismatch");
