@@ -2,25 +2,25 @@
 pragma solidity ^0.8.26;
 
 import {Ownable} from "@openzeppelin/contracts/access/Ownable.sol";
-import {IPredictionPoolForResolver} from "./interfaces/IPredictionPoolForResolver.sol";
+import {IPredictionManagerForResolver} from "./interfaces/IPredictionManagerForResolver.sol";
 import {AggregatorV3Interface} from "@chainlink/contracts/v0.8/interfaces/AggregatorV3Interface.sol";
 import {PredictionTypes} from "./types/PredictionTypes.sol";
 
 /**
  * @title OracleResolver
- * @author SwapCast Team (Please update with actual author/team name)
+ * @author Simone Di Cola
  * @notice This contract is responsible for resolving prediction markets by fetching prices from Chainlink oracles.
  * @dev It allows the owner to register Chainlink price feed aggregators for specific market IDs and price thresholds.
- *      Anyone can then trigger the resolution of a registered market. Upon resolution, it calls the PredictionPool
- *      to update the market's state with the winning outcome. The PredictionPool address is set immutably at deployment.
+ *      Anyone can then trigger the resolution of a registered market. Upon resolution, it calls the PredictionManager
+ *      to update the market's state with the winning outcome. The PredictionManager address is set immutably at deployment.
  */
 contract OracleResolver is Ownable {
     /**
-     * @notice The address of the PredictionPool contract this resolver interacts with.
+     * @notice The address of the PredictionManager contract this resolver interacts with.
      * @dev This address is set immutably during contract deployment to prevent changes.
-     *      It must implement the {IPredictionPoolForResolver} interface.
+     *      It must implement the {IPredictionManagerForResolver} interface.
      */
-    IPredictionPoolForResolver public immutable predictionPool;
+    IPredictionManagerForResolver public immutable predictionManager;
 
     /**
      * @notice Represents the oracle configuration for a specific market.
@@ -97,13 +97,13 @@ contract OracleResolver is Ownable {
 
     /**
      * @notice Contract constructor.
-     * @param _predictionPoolAddress The address of the PredictionPool contract. Must not be the zero address.
+     * @param _predictionPoolAddress The address of the PredictionManager contract. Must not be the zero address.
      *                               This address is stored immutably.
      * @param initialOwner The initial owner of this OracleResolver contract.
      */
     constructor(address _predictionPoolAddress, address initialOwner) {
         if (_predictionPoolAddress == address(0)) revert PredictionPoolZeroAddress();
-        predictionPool = IPredictionPoolForResolver(_predictionPoolAddress);
+        predictionManager = IPredictionManagerForResolver(_predictionPoolAddress);
         maxPriceStalenessSeconds = 3600; // Default to 1 hour
         emit MaxPriceStalenessSet(0, maxPriceStalenessSeconds);
 
@@ -148,8 +148,8 @@ contract OracleResolver is Ownable {
      * @dev This function can be called by anyone. It fetches the latest price from the specified Chainlink aggregator.
      *      Outcome 0 is declared winner if `oracle_price >= priceThreshold`.
      *      Outcome 1 is declared winner if `oracle_price < priceThreshold`.
-     *      Calls `PredictionPool.resolveMarket()` to finalize the resolution.
-     *      Emits {MarketResolved} on successful resolution via the PredictionPool.
+     *      Calls `PredictionManager.resolveMarket()` to finalize the resolution.
+     *      Emits {MarketResolved} on successful resolution via the PredictionManager.
      *      Reverts with {OracleNotRegistered} if no oracle is set for the market,
      *      or {ResolutionFailedInPool} if the call to PredictionPool fails.
      * @param _marketId The ID of the market to resolve.
@@ -175,9 +175,9 @@ contract OracleResolver is Ownable {
             winningOutcome = PredictionTypes.Outcome.Bullish; // e.g., Price will be BELOW X
         }
 
-        try predictionPool.resolveMarket(_marketId, winningOutcome, price) {
+        try predictionManager.resolveMarket(_marketId, winningOutcome, price) {
             // Emitting MarketResolved here indicates this OracleResolver initiated and observed successful pool resolution.
-            // PredictionPool might emit its own event as well (e.g., IPredictionPoolForResolver.MarketResolved).
+            // PredictionManager might emit its own event as well (e.g., IPredictionManagerForResolver.MarketResolved).
             emit MarketResolved(_marketId, price, winningOutcome);
         } catch {
             revert ResolutionFailedInPool(_marketId);

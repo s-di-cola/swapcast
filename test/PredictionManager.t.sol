@@ -3,13 +3,13 @@ pragma solidity ^0.8.26;
 
 import {Test, console} from "forge-std/Test.sol";
 import {StdInvariant} from "forge-std/StdInvariant.sol";
-import {PredictionPool} from "../src/PredictionPool.sol";
+import {PredictionManager} from "src/PredictionManager.sol";
 import {MockSwapCastNFT} from "./mocks/MockSwapCastNFT.sol";
-import {ISwapCastNFT} from "../src/interfaces/ISwapCastNFT.sol";
+import {ISwapCastNFT} from "src/interfaces/ISwapCastNFT.sol";
 import {Ownable} from "@openzeppelin/contracts/access/Ownable.sol";
 import {Vm} from "forge-std/Vm.sol";
 import {FullMath} from "@uniswap/v4-core/src/libraries/FullMath.sol";
-import {PredictionTypes} from "../src/types/PredictionTypes.sol";
+import {PredictionTypes} from "src/types/PredictionTypes.sol";
 
 contract MockRevertingReceiver is Test {
     event Received(uint256 amount);
@@ -21,7 +21,7 @@ contract MockRevertingReceiver is Test {
     }
 }
 
-contract PredictionPoolTest is Test {
+contract PredictionManagerTest is Test {
     event FeeConfigurationChanged(address indexed newTreasuryAddress, uint256 newFeeBasisPoints);
     event MinStakeAmountChanged(uint256 newMinStakeAmount);
     event MarketCreated(uint256 indexed marketId);
@@ -60,7 +60,7 @@ contract PredictionPoolTest is Test {
     error PayoutCalculationError(uint256 totalWinningStake, uint256 totalLosingStake);
     error RewardTransferFailed(uint256 tokenId, address recipient, uint256 payoutAmount);
 
-    PredictionPool internal pool;
+    PredictionManager internal pool;
     MockSwapCastNFT internal mockNft;
     MockRevertingReceiver internal revertingReceiver;
 
@@ -78,8 +78,6 @@ contract PredictionPoolTest is Test {
     function setUp() public {
         owner = makeAddr("owner");
         treasuryAddress = payable(makeAddr("treasury"));
-        oracleResolverAddress = makeAddr("MockOracleResolver");
-        rewardDistributorAddress = makeAddr("MockRewardDistributor");
         revertingReceiver = new MockRevertingReceiver();
 
         user1 = makeAddr("user1");
@@ -95,15 +93,18 @@ contract PredictionPoolTest is Test {
         mockNft = new MockSwapCastNFT();
         vm.stopPrank();
 
-        pool = new PredictionPool(
+        pool = new PredictionManager(
             address(mockNft),
             treasuryAddress,
             initialFeeBasisPoints,
             owner,
-            oracleResolverAddress,
-            rewardDistributorAddress,
-            initialMinStakeAmount
+            initialMinStakeAmount,
+            3600 // maxPriceStalenessSeconds
         );
+
+        // Get the addresses of OracleResolver and RewardDistributor created by PredictionManager
+        oracleResolverAddress = pool.oracleResolverAddress();
+        rewardDistributorAddress = pool.rewardDistributorAddress();
 
         vm.prank(owner);
         mockNft.setPredictionPoolAddress(address(pool));
@@ -142,7 +143,7 @@ contract PredictionPoolTest is Test {
 
     function testCreateMarket_Reverts_ZeroMarketId() public {
         vm.prank(owner);
-        vm.expectRevert(PredictionPool.InvalidMarketId.selector);
+        vm.expectRevert(PredictionManager.InvalidMarketId.selector);
         pool.createMarket(0);
     }
 
@@ -152,7 +153,7 @@ contract PredictionPoolTest is Test {
         pool.createMarket(marketIdToCreate);
 
         vm.prank(owner);
-        vm.expectRevert(abi.encodeWithSelector(PredictionPool.MarketAlreadyExists.selector, marketIdToCreate));
+        vm.expectRevert(abi.encodeWithSelector(PredictionManager.MarketAlreadyExists.selector, marketIdToCreate));
         pool.createMarket(marketIdToCreate);
     }
 
@@ -185,7 +186,7 @@ contract PredictionPoolTest is Test {
         PredictionTypes.Outcome outcomeToPredict = PredictionTypes.Outcome.Bearish;
 
         vm.prank(predictor);
-        vm.expectRevert(abi.encodeWithSelector(PredictionPool.MarketDoesNotExist.selector, nonExistentMarketId));
+        vm.expectRevert(abi.encodeWithSelector(PredictionManager.MarketDoesNotExist.selector, nonExistentMarketId));
         vm.deal(address(pool), stakeAmount); // Fund the pool
         pool.recordPrediction(predictor, nonExistentMarketId, outcomeToPredict, uint128(stakeAmount));
     }
@@ -199,7 +200,7 @@ contract PredictionPoolTest is Test {
         PredictionTypes.Outcome outcomeToPredict = PredictionTypes.Outcome.Bearish;
 
         vm.prank(predictor);
-        vm.expectRevert(PredictionPool.AmountCannotBeZero.selector);
+        vm.expectRevert(PredictionManager.AmountCannotBeZero.selector);
         pool.recordPrediction(predictor, marketIdToTest, outcomeToPredict, uint128(0));
     }
 
@@ -218,7 +219,7 @@ contract PredictionPoolTest is Test {
         PredictionTypes.Outcome outcomeToPredict = PredictionTypes.Outcome.Bearish;
 
         vm.prank(predictor);
-        vm.expectRevert(PredictionPool.AmountCannotBeZero.selector);
+        vm.expectRevert(PredictionManager.AmountCannotBeZero.selector);
         vm.deal(address(pool), stakeAmountSent); // Fund the pool
         pool.recordPrediction(predictor, marketIdToTest, outcomeToPredict, uint128(stakeAmountSent));
 
@@ -233,7 +234,7 @@ contract PredictionPoolTest is Test {
         vm.prank(oracleResolverAddress);
         pool.resolveMarket(marketIdToTest, PredictionTypes.Outcome.Bearish, 0);
 
-        vm.expectRevert(abi.encodeWithSelector(PredictionPool.MarketAlreadyResolved.selector, marketIdToTest));
+        vm.expectRevert(abi.encodeWithSelector(PredictionManager.MarketAlreadyResolved.selector, marketIdToTest));
         vm.deal(address(pool), 100 wei); // Fund the pool
         pool.recordPrediction(address(1), marketIdToTest, PredictionTypes.Outcome.Bearish, uint128(100 wei));
     }
@@ -246,7 +247,7 @@ contract PredictionPoolTest is Test {
         vm.deal(address(pool), 0.1 ether); // Fund the pool
         pool.recordPrediction(address(1), marketIdToTest, PredictionTypes.Outcome.Bearish, uint128(0.1 ether));
 
-        vm.expectRevert(abi.encodeWithSelector(PredictionPool.AlreadyPredicted.selector, marketIdToTest, address(1)));
+        vm.expectRevert(abi.encodeWithSelector(PredictionManager.AlreadyPredicted.selector, marketIdToTest, address(1)));
         vm.deal(address(pool), 0.1 ether); // Fund the pool
         pool.recordPrediction(address(1), marketIdToTest, PredictionTypes.Outcome.Bullish, uint128(0.1 ether));
     }
@@ -261,7 +262,7 @@ contract PredictionPoolTest is Test {
         pool.createMarket(marketId);
 
         vm.prank(user1);
-        vm.expectRevert(abi.encodeWithSelector(PredictionPool.ZeroAddressInput.selector));
+        vm.expectRevert(abi.encodeWithSelector(PredictionManager.ZeroAddressInput.selector));
         vm.deal(address(pool), stake); // Fund the pool
         pool.recordPrediction(zeroUser, marketId, outcome, uint128(stake));
     }
@@ -330,7 +331,7 @@ contract PredictionPoolTest is Test {
         pool.createMarket(marketIdToTest);
 
         vm.prank(user1);
-        vm.expectRevert(PredictionPool.NotOracleResolver.selector);
+        vm.expectRevert(PredictionManager.NotOracleResolver.selector);
         pool.resolveMarket(marketIdToTest, PredictionTypes.Outcome.Bullish, 0);
     }
 
@@ -340,14 +341,14 @@ contract PredictionPoolTest is Test {
         pool.createMarket(marketIdToTest);
 
         vm.prank(owner);
-        vm.expectRevert(PredictionPool.NotOracleResolver.selector);
+        vm.expectRevert(PredictionManager.NotOracleResolver.selector);
         pool.resolveMarket(marketIdToTest, PredictionTypes.Outcome.Bullish, 0);
     }
 
     function testResolveMarket_Reverts_MarketDoesNotExist() public {
         uint256 nonExistentMarketId = 99;
         vm.prank(oracleResolverAddress);
-        vm.expectRevert(abi.encodeWithSelector(PredictionPool.MarketDoesNotExist.selector, nonExistentMarketId));
+        vm.expectRevert(abi.encodeWithSelector(PredictionManager.MarketDoesNotExist.selector, nonExistentMarketId));
         pool.resolveMarket(nonExistentMarketId, PredictionTypes.Outcome.Bullish, 0);
     }
 
@@ -360,7 +361,7 @@ contract PredictionPoolTest is Test {
         pool.resolveMarket(marketIdToTest, PredictionTypes.Outcome.Bearish, 0);
 
         vm.prank(oracleResolverAddress);
-        vm.expectRevert(abi.encodeWithSelector(PredictionPool.MarketAlreadyResolved.selector, marketIdToTest));
+        vm.expectRevert(abi.encodeWithSelector(PredictionManager.MarketAlreadyResolved.selector, marketIdToTest));
         pool.resolveMarket(marketIdToTest, PredictionTypes.Outcome.Bullish, 0);
     }
 
@@ -613,7 +614,7 @@ contract PredictionPoolTest is Test {
         pool.resolveMarket(marketId, outcome, 1000);
 
         vm.prank(user2);
-        vm.expectRevert(PredictionPool.NotRewardDistributor.selector);
+        vm.expectRevert(PredictionManager.NotRewardDistributor.selector);
         pool.claimReward(tokenId);
     }
 
@@ -646,7 +647,7 @@ contract PredictionPoolTest is Test {
         pool.recordPrediction(predictor, marketId, outcome, uint128(stake));
 
         vm.prank(rewardDistributorAddress);
-        vm.expectRevert(abi.encodeWithSelector(PredictionPool.MarketNotResolved.selector, marketId));
+        vm.expectRevert(abi.encodeWithSelector(PredictionManager.MarketNotResolved.selector, marketId));
         pool.claimReward(tokenId);
     }
 
@@ -669,7 +670,7 @@ contract PredictionPoolTest is Test {
         pool.resolveMarket(marketId, actualWinningOutcome, 1000);
 
         vm.prank(rewardDistributorAddress);
-        vm.expectRevert(abi.encodeWithSelector(PredictionPool.NotWinningNFT.selector));
+        vm.expectRevert(abi.encodeWithSelector(PredictionManager.NotWinningNFT.selector));
         pool.claimReward(tokenId);
     }
 
@@ -700,7 +701,7 @@ contract PredictionPoolTest is Test {
         );
 
         vm.prank(rewardDistributorAddress);
-        vm.expectRevert(abi.encodeWithSelector(PredictionPool.RewardTransferFailed.selector));
+        vm.expectRevert(abi.encodeWithSelector(PredictionManager.RewardTransferFailed.selector));
         pool.claimReward(tokenIdToClaim);
     }
 
@@ -723,7 +724,7 @@ contract PredictionPoolTest is Test {
         );
 
         vm.prank(rewardDistributorAddress);
-        vm.expectRevert(abi.encodeWithSelector(PredictionPool.MarketNotResolved.selector, nonExistentMarketIdForNFT));
+        vm.expectRevert(abi.encodeWithSelector(PredictionManager.MarketNotResolved.selector, nonExistentMarketIdForNFT));
         pool.claimReward(tokenIdForNonExistentMarket);
     }
 }

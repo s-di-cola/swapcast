@@ -4,11 +4,11 @@ pragma solidity ^0.8.26;
 import {PredictionTypes} from "../types/PredictionTypes.sol";
 
 /**
- * @title IPredictionPoolForResolver
+ * @title IPredictionManagerForResolver
  * @author SwapCast Developers
- * @notice Interface for the PredictionPool, specifically for functions called by the OracleResolver.
+ * @notice Interface for the PredictionManager, specifically for functions called by the OracleResolver.
  */
-interface IPredictionPoolForResolver {
+interface IPredictionManagerForResolver {
     // --- Events ---
     /**
      * @notice Emitted when a market is resolved.
@@ -22,7 +22,7 @@ interface IPredictionPoolForResolver {
     );
 
     // --- Errors ---
-    // Custom errors relevant to these interactions would be defined in the PredictionPool implementation.
+    // Custom errors relevant to these interactions would be defined in the PredictionManager implementation.
     // Example: error MarketAlreadyResolved(uint256 marketId);
     // Example: error InvalidWinningOutcome(PredictionTypes.Outcome outcome);
 
@@ -32,7 +32,7 @@ interface IPredictionPoolForResolver {
      * @param marketId The ID of the market to resolve.
      * @param winningOutcome The determined winning outcome (Bearish or Bullish).
      * @param oraclePrice The price reported by the oracle at the time of resolution.
-     * @dev The PredictionPool will update the market's state to resolved and store the winning outcome.
+     * @dev The PredictionManager will update the market's state to resolved and store the winning outcome.
      *      It should ensure the market exists and is not already resolved.
      */
     function resolveMarket(uint256 marketId, PredictionTypes.Outcome winningOutcome, int256 oraclePrice) external;

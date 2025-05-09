@@ -33,7 +33,7 @@ contract SwapCastNFTTest is Test {
         nft = new SwapCastNFT(ownerOfNFTContract, "TestSwapCastNFT", "TSCNFT");
         // Owner of NFT contract sets the prediction pool address
         vm.prank(ownerOfNFTContract);
-        nft.setPredictionPoolAddress(address(pool));
+        nft.setPredictionManagerAddress(address(pool));
     }
 
     /// @notice Test that minting emits event and sets metadata
@@ -50,7 +50,7 @@ contract SwapCastNFTTest is Test {
     /// @notice Test that only PredictionPool can mint
     function testOnlyPredictionPoolCanMint() public {
         vm.prank(address(0xBEEF)); // Prank as a non-pool address
-        vm.expectRevert(SwapCastNFT.NotPredictionPool.selector);
+        vm.expectRevert(SwapCastNFT.NotPredictionManager.selector);
         nft.mint(user, 1, PredictionTypes.Outcome.Bullish, 100);
     }
 
@@ -65,7 +65,7 @@ contract SwapCastNFTTest is Test {
     function testUnauthorizedBurnReverts() public {
         pool.callMint(nft, user, 1, PredictionTypes.Outcome.Bullish, 100); // Mint a token first
         vm.prank(address(0xBEEF)); // Prank as a non-pool address
-        vm.expectRevert(SwapCastNFT.NotPredictionPool.selector);
+        vm.expectRevert(SwapCastNFT.NotPredictionManager.selector);
         nft.burn(0);
     }
 
@@ -91,16 +91,16 @@ contract SwapCastNFTTest is Test {
         address newPoolAddress = address(0xABCD);
         vm.prank(ownerOfNFTContract);
         vm.expectEmit(true, true, true, true);
-        emit SwapCastNFT.PredictionPoolAddressSet(address(pool), newPoolAddress);
-        nft.setPredictionPoolAddress(newPoolAddress);
-        assertEq(nft.predictionPoolAddress(), newPoolAddress);
+        emit SwapCastNFT.PredictionManagerAddressSet(address(pool), newPoolAddress);
+        nft.setPredictionManagerAddress(newPoolAddress);
+        assertEq(nft.predictionManagerAddress(), newPoolAddress);
     }
 
     /// @notice Test setting prediction pool address to zero reverts
     function testSetPredictionPoolAddressToZeroReverts() public {
         vm.prank(ownerOfNFTContract);
         vm.expectRevert(SwapCastNFT.ZeroAddress.selector);
-        nft.setPredictionPoolAddress(address(0));
+        nft.setPredictionManagerAddress(address(0));
     }
 
     /// @notice Test non-owner cannot set prediction pool address
@@ -109,7 +109,7 @@ contract SwapCastNFTTest is Test {
         vm.prank(attacker);
         // Standard Ownable error for older version
         vm.expectRevert("Ownable: caller is not the owner");
-        nft.setPredictionPoolAddress(address(0xABCD));
+        nft.setPredictionManagerAddress(address(0xABCD));
     }
 
     // Test for tokenURI (optional, if you want to ensure it's generated or reverts for non-existent tokens)
@@ -127,7 +127,7 @@ contract SwapCastNFTTest is Test {
         uint256 mintTimestamp = 1; // Mock timestamp
 
         vm.store(address(nft), bytes32(uint256(4)), bytes32(uint256(mintTimestamp))); // Mock block.timestamp for _mintTimestamp
-        nft.setPredictionPoolAddress(address(this));
+        nft.setPredictionManagerAddress(address(this));
         uint256 tokenId = nft.mint(address(this), marketId, PredictionTypes.Outcome.Bullish, convictionStake); // Mint NFT #0
 
         string memory uri = nft.tokenURI(tokenId);

@@ -7,7 +7,7 @@ import {PoolKey} from "v4-core/types/PoolKey.sol";
 import {BalanceDelta} from "v4-core/types/BalanceDelta.sol";
 import {PoolId, PoolIdLibrary} from "v4-core/types/PoolId.sol";
 import {Hooks} from "v4-core/libraries/Hooks.sol";
-import {IPredictionPool} from "./interfaces/IPredictionPool.sol";
+import {IPredictionManager} from "./interfaces/IPredictionManager.sol";
 import {SwapParams} from "v4-core/types/PoolOperation.sol";
 import {PredictionTypes} from "./types/PredictionTypes.sol";
 
@@ -15,22 +15,22 @@ using PoolIdLibrary for PoolKey;
 
 /**
  * @title SwapCastHook
- * @author SwapCast Developers
+ * @author Simone Di Cola
  * @notice A Uniswap V4 hook designed to enable users to make predictions on market outcomes
  *         concurrently with their swap transactions on a Uniswap V4 pool.
- * @dev This hook integrates with the SwapCast `PredictionPool`. When a user performs a swap via the `PoolManager`
+ * @dev This hook integrates with the SwapCast `PredictionManager`. When a user performs a swap via the `PoolManager`
  *      and includes specific `hookData` (market ID and predicted outcome), this hook's `_afterSwap` logic is triggered.
  *      The user's conviction (stake) is passed as `msg.value` with the swap call, which the `PoolManager` forwards to this hook.
- *      The hook then attempts to record this prediction in the `PredictionPool`.
+ *      The hook then attempts to record this prediction in the `PredictionManager`.
  *      It inherits from `BaseHook` and primarily utilizes the `afterSwap` permission.
  */
 contract SwapCastHook is BaseHook {
     /**
-     * @notice The instance of the PredictionPool contract where predictions are recorded.
+     * @notice The instance of the PredictionManager contract where predictions are recorded.
      * @dev This address is set immutably during deployment via the constructor.
-     *      It must conform to the {IPredictionPool} interface.
+     *      It must conform to the {IPredictionManager} interface.
      */
-    IPredictionPool public immutable predictionPool;
+    IPredictionManager public immutable predictionManager;
 
     /**
      * @notice Expected length in bytes for the `hookData` when making a prediction.
@@ -99,7 +99,7 @@ contract SwapCastHook is BaseHook {
      */
     error InvalidHookDataLength(uint256 actualLength, uint256 expectedLength);
     /**
-     * @notice Reverts during construction if the provided `_predictionPoolAddress` is the zero address.
+     * @notice Reverts during construction if the provided `_predictionManagerAddress` is the zero address.
      */
     error PredictionPoolZeroAddress();
     /**
@@ -107,7 +107,7 @@ contract SwapCastHook is BaseHook {
      */
     error NoConvictionStakeDeclaredInHookData();
     /**
-     * @notice Reverts if the call to `predictionPool.recordPrediction` fails for any reason.
+     * @notice Reverts if the call to `predictionManager.recordPrediction` fails for any reason.
      * @param reason A string describing the reason for the failure, forwarded from the `PredictionPool` or a general message.
      */
     error PredictionRecordingFailed(string reason);
@@ -116,12 +116,12 @@ contract SwapCastHook is BaseHook {
      * @notice Contract constructor.
      * @param _poolManager The address of the Uniswap V4 PoolManager this hook will be registered with.
      *                     Passed to the `BaseHook` constructor.
-     * @param _predictionPoolAddress The address of the `PredictionPool` contract where predictions will be recorded.
+     * @param _predictionManagerAddress The address of the `PredictionManager` contract where predictions will be recorded.
      *                               Cannot be the zero address.
      */
-    constructor(IPoolManager _poolManager, address _predictionPoolAddress) BaseHook(_poolManager) {
-        if (_predictionPoolAddress == address(0)) revert PredictionPoolZeroAddress();
-        predictionPool = IPredictionPool(_predictionPoolAddress);
+    constructor(IPoolManager _poolManager, address _predictionManagerAddress) BaseHook(_poolManager) {
+        if (_predictionManagerAddress == address(0)) revert PredictionPoolZeroAddress();
+        predictionManager = IPredictionManager(_predictionManagerAddress);
     }
 
     /**
@@ -223,15 +223,15 @@ contract SwapCastHook is BaseHook {
             revert NoConvictionStakeDeclaredInHookData();
         }
 
-        // Attempt to record the prediction in the PredictionPool.
-        // The convictionStakeDeclared is passed as an argument. The PredictionPool handles the stake value.
-        // This assumes IPredictionPool.recordPrediction signature is: recordPrediction(address user, uint256 marketId, PredictionTypes.Outcome outcome, uint128 convictionStake)
-        try predictionPool.recordPrediction(sender, marketId, outcome, convictionStakeDeclared) {
+        // Attempt to record the prediction in the PredictionManager.
+        // The convictionStakeDeclared is passed as an argument. The PredictionManager handles the stake value.
+        // This assumes IPredictionManager.recordPrediction signature is: recordPrediction(address user, uint256 marketId, PredictionTypes.Outcome outcome, uint128 convictionStake)
+        try predictionManager.recordPrediction(sender, marketId, outcome, convictionStakeDeclared) {
             emit PredictionRecorded(sender, key.toId(), marketId, outcome, convictionStakeDeclared);
             return (BaseHook.afterSwap.selector, 0); // Success
         } catch (bytes memory lowLevelData) {
             bytes4 actualPoolErrorSelector = bytes4(keccak256(bytes("UnknownPoolError"))); // Default
-            string memory revertMessageForHook = "PredictionPool reverted with an unspecified error.";
+            string memory revertMessageForHook = "PredictionManager reverted with an unspecified error.";
 
             if (lowLevelData.length >= 4) {
                 assembly {
@@ -247,14 +247,14 @@ contract SwapCastHook is BaseHook {
                         encodedStringBytes[j] = lowLevelData[j + 4];
                     }
                     string memory reason = abi.decode(encodedStringBytes, (string));
-                    revertMessageForHook = string(abi.encodePacked("PredictionPool Error: ", reason));
+                    revertMessageForHook = string(abi.encodePacked("PredictionManager Error: ", reason));
                 } else {
                     // For custom errors, the selector is now in actualPoolErrorSelector.
                     // The revert message for PredictionRecordingFailed will be more generic.
-                    revertMessageForHook = "PredictionPool reverted with a custom error.";
+                    revertMessageForHook = "PredictionManager reverted with a custom error.";
                 }
             } else if (lowLevelData.length > 0) {
-                revertMessageForHook = "PredictionPool reverted with non-standard error data.";
+                revertMessageForHook = "PredictionManager reverted with non-standard error data.";
             } // else lowLevelData.length == 0 (e.g. assert failure), default message & selector are fine.
 
             emit PredictionFailed(

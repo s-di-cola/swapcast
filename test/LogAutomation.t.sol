@@ -1,12 +1,12 @@
 //SPDX-License-Identifier: MIT
 pragma solidity ^0.8.26;
 
-import {Test, console, Vm} from "forge-std/Test.sol";
-import {PredictionPool, Log, ILogAutomation} from "../src/PredictionPool.sol";
+import {Test, Vm} from "forge-std/Test.sol";
+import {PredictionManager, Log, ILogAutomation} from "src/PredictionManager.sol";
 import {MockSwapCastNFT} from "./mocks/MockSwapCastNFT.sol";
-import {ISwapCastNFT} from "../src/interfaces/ISwapCastNFT.sol";
+import {ISwapCastNFT} from "src/interfaces/ISwapCastNFT.sol";
 import {Ownable} from "@openzeppelin/contracts/access/Ownable.sol";
-import {PredictionTypes} from "../src/types/PredictionTypes.sol";
+import {PredictionTypes} from "src/types/PredictionTypes.sol";
 import {AggregatorV3Interface} from "@chainlink/contracts/v0.8/interfaces/AggregatorV3Interface.sol";
 
 // Mock Chainlink Price Feed
@@ -66,7 +66,7 @@ contract MockAggregatorV3 is AggregatorV3Interface {
 }
 
 contract LogAutomationTest is Test {
-    PredictionPool internal pool;
+    PredictionManager internal pool;
     MockSwapCastNFT internal mockNft;
     MockAggregatorV3 internal mockPriceFeed;
 
@@ -104,14 +104,13 @@ contract LogAutomationTest is Test {
         vm.stopPrank();
         mockPriceFeed = new MockAggregatorV3(5000 * 10 ** 8); // $5000 with 8 decimals
 
-        pool = new PredictionPool(
+        pool = new PredictionManager(
             address(mockNft),
             treasuryAddress,
             initialFeeBasisPoints,
             owner,
-            oracleResolverAddress,
-            rewardDistributorAddress,
-            initialMinStakeAmount
+            initialMinStakeAmount,
+            3600 // maxPriceStalenessSeconds (1 hour)
         );
 
         vm.prank(owner);
@@ -152,7 +151,7 @@ contract LogAutomationTest is Test {
         uint256 pastExpirationTime = block.timestamp - 1 hours;
 
         vm.prank(owner);
-        vm.expectRevert(PredictionPool.InvalidExpirationTime.selector);
+        vm.expectRevert(PredictionManager.InvalidExpirationTime.selector);
         pool.createMarketWithOracle(marketId, pastExpirationTime, address(mockPriceFeed), 5000 * 10 ** 8);
     }
 

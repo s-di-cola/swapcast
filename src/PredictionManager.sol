@@ -3,17 +3,19 @@ pragma solidity ^0.8.26;
 
 import {Ownable} from "@openzeppelin/contracts/access/Ownable.sol";
 import {IERC721Receiver} from "@openzeppelin/contracts/token/ERC721/IERC721Receiver.sol";
-import {IPredictionPool} from "./interfaces/IPredictionPool.sol";
-import {IPredictionPoolForDistributor} from "./interfaces/IPredictionPoolForDistributor.sol";
-import {IPredictionPoolForResolver} from "./interfaces/IPredictionPoolForResolver.sol";
+import {IPredictionManager} from "./interfaces/IPredictionManager.sol";
+import {IPredictionManagerForDistributor} from "./interfaces/IPredictionManagerForDistributor.sol";
+import {IPredictionManagerForResolver} from "./interfaces/IPredictionManagerForResolver.sol";
 import {ISwapCastNFT} from "./interfaces/ISwapCastNFT.sol";
 import {PredictionTypes} from "./types/PredictionTypes.sol";
 import {ILogAutomation, Log} from "@chainlink/contracts/v0.8/automation/interfaces/ILogAutomation.sol";
 import {AutomationCompatibleInterface} from "@chainlink/contracts/v0.8/automation/AutomationCompatible.sol";
 import {AggregatorV3Interface} from "@chainlink/contracts/v0.8/interfaces/AggregatorV3Interface.sol";
+import {OracleResolver} from "./OracleResolver.sol";
+import {RewardDistributor} from "./RewardDistributor.sol";
 
 /**
- * @title PredictionPool
+ * @title PredictionManager
  * @author Simone Di Cola
  * @notice Manages prediction markets, records user predictions, handles fees, resolves markets,
  *         and allows users to claim rewards based on a pari-mutuel system.
@@ -22,11 +24,12 @@ import {AggregatorV3Interface} from "@chainlink/contracts/v0.8/interfaces/Aggreg
  *      This contract inherits from Ownable for access control on administrative functions,
  *      and IERC721Receiver to potentially receive NFTs if ever needed, though not actively used for receiving.
  *      It implements various interfaces to define its role in the SwapCast ecosystem.
+ *      This contract creates and owns the OracleResolver and RewardDistributor instances.
  */
-contract PredictionPool is
-    IPredictionPool,
-    IPredictionPoolForDistributor,
-    IPredictionPoolForResolver,
+contract PredictionManager is
+    IPredictionManager,
+    IPredictionManagerForDistributor,
+    IPredictionManagerForResolver,
     ILogAutomation,
     AutomationCompatibleInterface,
     Ownable,
@@ -131,7 +134,7 @@ contract PredictionPool is
 
     /**
      * @notice Emitted when a fee is paid by a user during a prediction.
-     * @dev This event is defined in the IPredictionPool interface.
+     * @dev This event is defined in the IPredictionManager interface.
      * @param marketId The market ID for which the prediction was made.
      * @param user The address of the user who made the prediction and paid the fee.
      * @param feeAmount The amount of the fee paid.
@@ -140,7 +143,7 @@ contract PredictionPool is
 
     /**
      * @notice Emitted when a user's stake is successfully recorded for a prediction.
-     * @dev This event is defined in the IPredictionPool interface.
+     * @dev This event is defined in the IPredictionManager interface.
      * @param marketId The market ID for which the prediction was made.
      * @param user The address of the user who made the prediction.
      * @param outcome The predicted outcome (0 or 1).
@@ -152,7 +155,7 @@ contract PredictionPool is
 
     /**
      * @notice Emitted when a user successfully claims their reward for a winning prediction.
-     * @dev This event is defined in the IPredictionPoolForDistributor interface.
+     * @dev This event is defined in the IPredictionManagerForDistributor interface.
      * @param user The address of the user claiming the reward.
      * @param tokenId The ID of the NFT representing the winning prediction.
      * @param rewardAmount The amount of ETH rewarded.
@@ -208,7 +211,7 @@ contract PredictionPool is
     /**
      * @dev Reverts if an NFT transfer operation fails (though NFT minting/burning is handled by SwapCastNFT).
      */
-    error NFTTransferFailed(); // Potentially for future use if PredictionPool directly handles NFTs.
+    error NFTTransferFailed(); // Potentially for future use if PredictionManager directly handles NFTs.
     /**
      * @dev Reverts if a user attempts to claim a reward with an NFT that does not correspond to the winning outcome.
      */
@@ -234,7 +237,7 @@ contract PredictionPool is
      */
     error NotOracleResolver();
 
-    error PredictionPoolError(string message);
+    error PredictionManagerError(string message);
 
     /**
      * @notice The address of the OracleResolver contract authorized to resolve markets.
@@ -264,40 +267,41 @@ contract PredictionPool is
 
     /**
      * @notice Contract constructor.
-     * @param _swapCastNFTAddress The address of the ISwapCastNFT compliant contract.
-     * @param _treasuryAddress The address where protocol fees will be sent.
-     * @param _initialFeeBasisPoints The initial protocol fee in basis points (e.g., 100 for 1%).
-     * @param _initialOwner The address that will be set as the owner of this contract.
-     * @param _oracleResolverAddress The address of the OracleResolver contract authorized to resolve markets.
-     * @param _rewardDistributorAddress The address of the RewardDistributor contract authorized to initiate claims.
+     * @param _swapCastNFTAddress The address of the SwapCastNFT contract used for minting prediction NFTs.
+     * @param _treasuryAddress The address where protocol fees are sent.
+     * @param _initialFeeBasisPoints The initial fee percentage in basis points (e.g., 100 for 1%).
+     * @param _initialOwner The initial owner of this contract.
      * @param _initialMinStakeAmount The initial minimum stake amount required for predictions (net of fees).
+     * @param _maxPriceStalenessSeconds The maximum staleness period in seconds for oracle price feeds.
      */
     constructor(
         address _swapCastNFTAddress,
         address _treasuryAddress,
         uint256 _initialFeeBasisPoints,
         address _initialOwner,
-        address _oracleResolverAddress,
-        address _rewardDistributorAddress,
-        uint256 _initialMinStakeAmount
+        uint256 _initialMinStakeAmount,
+        uint256 _maxPriceStalenessSeconds
     ) {
-        if (
-            _swapCastNFTAddress == address(0) || _treasuryAddress == address(0) || _oracleResolverAddress == address(0)
-                || _rewardDistributorAddress == address(0)
-        ) revert ZeroAddressInput();
-        if (_initialFeeBasisPoints > 10000) {
-            revert InvalidFeeBasisPoints(_initialFeeBasisPoints);
-        } // Max 100%
+        if (_swapCastNFTAddress == address(0) || _treasuryAddress == address(0)) {
+            revert ZeroAddressInput();
+        }
 
         swapCastNFT = ISwapCastNFT(_swapCastNFTAddress);
         treasuryAddress = _treasuryAddress;
         protocolFeeBasisPoints = _initialFeeBasisPoints;
-        oracleResolverAddress = _oracleResolverAddress;
-        rewardDistributorAddress = _rewardDistributorAddress;
         minStakeAmount = _initialMinStakeAmount;
+        maxPriceStalenessSeconds = _maxPriceStalenessSeconds;
 
-        emit FeeConfigurationChanged(_treasuryAddress, _initialFeeBasisPoints); // Also consider emitting min stake changed if needed
-        emit MinStakeAmountChanged(_initialMinStakeAmount); // Emit initial min stake
+        // Create OracleResolver and RewardDistributor instances
+        OracleResolver oracleResolver = new OracleResolver(_initialOwner, address(this));
+        RewardDistributor rewardDistributor = new RewardDistributor(_initialOwner, address(this));
+        
+        // Store their addresses
+        oracleResolverAddress = address(oracleResolver);
+        rewardDistributorAddress = address(rewardDistributor);
+        
+        emit FeeConfigurationChanged(_treasuryAddress, _initialFeeBasisPoints);
+        emit MinStakeAmountChanged(_initialMinStakeAmount);
 
         // Transfer ownership to the initialOwner if it's not the deployer
         if (_initialOwner != msg.sender) {
@@ -400,17 +404,17 @@ contract PredictionPool is
             customErrorSelectorOnRecord = bytes4(0); // Ensure we use the string revert
         } else {
             // Optionally reset message if not reverting, or leave as is
-            revertMessageOnRecord = "PredictionPool reverted with a custom error."; // Reset to default if reverting is turned off
+            revertMessageOnRecord = "PredictionManager reverted with a custom error."; // Reset to default if reverting is turned off
         }
     }
 
     /**
-     * @inheritdoc IPredictionPool
+     * @inheritdoc IPredictionManager
      * @dev Records a user's prediction for a given market. The user sends ETH (msg.value) covering their
      *      conviction stake plus the protocol fee. An NFT representing this prediction is minted via SwapCastNFT.
      *      Reverts if the market doesn't exist, is already resolved, or if the user has already predicted.
      *      Validates the outcome and that msg.value is sufficient.
-     *      Emits {FeePaid} and {StakeRecorded} events (defined in IPredictionPool).
+     *      Emits {FeePaid} and {StakeRecorded} events (defined in IPredictionManager).
      * @param _user The address of the user making the prediction (can be different from msg.sender if using meta-transactions).
      * @param _marketId The ID of the market to predict on.
      * @param _outcome The predicted outcome (Bearish or Bullish).
@@ -442,7 +446,7 @@ contract PredictionPool is
                     revert(add(data, 0x20), mload(data))
                 }
             } else {
-                revert PredictionPoolError(revertMessageOnRecord);
+                revert PredictionManagerError(revertMessageOnRecord);
             }
         }
 
@@ -476,12 +480,12 @@ contract PredictionPool is
         swapCastNFT.mint(_user, _marketId, _outcome, stakeAmount);
     }
 
-    // --- IPredictionPoolForResolver Implementation ---
+    // --- IPredictionManagerForResolver Implementation ---
     /**
-     * @inheritdoc IPredictionPoolForResolver
+     * @inheritdoc IPredictionManagerForResolver
      * @dev Resolves a market with the winning outcome. Typically called by the OracleResolver contract.
      *      This implementation uses the `onlyOracleResolver` modifier.
-     *      Emits a {MarketResolved} event (defined in IPredictionPoolForResolver).
+     *      Emits a {MarketResolved} event (defined in IPredictionManagerForResolver).
      * @param _marketId The ID of the market to resolve.
      * @param _winningOutcome The winning outcome (Bearish or Bullish).
      * @param _oraclePrice The price reported by the oracle at the time of resolution.
@@ -509,15 +513,15 @@ contract PredictionPool is
         emit MarketResolved(_marketId, _winningOutcome, _oraclePrice, totalPrizePool);
     }
 
-    // --- IPredictionPoolForDistributor Implementation ---
+    // --- IPredictionManagerForDistributor Implementation ---
     /**
-     * @inheritdoc IPredictionPoolForDistributor
+     * @inheritdoc IPredictionManagerForDistributor
      * @dev Allows the designated RewardDistributor contract to claim rewards for a winning prediction NFT.
      *      The RewardDistributor is responsible for verifying NFT ownership before calling this function.
      *      The NFT is burned, and the original NFT owner (retrieved from SwapCastNFT) receives their initial stake
      *      plus a share of the losing pool's stakes.
      *      Reverts if the market is not resolved, if the NFT is not for the winning outcome, or if transfers fail.
-     *      Emits a {RewardClaimed} event (defined in IPredictionPoolForDistributor).
+     *      Emits a {RewardClaimed} event (defined in IPredictionManagerForDistributor).
      *      This function is restricted by the `onlyRewardDistributor` modifier.
      * @param _tokenId The ID of the SwapCastNFT representing the user's prediction.
      */
@@ -558,7 +562,7 @@ contract PredictionPool is
             }
         }
 
-        // Burn the NFT. SwapCastNFT.burn is restricted to be called by this PredictionPool contract.
+        // Burn the NFT. SwapCastNFT.burn is restricted to be called by this PredictionManager contract.
         swapCastNFT.burn(_tokenId);
 
         if (rewardAmount > 0) {

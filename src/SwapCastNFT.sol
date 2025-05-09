@@ -10,7 +10,7 @@ import {PredictionTypes} from "./types/PredictionTypes.sol";
 
 /**
  * @title SwapCastNFT
- * @author SwapCast Team (Please update with actual author/team name)
+ * @author Simone Di Cola
  * @notice Represents a user's prediction position as an ERC721 Non-Fungible Token.
  *         Each NFT stores metadata about the prediction, such as market ID, outcome, and conviction stake.
  * @dev This contract handles the lifecycle of prediction NFTs: minting, burning, and metadata provision.
@@ -20,10 +20,10 @@ import {PredictionTypes} from "./types/PredictionTypes.sol";
  */
 contract SwapCastNFT is ERC721, Ownable, ISwapCastNFT {
     /**
-     * @notice The address of the PredictionPool contract authorized to mint and burn these NFTs.
+     * @notice The address of the PredictionManager contract authorized to mint and burn these NFTs.
      * @dev Only this address can call `mint()` and `burn()`. Settable by the contract owner.
      */
-    address public predictionPoolAddress;
+    address public predictionManagerAddress;
 
     /**
      * @notice Stores the detailed metadata associated with each prediction NFT.
@@ -53,10 +53,10 @@ contract SwapCastNFT is ERC721, Ownable, ISwapCastNFT {
 
     /**
      * @notice Emitted when the `predictionPoolAddress` is successfully updated.
-     * @param oldAddress The previous address of the PredictionPool (address(0) if not previously set).
-     * @param newAddress The new, updated address of the PredictionPool.
+     * @param oldAddress The previous address of the PredictionManager (address(0) if not previously set).
+     * @param newAddress The new, updated address of the PredictionManager.
      */
-    event PredictionPoolAddressSet(address indexed oldAddress, address indexed newAddress);
+    event PredictionManagerAddressSet(address indexed oldAddress, address indexed newAddress);
     /**
      * @notice Emitted when a new prediction NFT (position) is minted.
      * @param owner The address receiving the minted NFT (the predictor).
@@ -79,11 +79,11 @@ contract SwapCastNFT is ERC721, Ownable, ISwapCastNFT {
     event PositionNFTBurned(uint256 indexed tokenId);
 
     /**
-     * @notice Reverts if a restricted function is called by an address other than the authorized `predictionPoolAddress`.
+     * @notice Reverts if a restricted function is called by an address other than the authorized `predictionManagerAddress`.
      */
-    error NotPredictionPool();
+    error NotPredictionManager();
     /**
-     * @notice Reverts if an address parameter is the zero address when a non-zero address is required (e.g., setting PredictionPool address).
+     * @notice Reverts if an address parameter is the zero address when a non-zero address is required (e.g., setting PredictionManager address).
      */
     error ZeroAddress();
     /**
@@ -107,30 +107,30 @@ contract SwapCastNFT is ERC721, Ownable, ISwapCastNFT {
     }
 
     /**
-     * @notice Sets or updates the address of the PredictionPool contract authorized to mint/burn NFTs.
-     * @dev Only callable by the contract owner. Emits {PredictionPoolAddressSet}.
-     *      The provided `_newPredictionPoolAddress` must not be the zero address.
-     * @param _newPredictionPoolAddress The new address for the PredictionPool contract.
+     * @notice Sets or updates the address of the PredictionManager contract authorized to mint/burn NFTs.
+     * @dev Only callable by the contract owner. Emits {PredictionManagerAddressSet}.
+     *      The provided `_newPredictionManagerAddress` must not be the zero address.
+     * @param _newPredictionManagerAddress The new address for the PredictionManager contract.
      */
-    function setPredictionPoolAddress(address _newPredictionPoolAddress) external onlyOwner {
-        if (_newPredictionPoolAddress == address(0)) revert ZeroAddress();
-        address oldAddress = predictionPoolAddress;
-        predictionPoolAddress = _newPredictionPoolAddress;
-        emit PredictionPoolAddressSet(oldAddress, _newPredictionPoolAddress);
+    function setPredictionManagerAddress(address _newPredictionManagerAddress) external onlyOwner {
+        if (_newPredictionManagerAddress == address(0)) revert ZeroAddress();
+        address oldAddress = predictionManagerAddress;
+        predictionManagerAddress = _newPredictionManagerAddress;
+        emit PredictionManagerAddressSet(oldAddress, _newPredictionManagerAddress);
     }
 
     /**
-     * @dev Modifier to restrict certain functions (like `mint` and `burn`) to be callable only by the `predictionPoolAddress`.
-     *      Reverts with {NotPredictionPool} if called by any other address.
+     * @dev Modifier to restrict certain functions (like `mint` and `burn`) to be callable only by the `predictionManagerAddress`.
+     *      Reverts with {NotPredictionManager} if called by any other address.
      */
-    modifier onlyPredictionPool() {
-        if (msg.sender != predictionPoolAddress) revert NotPredictionPool();
+    modifier onlyPredictionManager() {
+        if (msg.sender != predictionManagerAddress) revert NotPredictionManager();
         _;
     }
 
     /**
      * @notice Mints a new NFT representing a user's prediction position.
-     * @dev Implements `ISwapCastNFT.mint`. Only callable by the authorized `predictionPoolAddress` (via {onlyPredictionPool} modifier).
+     * @dev Implements `ISwapCastNFT.mint`. Only callable by the authorized `predictionManagerAddress` (via {onlyPredictionManager} modifier).
      *      Assigns a new unique token ID, mints the ERC721 token to the specified owner (`_to`),
      *      and stores the associated {PredictionMetadata}. Emits {PositionNFTMinted}.
      * @param _to The address that will own the newly minted NFT.
@@ -142,7 +142,7 @@ contract SwapCastNFT is ERC721, Ownable, ISwapCastNFT {
     function mint(address _to, uint256 _marketId, PredictionTypes.Outcome _outcome, uint256 _convictionStake)
         external
         override
-        onlyPredictionPool
+        onlyPredictionManager
         returns (uint256)
     {
         uint256 tokenId = _nextTokenId;
@@ -163,12 +163,12 @@ contract SwapCastNFT is ERC721, Ownable, ISwapCastNFT {
 
     /**
      * @notice Burns (destroys) an existing NFT, typically after its prediction has been resolved and claimed.
-     * @dev Implements `ISwapCastNFT.burn`. Only callable by the authorized `predictionPoolAddress` (via {onlyPredictionPool} modifier).
+     * @dev Implements `ISwapCastNFT.burn`. Only callable by the authorized `predictionManagerAddress` (via {onlyPredictionManager} modifier).
      *      Deletes the associated {PredictionMetadata} and burns the ERC721 token. Emits {PositionNFTBurned}.
      *      The `PredictionPool` is responsible for verifying token ownership and authorization before calling this function.
      * @param _tokenId The ID of the NFT to burn.
      */
-    function burn(uint256 _tokenId) external override onlyPredictionPool {
+    function burn(uint256 _tokenId) external override onlyPredictionManager {
         // The PredictionPool is responsible for ensuring it has the authority to burn this token.
         // This typically means the PredictionPool has confirmed the original owner's intent (e.g., during a claim process)
         // or that the token is effectively controlled/escrowed by the PredictionPool for burning.

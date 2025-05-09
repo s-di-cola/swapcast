@@ -1,15 +1,16 @@
-pragma solidity 0.8.26;
+// SPDX-License-Identifier: MIT
+pragma solidity ^0.8.26;
 
 import {Test, console} from "forge-std/Test.sol";
 import {OracleResolver} from "../src/OracleResolver.sol";
-import {IPredictionPoolForResolver} from "../src/interfaces/IPredictionPoolForResolver.sol";
+import {IPredictionManagerForResolver} from "src/interfaces/IPredictionManagerForResolver.sol";
 import {Ownable} from "@openzeppelin/contracts/access/Ownable.sol";
-import {MockPredictionPool} from "./mocks/MockPredictionPool.sol";
+import {MockPredictionManager} from "./mocks/MockPredictionPool.sol";
 import {MockAggregator} from "./mocks/MockAggregator.sol";
 
 contract OracleResolverTest is Test {
     OracleResolver public oracleResolver;
-    MockPredictionPool public mockPredictionPool;
+    MockPredictionManager public mockPredictionPool;
     MockAggregator public mockAggregatorEthUsd;
 
     address public owner;
@@ -42,7 +43,7 @@ contract OracleResolverTest is Test {
         user1 = makeAddr("user1");
         user2 = payable(makeAddr("user2"));
 
-        mockPredictionPool = new MockPredictionPool();
+        mockPredictionPool = new MockPredictionManager();
         mockAggregatorEthUsd = new MockAggregator();
 
         oracleResolver = new OracleResolver(address(mockPredictionPool), owner);
@@ -50,14 +51,16 @@ contract OracleResolverTest is Test {
 
     function testConstructor_SuccessfulDeployment() public view {
         assertEq(
-            address(oracleResolver.predictionPool()), address(mockPredictionPool), "PredictionPool address mismatch"
+            address(oracleResolver.predictionManager()),
+            address(mockPredictionPool),
+            "PredictionManager address mismatch"
         );
         assertEq(oracleResolver.owner(), owner, "Owner mismatch");
         assertEq(oracleResolver.maxPriceStalenessSeconds(), DEFAULT_MAX_STALENESS, "MaxPriceStalenessSeconds mismatch");
     }
 
     function testConstructor_RevertsIfPredictionPoolIsZeroAddress() public {
-        vm.expectRevert(OracleResolver.PredictionPoolZeroAddress.selector);
+        vm.expectRevert(OracleResolver.PredictionPoolZeroAddress.selector); // Note: Error name not changed in contract
         new OracleResolver(address(0), owner);
     }
 
@@ -127,7 +130,7 @@ contract OracleResolverTest is Test {
         vm.prank(user1);
         vm.expectCall(
             address(mockPredictionPool),
-            abi.encodeWithSelector(MockPredictionPool.resolveMarket.selector, DEFAULT_MARKET_ID, 0, price)
+            abi.encodeWithSelector(MockPredictionManager.resolveMarket.selector, DEFAULT_MARKET_ID, 0, price)
         );
         vm.expectEmit(true, true, true, true, address(oracleResolver));
         emit MarketResolved(DEFAULT_MARKET_ID, price, 0);
@@ -146,7 +149,7 @@ contract OracleResolverTest is Test {
         vm.prank(user1);
         vm.expectCall(
             address(mockPredictionPool),
-            abi.encodeWithSelector(MockPredictionPool.resolveMarket.selector, DEFAULT_MARKET_ID, 1, price)
+            abi.encodeWithSelector(MockPredictionManager.resolveMarket.selector, DEFAULT_MARKET_ID, 1, price)
         );
         vm.expectEmit(true, true, true, true, address(oracleResolver));
         emit MarketResolved(DEFAULT_MARKET_ID, price, 1);

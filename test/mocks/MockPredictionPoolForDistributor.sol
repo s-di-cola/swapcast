@@ -1,9 +1,9 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.26;
 
-import {IPredictionPoolForDistributor} from "../../src/interfaces/IPredictionPoolForDistributor.sol";
+import {IPredictionManagerForDistributor} from "src/interfaces/IPredictionManagerForDistributor.sol";
 
-contract MockPredictionPoolForDistributor is IPredictionPoolForDistributor {
+contract MockPredictionManagerForDistributor is IPredictionManagerForDistributor {
     bool public claimRewardCalled;
     uint256 public lastTokenIdClaimed;
     bool public shouldRevertOnClaim;
@@ -21,7 +21,7 @@ contract MockPredictionPoolForDistributor is IPredictionPoolForDistributor {
         lastTokenIdClaimed = tokenId;
         emit ClaimRewardAttempted(tokenId, msg.sender);
         if (shouldRevertOnClaim) {
-            revert("MockPredictionPool: ClaimReward reverted as instructed");
+            revert("MockPredictionManager: ClaimReward reverted as instructed");
         }
         // If not reverting, successful execution implies reward distribution logic would happen here.
     }

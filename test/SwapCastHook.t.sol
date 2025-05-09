@@ -15,7 +15,7 @@ import {LiquidityAmounts} from "@uniswap/v4-core/test/utils/LiquidityAmounts.sol
 import {SwapCastHook} from "../src/SwapCastHook.sol";
 import {ImmutableState} from "../lib/v4-periphery/src/base/ImmutableState.sol";
 import {SwapCastNFT} from "src/SwapCastNFT.sol";
-import {PredictionPool} from "src/PredictionPool.sol";
+import {PredictionManager} from "src/PredictionManager.sol";
 
 contract TestableSwapCastNFT is SwapCastNFT {
     constructor(address initialOwner) SwapCastNFT(initialOwner, "TestSwapCastNFT", "TSCNFT") {}
@@ -33,7 +33,7 @@ contract TestSwapCastHook is Test, Deployers {
     SwapCastHook internal hook;
     PoolKey internal poolKey;
     TestableSwapCastNFT internal nft;
-    PredictionPool internal pool;
+    PredictionManager internal pool;
 
     address internal constant MOCK_TREASURY = address(0x1001);
     address internal constant MOCK_ORACLE_RESOLVER = address(0x1002);
@@ -46,16 +46,15 @@ contract TestSwapCastHook is Test, Deployers {
         deployMintAndApprove2Currencies();
 
         nft = new TestableSwapCastNFT(address(this));
-        pool = new PredictionPool(
+        pool = new PredictionManager(
             address(nft),
             MOCK_TREASURY,
             INITIAL_FEE_BASIS_POINTS,
             address(this),
-            MOCK_ORACLE_RESOLVER,
-            MOCK_REWARD_DISTRIBUTOR,
-            INITIAL_MIN_STAKE_AMOUNT
+            INITIAL_MIN_STAKE_AMOUNT,
+            3600 // maxPriceStalenessSeconds (1 hour)
         );
-        nft.setPredictionPoolAddress(address(pool));
+        nft.setPredictionManagerAddress(address(pool));
 
         // Deploy hook to an address that has the proper flags set
         // Following the example from points-hook repository
@@ -220,7 +219,7 @@ contract TestSwapCastHook is Test, Deployers {
                 WrappedError.selector,
                 address(hook),
                 IHooks.afterSwap.selector,
-                abi.encodeWithSelector(expectedSelector, "PredictionPool reverted with a custom error."),
+                abi.encodeWithSelector(expectedSelector, "PredictionManager reverted with a custom error."),
                 abi.encodePacked(bytes4(keccak256(bytes("HookCallFailed()"))))
             )
         );

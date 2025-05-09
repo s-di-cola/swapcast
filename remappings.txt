@@ -1,7 +1,6 @@
 @chainlink/contracts/=lib/foundry-chainlink-toolkit/lib/chainlink-brownie-contracts/contracts/src/
 @ensdomains/=lib/v4-periphery/lib/v4-core/node_modules/@ensdomains/
 @openzeppelin/=lib/foundry-chainlink-toolkit/lib/openzeppelin-contracts/
-@openzeppelin/contracts/=lib/v4-periphery/lib/v4-core/lib/openzeppelin-contracts/contracts/
 @uniswap/v4-core/=lib/v4-periphery/lib/v4-core/
 chainlink-brownie-contracts/=lib/foundry-chainlink-toolkit/lib/chainlink-brownie-contracts/contracts/src/v0.6/vendor/@arbitrum/nitro-contracts/src/
 ds-test/=lib/foundry-chainlink-toolkit/lib/forge-std/lib/ds-test/src/

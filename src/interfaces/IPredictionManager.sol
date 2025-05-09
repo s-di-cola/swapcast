@@ -4,11 +4,11 @@ pragma solidity ^0.8.26;
 import {PredictionTypes} from "../types/PredictionTypes.sol";
 
 /**
- * @title IPredictionPool Interface
+ * @title IPredictionManager Interface
  * @author SwapCast Developers
- * @notice Defines the interface for the PredictionPool contract, primarily for interaction from the SwapCastHook.
+ * @notice Defines the interface for the PredictionManager contract, primarily for interaction from the SwapCastHook.
  */
-interface IPredictionPool {
+interface IPredictionManager {
     /**
      * @notice Records a user's prediction and associated stake.
      * @param user The address of the user making the prediction.
