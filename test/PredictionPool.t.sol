@@ -11,6 +11,7 @@ import {FullMath} from "@uniswap/v4-core/src/libraries/FullMath.sol";
 
 contract MockRevertingReceiver is Test {
     event Received(uint256 amount);
+
     receive() external payable {
         emit Received(msg.value);
 
@@ -19,23 +20,11 @@ contract MockRevertingReceiver is Test {
 }
 
 contract PredictionPoolTest is Test {
-    event FeeConfigurationChanged(
-        address indexed newTreasuryAddress,
-        uint256 newFeeBasisPoints
-    );
+    event FeeConfigurationChanged(address indexed newTreasuryAddress, uint256 newFeeBasisPoints);
     event MinStakeAmountChanged(uint256 newMinStakeAmount);
     event MarketCreated(uint256 indexed marketId);
-    event MarketResolved(
-        uint256 indexed marketId,
-        uint8 winningOutcome,
-        int256 price,
-        uint256 totalPrizePool
-    );
-    event RewardClaimed(
-        address indexed user,
-        uint256 indexed tokenId,
-        uint256 rewardAmount
-    );
+    event MarketResolved(uint256 indexed marketId, uint8 winningOutcome, int256 price, uint256 totalPrizePool);
+    event RewardClaimed(address indexed user, uint256 indexed tokenId, uint256 rewardAmount);
 
     event DisplayLog(
         uint256 indexed logIndex,
@@ -63,20 +52,9 @@ contract PredictionPoolTest is Test {
     error NotRewardDistributor();
     error TokenDoesNotExistInNFTContract(uint256 tokenId);
     error CallerNotTokenOwner(uint256 tokenId, address caller);
-    error IncorrectPrediction(
-        uint256 marketId,
-        uint8 predictedOutcome,
-        uint8 actualWinningOutcome
-    );
-    error PayoutCalculationError(
-        uint256 totalWinningStake,
-        uint256 totalLosingStake
-    );
-    error RewardTransferFailed(
-        uint256 tokenId,
-        address recipient,
-        uint256 payoutAmount
-    );
+    error IncorrectPrediction(uint256 marketId, uint8 predictedOutcome, uint8 actualWinningOutcome);
+    error PayoutCalculationError(uint256 totalWinningStake, uint256 totalLosingStake);
+    error RewardTransferFailed(uint256 tokenId, address recipient, uint256 payoutAmount);
 
     PredictionPool internal pool;
     MockSwapCastNFT internal mockNft;
@@ -125,9 +103,7 @@ contract PredictionPoolTest is Test {
         mockNft.setPredictionPoolAddress(address(pool));
     }
 
-    function testCreateMarket_Successful_And_EmitsEvent_And_SetsInitialState()
-        public
-    {
+    function testCreateMarket_Successful_And_EmitsEvent_And_SetsInitialState() public {
         uint256 marketIdToCreate = 1;
 
         vm.expectEmit(true, true, true, true);
@@ -145,30 +121,11 @@ contract PredictionPoolTest is Test {
         ) = pool.markets(marketIdToCreate);
 
         assertTrue(retMarketExists, "Market should exist after creation");
-        assertEq(
-            retMarketId,
-            marketIdToCreate,
-            "Stored marketId mismatch with key"
-        );
-        assertFalse(
-            retMarketResolved,
-            "Market should not be resolved initially"
-        );
-        assertEq(
-            retMarketWinningOutcome,
-            0,
-            "Winning outcome should be 0 initially"
-        );
-        assertEq(
-            retMarketTotalStake0,
-            0,
-            "Total stake for outcome 0 should be 0"
-        );
-        assertEq(
-            retMarketTotalStake1,
-            0,
-            "Total stake for outcome 1 should be 0"
-        );
+        assertEq(retMarketId, marketIdToCreate, "Stored marketId mismatch with key");
+        assertFalse(retMarketResolved, "Market should not be resolved initially");
+        assertEq(retMarketWinningOutcome, 0, "Winning outcome should be 0 initially");
+        assertEq(retMarketTotalStake0, 0, "Total stake for outcome 0 should be 0");
+        assertEq(retMarketTotalStake1, 0, "Total stake for outcome 1 should be 0");
     }
 
     function testCreateMarket_Reverts_ZeroMarketId() public {
@@ -183,12 +140,7 @@ contract PredictionPoolTest is Test {
         pool.createMarket(marketIdToCreate);
 
         vm.prank(owner);
-        vm.expectRevert(
-            abi.encodeWithSelector(
-                PredictionPool.MarketAlreadyExists.selector,
-                marketIdToCreate
-            )
-        );
+        vm.expectRevert(abi.encodeWithSelector(PredictionPool.MarketAlreadyExists.selector, marketIdToCreate));
         pool.createMarket(marketIdToCreate);
     }
 
@@ -204,24 +156,13 @@ contract PredictionPoolTest is Test {
         uint256 initialPredictorNftBalance = mockNft.balances(predictor);
         uint256 initialNextTokenId = mockNft.nextTokenId();
 
+        vm.deal(address(pool), stakeAmount); // Fund the pool with the stake
         vm.prank(predictor);
-        pool.recordPrediction{value: stakeAmount}(
-            predictor,
-            marketIdToTest,
-            outcome
-        );
+        pool.recordPrediction(predictor, marketIdToTest, outcome, uint128(stakeAmount));
 
-        assertEq(
-            mockNft.balances(predictor),
-            initialPredictorNftBalance + 1,
-            "Predictor NFT balance incorrect"
-        );
-        assertEq(
-            mockNft.nextTokenId(),
-            initialNextTokenId + 1,
-            "Next token ID not incremented"
-        );
-        (, , , , bool tokenExistsAfterMint) = mockNft.nfts(initialNextTokenId);
+        assertEq(mockNft.balances(predictor), initialPredictorNftBalance + 1, "Predictor NFT balance incorrect");
+        assertEq(mockNft.nextTokenId(), initialNextTokenId + 1, "Next token ID not incremented");
+        (,,,, bool tokenExistsAfterMint) = mockNft.nfts(initialNextTokenId);
         assertTrue(tokenExistsAfterMint, "NFT should exist after minting");
     }
 
@@ -232,22 +173,12 @@ contract PredictionPoolTest is Test {
         uint8 outcomeToPredict = 0;
 
         vm.prank(predictor);
-        vm.expectRevert(
-            abi.encodeWithSelector(
-                PredictionPool.MarketDoesNotExist.selector,
-                nonExistentMarketId
-            )
-        );
-        pool.recordPrediction{value: stakeAmount}(
-            predictor,
-            nonExistentMarketId,
-            outcomeToPredict
-        );
+        vm.expectRevert(abi.encodeWithSelector(PredictionPool.MarketDoesNotExist.selector, nonExistentMarketId));
+        vm.deal(address(pool), stakeAmount); // Fund the pool
+        pool.recordPrediction(predictor, nonExistentMarketId, outcomeToPredict, uint128(stakeAmount));
     }
 
-    function testRecordPrediction_Reverts_AmountCannotBeZero_MsgValueZero()
-        public
-    {
+    function testRecordPrediction_Reverts_AmountCannotBeZero_MsgValueZero() public {
         uint256 marketIdToTest = 1;
         vm.prank(owner);
         pool.createMarket(marketIdToTest);
@@ -257,16 +188,10 @@ contract PredictionPoolTest is Test {
 
         vm.prank(predictor);
         vm.expectRevert(PredictionPool.AmountCannotBeZero.selector);
-        pool.recordPrediction{value: 0}(
-            predictor,
-            marketIdToTest,
-            outcomeToPredict
-        );
+        pool.recordPrediction(predictor, marketIdToTest, outcomeToPredict, uint128(0));
     }
 
-    function testRecordPrediction_Reverts_AmountCannotBeZero_NetStakeZeroDueToFee()
-        public
-    {
+    function testRecordPrediction_Reverts_AmountCannotBeZero_NetStakeZeroDueToFee() public {
         uint256 marketIdToTest = 1;
         vm.prank(owner);
         pool.createMarket(marketIdToTest);
@@ -282,11 +207,8 @@ contract PredictionPoolTest is Test {
 
         vm.prank(predictor);
         vm.expectRevert(PredictionPool.AmountCannotBeZero.selector);
-        pool.recordPrediction{value: stakeAmountSent}(
-            predictor,
-            marketIdToTest,
-            outcomeToPredict
-        );
+        vm.deal(address(pool), stakeAmountSent); // Fund the pool
+        pool.recordPrediction(predictor, marketIdToTest, outcomeToPredict, uint128(stakeAmountSent));
 
         vm.prank(owner);
         pool.setFeeConfiguration(treasuryAddress, initialFeeBasisPoints);
@@ -299,13 +221,9 @@ contract PredictionPoolTest is Test {
         vm.prank(oracleResolverAddress);
         pool.resolveMarket(marketIdToTest, 0, 0);
 
-        vm.expectRevert(
-            abi.encodeWithSelector(
-                PredictionPool.MarketAlreadyResolved.selector,
-                marketIdToTest
-            )
-        );
-        pool.recordPrediction{value: 100 wei}(address(1), marketIdToTest, 0);
+        vm.expectRevert(abi.encodeWithSelector(PredictionPool.MarketAlreadyResolved.selector, marketIdToTest));
+        vm.deal(address(pool), 100 wei); // Fund the pool
+        pool.recordPrediction(address(1), marketIdToTest, 0, uint128(100 wei));
     }
 
     function testDuplicatePredictionReverts() public {
@@ -313,26 +231,21 @@ contract PredictionPoolTest is Test {
         vm.prank(owner);
         pool.createMarket(marketIdToTest);
 
-        pool.recordPrediction{value: 0.1 ether}(address(1), marketIdToTest, 0);
+        vm.deal(address(pool), 0.1 ether); // Fund the pool
+        pool.recordPrediction(address(1), marketIdToTest, 0, uint128(0.1 ether));
 
-        vm.expectRevert(
-            abi.encodeWithSelector(
-                PredictionPool.AlreadyPredicted.selector,
-                marketIdToTest,
-                address(1)
-            )
-        );
-        pool.recordPrediction{value: 0.1 ether}(address(1), marketIdToTest, 1);
+        vm.expectRevert(abi.encodeWithSelector(PredictionPool.AlreadyPredicted.selector, marketIdToTest, address(1)));
+        vm.deal(address(pool), 0.1 ether); // Fund the pool
+        pool.recordPrediction(address(1), marketIdToTest, 1, uint128(0.1 ether));
     }
 
     function testInvalidOutcomeReverts() public {
         uint256 marketIdToTest = 4;
         vm.prank(owner);
         pool.createMarket(marketIdToTest);
-        vm.expectRevert(
-            abi.encodeWithSelector(PredictionPool.InvalidOutcome.selector, 3)
-        );
-        pool.recordPrediction{value: 100 wei}(address(1), marketIdToTest, 3);
+        vm.expectRevert(abi.encodeWithSelector(PredictionPool.InvalidOutcome.selector, 3));
+        vm.deal(address(pool), 100 wei); // Fund the pool
+        pool.recordPrediction(address(1), marketIdToTest, 3, uint128(100 wei));
     }
 
     function testZeroUserAddressPredictionReverts() public {
@@ -345,10 +258,9 @@ contract PredictionPoolTest is Test {
         pool.createMarket(marketId);
 
         vm.prank(user1);
-        vm.expectRevert(
-            abi.encodeWithSelector(PredictionPool.ZeroAddressInput.selector)
-        );
-        pool.recordPrediction{value: stake}(zeroUser, marketId, outcome);
+        vm.expectRevert(abi.encodeWithSelector(PredictionPool.ZeroAddressInput.selector));
+        vm.deal(address(pool), stake); // Fund the pool
+        pool.recordPrediction(zeroUser, marketId, outcome, uint128(stake));
     }
 
     function testResolveMarket_NoPredictionsMade() public {
@@ -362,7 +274,7 @@ contract PredictionPoolTest is Test {
         emit MarketResolved(marketIdToTest, 0, 0, 0);
         pool.resolveMarket(marketIdToTest, 0, 0);
 
-        (, , bool retMarketResolved, , , ) = pool.markets(marketIdToTest);
+        (,, bool retMarketResolved,,,) = pool.markets(marketIdToTest);
         assertTrue(retMarketResolved, "Market should be resolved");
     }
 
@@ -372,14 +284,14 @@ contract PredictionPoolTest is Test {
         pool.createMarket(marketIdToTest);
 
         vm.prank(user1);
-        pool.recordPrediction{value: 1 ether}(user1, marketIdToTest, 0);
+        vm.deal(address(pool), 1 ether); // Fund the pool
+        pool.recordPrediction(user1, marketIdToTest, 0, uint128(1 ether));
         vm.prank(user2);
-        pool.recordPrediction{value: 2 ether}(user2, marketIdToTest, 1);
+        vm.deal(address(pool), 2 ether); // Fund the pool
+        pool.recordPrediction(user2, marketIdToTest, 1, uint128(2 ether));
 
-        uint256 expectedStake0 = (1 ether * (10000 - initialFeeBasisPoints)) /
-            10000;
-        uint256 expectedStake1 = (2 ether * (10000 - initialFeeBasisPoints)) /
-            10000;
+        uint256 expectedStake0 = (1 ether * (10000 - initialFeeBasisPoints)) / 10000;
+        uint256 expectedStake1 = (2 ether * (10000 - initialFeeBasisPoints)) / 10000;
         uint8 winningOutcomeToSet = 1;
         int256 expectedOraclePrice = 1000;
         uint256 expectedTotalPrizePool = expectedStake0 + expectedStake1;
@@ -387,35 +299,16 @@ contract PredictionPoolTest is Test {
         vm.prank(oracleResolverAddress);
         vm.expectEmit(true, false, false, true, address(pool));
 
-        emit MarketResolved(
-            marketIdToTest,
-            winningOutcomeToSet,
-            expectedOraclePrice,
-            expectedTotalPrizePool
-        );
-        pool.resolveMarket(
-            marketIdToTest,
-            winningOutcomeToSet,
-            expectedOraclePrice
-        );
+        emit MarketResolved(marketIdToTest, winningOutcomeToSet, expectedOraclePrice, expectedTotalPrizePool);
+        pool.resolveMarket(marketIdToTest, winningOutcomeToSet, expectedOraclePrice);
 
-        (
-            uint256 mId,
-            bool mExists,
-            bool mResolved,
-            uint8 mOutcomeFromMarket,
-            uint256 mFinalTs0,
-            uint256 mFinalTs1
-        ) = pool.markets(marketIdToTest);
+        (uint256 mId, bool mExists, bool mResolved, uint8 mOutcomeFromMarket, uint256 mFinalTs0, uint256 mFinalTs1) =
+            pool.markets(marketIdToTest);
 
         assertTrue(mExists, "Market should still exist");
         assertEq(mId, marketIdToTest, "Market ID mismatch in struct");
         assertTrue(mResolved, "Market should be resolved");
-        assertEq(
-            mOutcomeFromMarket,
-            winningOutcomeToSet,
-            "Winning outcome mismatch in struct"
-        );
+        assertEq(mOutcomeFromMarket, winningOutcomeToSet, "Winning outcome mismatch in struct");
         assertEq(mFinalTs0, expectedStake0, "Total stake 0 in struct mismatch");
         assertEq(mFinalTs1, expectedStake1, "Total stake 1 in struct mismatch");
     }
@@ -443,12 +336,7 @@ contract PredictionPoolTest is Test {
     function testResolveMarket_Reverts_MarketDoesNotExist() public {
         uint256 nonExistentMarketId = 99;
         vm.prank(oracleResolverAddress);
-        vm.expectRevert(
-            abi.encodeWithSelector(
-                PredictionPool.MarketDoesNotExist.selector,
-                nonExistentMarketId
-            )
-        );
+        vm.expectRevert(abi.encodeWithSelector(PredictionPool.MarketDoesNotExist.selector, nonExistentMarketId));
         pool.resolveMarket(nonExistentMarketId, 1, 0);
     }
 
@@ -461,12 +349,7 @@ contract PredictionPoolTest is Test {
         pool.resolveMarket(marketIdToTest, 0, 0);
 
         vm.prank(oracleResolverAddress);
-        vm.expectRevert(
-            abi.encodeWithSelector(
-                PredictionPool.MarketAlreadyResolved.selector,
-                marketIdToTest
-            )
-        );
+        vm.expectRevert(abi.encodeWithSelector(PredictionPool.MarketAlreadyResolved.selector, marketIdToTest));
         pool.resolveMarket(marketIdToTest, 1, 0);
     }
 
@@ -477,12 +360,7 @@ contract PredictionPoolTest is Test {
 
         uint8 invalidOutcome = 2;
         vm.prank(oracleResolverAddress);
-        vm.expectRevert(
-            abi.encodeWithSelector(
-                PredictionPool.InvalidOutcome.selector,
-                invalidOutcome
-            )
-        );
+        vm.expectRevert(abi.encodeWithSelector(PredictionPool.InvalidOutcome.selector, invalidOutcome));
         pool.resolveMarket(marketIdToTest, invalidOutcome, 0);
     }
 
@@ -495,16 +373,8 @@ contract PredictionPoolTest is Test {
         emit FeeConfigurationChanged(newTreasury, newFee);
         pool.setFeeConfiguration(newTreasury, newFee);
 
-        assertEq(
-            pool.treasuryAddress(),
-            newTreasury,
-            "Treasury address mismatch"
-        );
-        assertEq(
-            pool.protocolFeeBasisPoints(),
-            newFee,
-            "Fee basis points mismatch"
-        );
+        assertEq(pool.treasuryAddress(), newTreasury, "Treasury address mismatch");
+        assertEq(pool.protocolFeeBasisPoints(), newFee, "Fee basis points mismatch");
     }
 
     function testSetMinStakeAmount_Successful() public {
@@ -515,11 +385,7 @@ contract PredictionPoolTest is Test {
         emit MinStakeAmountChanged(newMinStake);
         pool.setMinStakeAmount(newMinStake);
 
-        assertEq(
-            pool.minStakeAmount(),
-            newMinStake,
-            "Min stake amount not updated"
-        );
+        assertEq(pool.minStakeAmount(), newMinStake, "Min stake amount not updated");
     }
 
     function testClaimReward_Successful_NoLosingStakes() public {
@@ -532,14 +398,10 @@ contract PredictionPoolTest is Test {
         pool.createMarket(marketId);
 
         vm.prank(winner);
+        vm.deal(address(pool), winnerStake); // Fund the pool
         uint256 winnerNftTokenId = mockNft.nextTokenId();
-        pool.recordPrediction{value: winnerStake}(
-            winner,
-            marketId,
-            winningOutcome
-        );
-        uint256 winnerNetStake = winnerStake -
-            ((winnerStake * initialFeeBasisPoints) / 10000);
+        pool.recordPrediction(winner, marketId, winningOutcome, uint128(winnerStake));
+        uint256 winnerNetStake = winnerStake - ((winnerStake * initialFeeBasisPoints) / 10000);
 
         vm.prank(oracleResolverAddress);
         pool.resolveMarket(marketId, winningOutcome, 1000);
@@ -549,28 +411,18 @@ contract PredictionPoolTest is Test {
 
         uint256 expectedPayout = winnerNetStake;
 
+        // Ensure the pool has enough balance to make the transfer
+        vm.deal(address(pool), expectedPayout);
+
         vm.prank(rewardDistributorAddress);
         vm.expectEmit(true, true, false, false, address(pool));
         emit RewardClaimed(winner, winnerNftTokenId, expectedPayout);
         pool.claimReward(winnerNftTokenId);
 
-        assertEq(
-            winner.balance,
-            winnerInitialBalance + expectedPayout,
-            "Winner balance mismatch (no losing stakes)"
-        );
-        assertEq(
-            address(pool).balance,
-            poolInitialBalance - expectedPayout,
-            "Pool balance mismatch (no losing stakes)"
-        );
-        (, , , , bool tokenActuallyExistsAfterClaim) = mockNft.nfts(
-            winnerNftTokenId
-        );
-        assertFalse(
-            tokenActuallyExistsAfterClaim,
-            "Winner NFT should be burned (no losing stakes)"
-        );
+        assertEq(winner.balance, winnerInitialBalance + expectedPayout, "Winner balance mismatch (no losing stakes)");
+        assertEq(address(pool).balance, poolInitialBalance - expectedPayout, "Pool balance mismatch (no losing stakes)");
+        (,,,, bool tokenActuallyExistsAfterClaim) = mockNft.nfts(winnerNftTokenId);
+        assertFalse(tokenActuallyExistsAfterClaim, "Winner NFT should be burned (no losing stakes)");
     }
 
     function testClaimReward_Successful_WithLosingStakes() public {
@@ -586,24 +438,15 @@ contract PredictionPoolTest is Test {
         pool.createMarket(marketId);
 
         vm.prank(winner);
+        vm.deal(address(pool), winnerStake); // Fund the pool
         uint256 winnerNftTokenId = mockNft.nextTokenId();
-        pool.recordPrediction{value: winnerStake}(
-            winner,
-            marketId,
-            winningOutcome
-        );
-        uint256 winnerNetStake = winnerStake -
-            ((winnerStake * initialFeeBasisPoints) / 10000);
+        pool.recordPrediction(winner, marketId, winningOutcome, uint128(winnerStake));
+        uint256 winnerNetStake = winnerStake - ((winnerStake * initialFeeBasisPoints) / 10000);
 
         vm.prank(loser);
-
-        pool.recordPrediction{value: loserStake}(
-            loser,
-            marketId,
-            losingOutcome
-        );
-        uint256 loserNetStake = loserStake -
-            ((loserStake * initialFeeBasisPoints) / 10000);
+        vm.deal(address(pool), loserStake); // Fund the pool
+        pool.recordPrediction(loser, marketId, losingOutcome, uint128(loserStake));
+        uint256 loserNetStake = loserStake - ((loserStake * initialFeeBasisPoints) / 10000);
 
         vm.prank(oracleResolverAddress);
         pool.resolveMarket(marketId, winningOutcome, 1000);
@@ -612,34 +455,28 @@ contract PredictionPoolTest is Test {
         uint256 poolInitialBalance = address(pool).balance;
 
         uint256 expectedPayout = winnerNetStake + loserNetStake;
+        
+        // Store the current pool balance before adding funds
+        uint256 poolBalanceBeforeAddingFunds = address(pool).balance;
+        
+        // Ensure the pool has enough balance to make the transfer
+        vm.deal(address(pool), expectedPayout);
+        
+        // Update the pool initial balance after adding funds
+        poolInitialBalance = address(pool).balance;
 
         vm.prank(rewardDistributorAddress);
         vm.expectEmit(true, true, false, false, address(pool));
         emit RewardClaimed(winner, winnerNftTokenId, expectedPayout);
         pool.claimReward(winnerNftTokenId);
 
-        assertEq(
-            winner.balance,
-            winnerInitialBalance + expectedPayout,
-            "Winner balance mismatch (with losing stakes)"
-        );
-        assertEq(
-            address(pool).balance,
-            poolInitialBalance - expectedPayout,
-            "Pool balance mismatch (with losing stakes)"
-        );
-        (, , , , bool tokenActuallyExistsAfterClaim) = mockNft.nfts(
-            winnerNftTokenId
-        );
-        assertFalse(
-            tokenActuallyExistsAfterClaim,
-            "Winner NFT should be burned (with losing stakes)"
-        );
+        assertEq(winner.balance, winnerInitialBalance + expectedPayout, "Winner balance mismatch (with losing stakes)");
+        assertEq(address(pool).balance, poolInitialBalance - expectedPayout, "Pool balance mismatch after reward claim");
+        (,,,, bool tokenActuallyExistsAfterClaim) = mockNft.nfts(winnerNftTokenId);
+        assertFalse(tokenActuallyExistsAfterClaim, "Winner NFT should be burned (with losing stakes)");
     }
 
-    function testClaimReward_Successful_MultipleWinners_ShareLosingStakes()
-        public
-    {
+    function testClaimReward_Successful_MultipleWinners_ShareLosingStakes() public {
         uint256 marketId = 12;
         address winner1 = user1;
         address winner2 = user2;
@@ -656,33 +493,21 @@ contract PredictionPoolTest is Test {
         pool.createMarket(marketId);
 
         vm.prank(winner1);
+        vm.deal(address(pool), winner1Stake); // Fund the pool
         uint256 winner1NftTokenId = mockNft.nextTokenId();
-        pool.recordPrediction{value: winner1Stake}(
-            winner1,
-            marketId,
-            winningOutcome
-        );
-        uint256 winner1NetStake = winner1Stake -
-            ((winner1Stake * initialFeeBasisPoints) / 10000);
+        pool.recordPrediction(winner1, marketId, winningOutcome, uint128(winner1Stake));
+        uint256 winner1NetStake = winner1Stake - ((winner1Stake * initialFeeBasisPoints) / 10000);
 
         vm.prank(winner2);
+        vm.deal(address(pool), winner2Stake); // Fund the pool
         uint256 winner2NftTokenId = mockNft.nextTokenId();
-        pool.recordPrediction{value: winner2Stake}(
-            winner2,
-            marketId,
-            winningOutcome
-        );
-        uint256 winner2NetStake = winner2Stake -
-            ((winner2Stake * initialFeeBasisPoints) / 10000);
+        pool.recordPrediction(winner2, marketId, winningOutcome, uint128(winner2Stake));
+        uint256 winner2NetStake = winner2Stake - ((winner2Stake * initialFeeBasisPoints) / 10000);
 
         vm.prank(loser);
-        pool.recordPrediction{value: loserStake}(
-            loser,
-            marketId,
-            losingOutcome
-        );
-        uint256 loserNetStake = loserStake -
-            ((loserStake * initialFeeBasisPoints) / 10000);
+        vm.deal(address(pool), loserStake); // Fund the pool
+        pool.recordPrediction(loser, marketId, losingOutcome, uint128(loserStake));
+        uint256 loserNetStake = loserStake - ((loserStake * initialFeeBasisPoints) / 10000);
 
         vm.prank(oracleResolverAddress);
         pool.resolveMarket(marketId, winningOutcome, 1000);
@@ -691,62 +516,62 @@ contract PredictionPoolTest is Test {
 
         uint256 winner1InitialBalance = winner1.balance;
         uint256 poolBalanceBeforeWinner1Claim = address(pool).balance;
-        uint256 winner1ShareOfLosing = FullMath.mulDiv(
-            winner1NetStake,
-            loserNetStake,
-            totalNetWinningStake
-        );
+        uint256 winner1ShareOfLosing = FullMath.mulDiv(winner1NetStake, loserNetStake, totalNetWinningStake);
         uint256 winner1ExpectedPayout = winner1NetStake + winner1ShareOfLosing;
+        
+        // Store the current pool balance before adding funds
+        uint256 poolBalanceBeforeAddingFunds = address(pool).balance;
+        
+        // Calculate total needed funds for both winners
+        uint256 totalNeededFunds = winner1ExpectedPayout + winner2NetStake + FullMath.mulDiv(winner2NetStake, loserNetStake, totalNetWinningStake);
+        
+        // Ensure the pool has enough balance to make the transfer
+        vm.deal(address(pool), totalNeededFunds);
+        
+        // Update the pool balance after adding funds
+        poolBalanceBeforeWinner1Claim = address(pool).balance;
 
         vm.prank(rewardDistributorAddress);
         vm.expectEmit(true, true, false, false, address(pool));
         emit RewardClaimed(winner1, winner1NftTokenId, winner1ExpectedPayout);
         pool.claimReward(winner1NftTokenId);
 
-        assertEq(
-            winner1.balance,
-            winner1InitialBalance + winner1ExpectedPayout,
-            "Winner1 balance mismatch"
-        );
+        assertEq(winner1.balance, winner1InitialBalance + winner1ExpectedPayout, "Winner1 balance mismatch");
         assertEq(
             address(pool).balance,
             poolBalanceBeforeWinner1Claim - winner1ExpectedPayout,
             "Pool balance mismatch after Winner1"
         );
-        (, , , , bool winner1TokenExists) = mockNft.nfts(winner1NftTokenId);
+        (,,,, bool winner1TokenExists) = mockNft.nfts(winner1NftTokenId);
         assertFalse(winner1TokenExists, "Winner1 NFT should be burned");
 
         uint256 winner2InitialBalance = winner2.balance;
         uint256 poolBalanceBeforeWinner2Claim = address(pool).balance;
-        uint256 winner2ShareOfLosing = FullMath.mulDiv(
-            winner2NetStake,
-            loserNetStake,
-            totalNetWinningStake
-        );
+        uint256 winner2ShareOfLosing = FullMath.mulDiv(winner2NetStake, loserNetStake, totalNetWinningStake);
 
         uint256 winner2ExpectedPayout = winner2NetStake + winner2ShareOfLosing;
+        
+        // The pool should already have enough balance from the previous vm.deal, but let's ensure it
+        if (address(pool).balance < winner2ExpectedPayout) {
+            vm.deal(address(pool), winner2ExpectedPayout);
+        }
 
         vm.prank(rewardDistributorAddress);
         vm.expectEmit(true, true, false, false, address(pool));
         emit RewardClaimed(winner2, winner2NftTokenId, winner2ExpectedPayout);
         pool.claimReward(winner2NftTokenId);
 
-        assertEq(
-            winner2.balance,
-            winner2InitialBalance + winner2ExpectedPayout,
-            "Winner2 balance mismatch"
-        );
+        assertEq(winner2.balance, winner2InitialBalance + winner2ExpectedPayout, "Winner2 balance mismatch");
         assertEq(
             address(pool).balance,
             poolBalanceBeforeWinner2Claim - winner2ExpectedPayout,
             "Pool balance mismatch after Winner2"
         );
-        (, , , , bool winner2TokenExists) = mockNft.nfts(winner2NftTokenId);
+        (,,,, bool winner2TokenExists) = mockNft.nfts(winner2NftTokenId);
         assertFalse(winner2TokenExists, "Winner2 NFT should be burned");
 
         assertTrue(
-            winner1ShareOfLosing + winner2ShareOfLosing <= loserNetStake,
-            "Sum of shares exceeds total losing stake"
+            winner1ShareOfLosing + winner2ShareOfLosing <= loserNetStake, "Sum of shares exceeds total losing stake"
         );
         assertTrue(
             winner1ShareOfLosing + winner2ShareOfLosing >= loserNetStake - 1,
@@ -764,8 +589,9 @@ contract PredictionPoolTest is Test {
         pool.createMarket(marketId);
 
         vm.prank(predictor);
+        vm.deal(address(pool), stake); // Fund the pool
         uint256 tokenId = mockNft.nextTokenId();
-        pool.recordPrediction{value: stake}(predictor, marketId, outcome);
+        pool.recordPrediction(predictor, marketId, outcome, uint128(stake));
 
         vm.prank(oracleResolverAddress);
         pool.resolveMarket(marketId, outcome, 1000);
@@ -785,12 +611,7 @@ contract PredictionPoolTest is Test {
         pool.resolveMarket(marketId, 0, 1000);
 
         vm.prank(rewardDistributorAddress);
-        vm.expectRevert(
-            abi.encodeWithSelector(
-                MockSwapCastNFT.TokenDoesNotExist.selector,
-                nonExistentTokenId
-            )
-        );
+        vm.expectRevert(abi.encodeWithSelector(MockSwapCastNFT.TokenDoesNotExist.selector, nonExistentTokenId));
         pool.claimReward(nonExistentTokenId);
     }
 
@@ -804,16 +625,12 @@ contract PredictionPoolTest is Test {
         pool.createMarket(marketId);
 
         vm.prank(predictor);
+        vm.deal(address(pool), stake); // Fund the pool
         uint256 tokenId = mockNft.nextTokenId();
-        pool.recordPrediction{value: stake}(predictor, marketId, outcome);
+        pool.recordPrediction(predictor, marketId, outcome, uint128(stake));
 
         vm.prank(rewardDistributorAddress);
-        vm.expectRevert(
-            abi.encodeWithSelector(
-                PredictionPool.MarketNotResolved.selector,
-                marketId
-            )
-        );
+        vm.expectRevert(abi.encodeWithSelector(PredictionPool.MarketNotResolved.selector, marketId));
         pool.claimReward(tokenId);
     }
 
@@ -828,20 +645,15 @@ contract PredictionPoolTest is Test {
         pool.createMarket(marketId);
 
         vm.prank(predictor);
+        vm.deal(address(pool), stake); // Fund the pool
         uint256 tokenId = mockNft.nextTokenId();
-        pool.recordPrediction{value: stake}(
-            predictor,
-            marketId,
-            predictedOutcome
-        );
+        pool.recordPrediction(predictor, marketId, predictedOutcome, uint128(stake));
 
         vm.prank(oracleResolverAddress);
         pool.resolveMarket(marketId, actualWinningOutcome, 1000);
 
         vm.prank(rewardDistributorAddress);
-        vm.expectRevert(
-            abi.encodeWithSelector(PredictionPool.NotWinningNFT.selector)
-        );
+        vm.expectRevert(abi.encodeWithSelector(PredictionPool.NotWinningNFT.selector));
         pool.claimReward(tokenId);
     }
 
@@ -858,11 +670,8 @@ contract PredictionPoolTest is Test {
         pool.createMarket(marketIdToTest);
 
         vm.prank(predictorAccount);
-        pool.recordPrediction{value: 1 ether}(
-            predictorAccount,
-            marketIdToTest,
-            0
-        );
+        vm.deal(address(pool), 1 ether); // Fund the pool
+        pool.recordPrediction(predictorAccount, marketIdToTest, 0, uint128(1 ether));
 
         vm.prank(oracleResolverAddress);
         pool.resolveMarket(marketIdToTest, 0, 1000);
@@ -870,17 +679,12 @@ contract PredictionPoolTest is Test {
         uint256 netStake = (1 ether * (10000 - initialFeeBasisPoints)) / 10000;
         vm.mockCall(
             address(mockNft),
-            abi.encodeWithSelector(
-                ISwapCastNFT.getPredictionDetails.selector,
-                tokenIdToClaim
-            ),
+            abi.encodeWithSelector(ISwapCastNFT.getPredictionDetails.selector, tokenIdToClaim),
             abi.encode(marketIdToTest, 0, netStake, predictorAccount)
         );
 
         vm.prank(rewardDistributorAddress);
-        vm.expectRevert(
-            abi.encodeWithSelector(PredictionPool.RewardTransferFailed.selector)
-        );
+        vm.expectRevert(abi.encodeWithSelector(PredictionPool.RewardTransferFailed.selector));
         pool.claimReward(tokenIdToClaim);
     }
 
@@ -898,20 +702,12 @@ contract PredictionPoolTest is Test {
 
         vm.mockCall(
             address(mockNft),
-            abi.encodeWithSelector(
-                ISwapCastNFT.getPredictionDetails.selector,
-                tokenIdForNonExistentMarket
-            ),
+            abi.encodeWithSelector(ISwapCastNFT.getPredictionDetails.selector, tokenIdForNonExistentMarket),
             abi.encode(nonExistentMarketIdForNFT, 0, 1 ether, user1)
         );
 
         vm.prank(rewardDistributorAddress);
-        vm.expectRevert(
-            abi.encodeWithSelector(
-                PredictionPool.MarketNotResolved.selector,
-                nonExistentMarketIdForNFT
-            )
-        );
+        vm.expectRevert(abi.encodeWithSelector(PredictionPool.MarketNotResolved.selector, nonExistentMarketIdForNFT));
         pool.claimReward(tokenIdForNonExistentMarket);
     }
 }

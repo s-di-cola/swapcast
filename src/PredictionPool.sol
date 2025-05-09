@@ -7,6 +7,7 @@ import {IPredictionPool} from "./interfaces/IPredictionPool.sol";
 import {IPredictionPoolForDistributor} from "./interfaces/IPredictionPoolForDistributor.sol";
 import {IPredictionPoolForResolver} from "./interfaces/IPredictionPoolForResolver.sol";
 import {ISwapCastNFT} from "./interfaces/ISwapCastNFT.sol";
+import {console} from "forge-std/console.sol";
 
 /**
  * @title PredictionPool
@@ -43,6 +44,16 @@ contract PredictionPool is
      * @notice The minimum amount of ETH (net of fees) required for a valid prediction stake.
      */
     uint256 public minStakeAmount;
+
+    /**
+     * @notice For testing: if true, the `recordPrediction` function will revert with `revertMessageOnRecord`.
+     */
+    bool public shouldRevertOnRecord;
+    /**
+     * @notice For testing: the message to revert with if `shouldRevertOnRecord` is true.
+     */
+    string public revertMessageOnRecord;
+    bytes4 public customErrorSelectorOnRecord;
 
     /**
      * @dev Represents a prediction market.
@@ -190,6 +201,8 @@ contract PredictionPool is
      */
     error NotOracleResolver();
 
+    error PredictionPoolError(string message);
+
     /**
      * @notice The address of the OracleResolver contract authorized to resolve markets.
      */
@@ -300,6 +313,23 @@ contract PredictionPool is
     }
 
     /**
+     * @notice Sets the conditions under which the recordPrediction function should revert for testing.
+     * @dev Only callable by the owner.
+     * @param _shouldRevert True if recordPrediction should revert, false otherwise.
+     * @param _message The message to revert with if _shouldRevert is true.
+     */
+    function setRevertOnRecordDetails(bool _shouldRevert, string memory _message) external onlyOwner {
+        shouldRevertOnRecord = _shouldRevert;
+        if (_shouldRevert) {
+            revertMessageOnRecord = _message;
+            customErrorSelectorOnRecord = bytes4(0); // Ensure we use the string revert
+        } else {
+            // Optionally reset message if not reverting, or leave as is
+            revertMessageOnRecord = "PredictionPool reverted with a custom error."; // Reset to default if reverting is turned off
+        }
+    }
+
+    /**
      * @inheritdoc IPredictionPool
      * @dev Records a user's prediction for a given market. The user sends ETH (msg.value) covering their
      *      conviction stake plus the protocol fee. An NFT representing this prediction is minted via SwapCastNFT.
@@ -309,17 +339,43 @@ contract PredictionPool is
      * @param _user The address of the user making the prediction (can be different from msg.sender if using meta-transactions).
      * @param _marketId The ID of the market to predict on.
      * @param _outcome The predicted outcome (0 for Bearish, 1 for Bullish).
+     * @param _convictionStakeDeclared The amount of ETH staked as conviction.
      */
-    function recordPrediction(address _user, uint256 _marketId, uint8 _outcome) external payable override {
+    function recordPrediction(
+        address _user,
+        uint256 _marketId,
+        uint8 _outcome,
+        uint128 _convictionStakeDeclared
+    ) external override {
+        console.log("PredictionPool.recordPrediction called by:", _user);
+        console.log("Attempting to record prediction for marketId:", _marketId);
+        console.log("Predicted outcome:", _outcome);
+        console.log("Declared conviction stake:", _convictionStakeDeclared);
+
         if (_user == address(0)) revert ZeroAddressInput();
-        if (msg.value == 0) revert AmountCannotBeZero();
+        if (_convictionStakeDeclared == 0) revert AmountCannotBeZero(); // Stake declared in hookData must be non-zero
         if (_outcome > 1) revert InvalidOutcome(_outcome);
         Market storage market = markets[_marketId];
+        console.log("Market ID:", _marketId, "Exists?", market.exists);
         if (!market.exists) revert MarketDoesNotExist(_marketId);
         if (market.resolved) revert MarketAlreadyResolved(_marketId);
         if (market.userPredictionCount[_user] > 0) revert AlreadyPredicted(_marketId, _user);
 
-        uint256 totalStakeSent = msg.value;
+        if (shouldRevertOnRecord) {
+            if (customErrorSelectorOnRecord != bytes4(0)) {
+                // Revert with custom error selector and message
+                // This assembly block is a placeholder for how one might encode a custom error with a selector and a string message.
+                // Actual implementation would depend on the specific error's ABI encoding.
+                bytes memory data = abi.encodeWithSelector(customErrorSelectorOnRecord, revertMessageOnRecord);
+                assembly {
+                    revert(add(data, 0x20), mload(data))
+                }
+            } else {
+                revert PredictionPoolError(revertMessageOnRecord);
+            }
+        }
+
+        uint256 totalStakeSent = _convictionStakeDeclared; // Use the stake declared in hookData
         uint256 protocolFee = (totalStakeSent * protocolFeeBasisPoints) / 10000;
         uint256 stakeAmount = totalStakeSent - protocolFee;
 
@@ -430,7 +486,8 @@ contract PredictionPool is
             (bool success,) = payable(nftOwner).call{value: rewardAmount}("");
             if (!success) revert RewardTransferFailed();
         }
-
+        
+        // Always emit the event after burning the NFT, regardless of reward amount
         emit RewardClaimed(nftOwner, _tokenId, rewardAmount);
     }
 

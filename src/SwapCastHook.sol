@@ -9,6 +9,7 @@ import {PoolId, PoolIdLibrary} from "v4-core/types/PoolId.sol";
 import {Hooks} from "v4-core/libraries/Hooks.sol";
 import {IPredictionPool} from "./interfaces/IPredictionPool.sol";
 import {SwapParams} from "v4-core/types/PoolOperation.sol";
+import {console} from "forge-std/console.sol";
 
 using PoolIdLibrary for PoolKey;
 
@@ -33,11 +34,11 @@ contract SwapCastHook is BaseHook {
 
     /**
      * @notice Expected length in bytes for the `hookData` when making a prediction.
-     * @dev This constant represents 32 bytes for `marketId` (uint256) + 1 byte for `outcome` (uint8).
+     * @dev This constant represents 32 bytes for `marketId` (uint256) + 1 byte for `outcome` (uint8) + 16 bytes for `convictionStake` (uint128).
      *      Currently, `_afterSwap` checks if `hookData.length == 0` but does not strictly enforce this length for non-empty data.
      *      Consider adding validation: `if (hookData.length != 0 && hookData.length != PREDICTION_HOOK_DATA_LENGTH) revert InvalidHookDataLength(...)`.
      */
-    uint256 private constant PREDICTION_HOOK_DATA_LENGTH = 33; // 32 bytes for marketId (uint256) + 1 byte for outcome (uint8)
+    uint256 private constant PREDICTION_HOOK_DATA_LENGTH = 49; // 32 bytes for marketId (uint256) + 1 byte for outcome (uint8) + 16 bytes for convictionStake (uint128)
 
     /**
      * @notice Emitted when a user attempts to make a prediction via this hook during a swap.
@@ -45,26 +46,36 @@ contract SwapCastHook is BaseHook {
      * @param poolId The ID of the Uniswap V4 pool where the swap occurred.
      * @param marketId The specific market ID for which the prediction is being made.
      * @param outcome The outcome predicted by the user.
-     * @param convictionValueSent The amount of ETH (in wei) sent by the user as their conviction stake for this prediction.
+     * @param convictionStakeDeclared The amount of conviction (stake) declared in the hookData for this prediction.
      */
     event PredictionAttempted(
-        address indexed sender, PoolId indexed poolId, uint256 marketId, uint8 outcome, uint256 convictionValueSent
+        address indexed sender, PoolId indexed poolId, uint256 marketId, uint8 outcome, uint128 convictionStakeDeclared
     );
     /**
      * @notice Emitted when a prediction is successfully recorded in the `PredictionPool` via this hook.
      * @param sender The address of the user whose prediction was recorded.
+     * @param poolId The ID of the Uniswap V4 pool where the swap occurred and prediction was recorded.
      * @param marketId The market ID for which the prediction was recorded.
      * @param outcome The outcome that was recorded.
-     * @param convictionValue The amount of ETH (in wei) staked as conviction, successfully transferred to the PredictionPool.
+     * @param convictionStakeDeclared The amount of conviction (stake) declared and recorded for the prediction.
      */
-    event PredictionRecorded(address indexed sender, uint256 marketId, uint8 outcome, uint256 convictionValue);
+    event PredictionRecorded(
+        address indexed sender,
+        PoolId indexed poolId,
+        uint256 marketId,
+        uint8 outcome,
+        uint128 convictionStakeDeclared
+    );
     /**
      * @notice Emitted if an attempt to record a prediction in the `PredictionPool` fails.
      * @param sender The address of the user whose prediction attempt failed.
+     * @param poolId The ID of the Uniswap V4 pool where the swap occurred.
      * @param marketId The market ID for which the prediction attempt failed.
-     * @param reason A string describing the reason for the failure, typically from the `PredictionPool` or this hook.
+     * @param outcome The outcome that was attempted to be recorded.
+     * @param convictionStakeDeclared The amount of conviction (stake) declared in the hookData for this prediction attempt.
+     * @param reason A bytes4 reason describing the failure, typically from the `PredictionPool` or this hook.
      */
-    event PredictionFailed(address indexed sender, uint256 marketId, string reason);
+    event PredictionFailed(address indexed sender, PoolId indexed poolId, uint256 marketId, uint8 outcome, uint128 convictionStakeDeclared, bytes4 reason);
 
     /**
      * @notice Reverts if the provided `hookData` has an unexpected length.
@@ -79,9 +90,9 @@ contract SwapCastHook is BaseHook {
      */
     error PredictionPoolZeroAddress();
     /**
-     * @notice Reverts if a user attempts to make a prediction (`hookData` is provided) but `msg.value` (conviction stake) is zero.
+     * @notice Reverts if a user attempts to make a prediction (`hookData` is provided) but the conviction stake declared in `hookData` is zero.
      */
-    error NoConvictionValueSent();
+    error NoConvictionStakeDeclaredInHookData();
     /**
      * @notice Reverts if the call to `predictionPool.recordPrediction` fails for any reason.
      * @param reason A string describing the reason for the failure, forwarded from the `PredictionPool` or a general message.
@@ -127,8 +138,8 @@ contract SwapCastHook is BaseHook {
             afterAddLiquidity: false,
             beforeRemoveLiquidity: false,
             afterRemoveLiquidity: false,
-            beforeSwap: false,
-            afterSwap: true, // This hook logic runs after a swap
+            beforeSwap: false, // We only need afterSwap
+            afterSwap: true,
             beforeDonate: false,
             afterDonate: false,
             beforeSwapReturnDelta: false,
@@ -144,10 +155,10 @@ contract SwapCastHook is BaseHook {
      * @param sender The address of the user who initiated the swap transaction (the `msg.sender` to `PoolManager`).
      * @param key The `PoolKey` identifying the pool where the swap occurred.
      * @param hookData Arbitrary data passed by the user with the swap. For this hook, it's expected to contain
-     *                 the `marketId` (uint256) and `outcome` (uint8) for the prediction, abi-encoded.
+     *                 the `marketId` (uint256), `outcome` (uint8), and `convictionStake` (uint128) for the prediction, abi-encoded.
      * @return hookReturnData The selector of the function in `BaseHook` to be called by `PoolManager` upon completion (typically `BaseHook.afterSwap.selector`).
      * @return currencyDelta A currency delta to be applied by the `PoolManager`. This hook returns 0, as it does not directly modify pool balances;
-     *                       `msg.value` (conviction stake) is handled by forwarding to the `PredictionPool`.
+     *                       `convictionStake` is handled by forwarding to the `PredictionPool`.
      */
     function _afterSwap(
         address sender,
@@ -156,46 +167,103 @@ contract SwapCastHook is BaseHook {
         BalanceDelta, /*delta*/
         bytes calldata hookData
     ) internal override returns (bytes4 hookReturnData, int128 currencyDelta) {
+        console.log("SwapCastHook._afterSwap: Entered.");
+        console.log("SwapCastHook._afterSwap: sender:", sender);
+        console.log("SwapCastHook._afterSwap: hookData.length:", hookData.length);
+        console.log("SwapCastHook._afterSwap: msg.value:", msg.value);
+
         if (hookData.length == 0) {
-            // No hookData provided, so this is not a prediction attempt. Return early.
+            console.log("SwapCastHook._afterSwap: hookData.length is 0, returning early.");
             return (BaseHook.afterSwap.selector, 0); // Standard return for no-op or successful completion without currency delta.
         }
 
         // If hookData is present, it must be the correct length for a prediction.
         if (hookData.length != PREDICTION_HOOK_DATA_LENGTH) {
+            console.log("SwapCastHook._afterSwap: Reverting due to InvalidHookDataLength. Actual:", hookData.length);
             revert InvalidHookDataLength(hookData.length, PREDICTION_HOOK_DATA_LENGTH);
         }
+        console.log("SwapCastHook._afterSwap: Passed hookData.length check.");
 
-        uint256 convictionValueSent = msg.value; // ETH sent with the swap call, forwarded by PoolManager to the hook.
+        // Decode marketId, outcome, and convictionStake from hookData.
+        // Assumes hookData is abi.encodePacked(uint256 marketId, uint8 outcome, uint128 convictionStakeDeclared).
+        uint256 marketId;
+        uint8 outcome;
+        uint128 convictionStakeDeclared;
 
-        // Decode marketId and outcome from hookData.
-        // Assumes hookData is abi.encode(uint256 marketId, uint8 outcome).
-        (uint256 marketId, uint8 outcome) = abi.decode(hookData, (uint256, uint8));
+        // PREDICTION_HOOK_DATA_LENGTH is 32 (marketId) + 1 (outcome) + 16 (convictionStakeDeclared) = 49 bytes.
+        // hookData is abi.encodePacked(uint256 marketId, uint8 outcome, uint128 convictionStakeDeclared)
+        assembly {
+            // hookData.offset points to the start of the slice's data within calldata.
 
-        emit PredictionAttempted(sender, key.toId(), marketId, outcome, convictionValueSent);
+            // marketId (uint256 = 32 bytes) starts at hookData.offset + 0
+            marketId := calldataload(hookData.offset)
 
-        if (convictionValueSent == 0) {
-            // Prediction attempt made (hookData provided) but no conviction stake sent.
-            revert NoConvictionValueSent();
+            // outcome (uint8 = 1 byte) starts at hookData.offset + 32
+            // calldataload loads a 32-byte word. outcome is the most significant byte of this word.
+            // byte(0, word) extracts the 0-th byte (most significant) from the word.
+            outcome := byte(0, calldataload(add(hookData.offset, 32)))
+
+            // convictionStakeDeclared (uint128 = 16 bytes) starts at hookData.offset + 33
+            // Load 32 bytes starting from hookData.offset + 33.
+            let wordForStake := calldataload(add(hookData.offset, 33))
+            // We want the upper 128 bits (16 bytes) of this 256-bit (32-byte) word.
+            // shr(128, word) shifts right by 128 bits, keeping the upper 128 bits.
+            convictionStakeDeclared := shr(128, wordForStake)
         }
+
+        console.log("SwapCastHook._afterSwap: Decoded marketId:", marketId);
+        console.log("SwapCastHook._afterSwap: Decoded outcome:", outcome);
+        console.log("SwapCastHook._afterSwap: Decoded convictionStakeDeclared:", convictionStakeDeclared);
+
+        emit PredictionAttempted(sender, key.toId(), marketId, outcome, convictionStakeDeclared);
+        console.log("SwapCastHook._afterSwap: Emitted PredictionAttempted.");
+
+        if (convictionStakeDeclared == 0) {
+            console.log("SwapCastHook._afterSwap: Reverting due to NoConvictionStakeDeclaredInHookData.");
+            revert NoConvictionStakeDeclaredInHookData();
+        }
+        console.log("SwapCastHook._afterSwap: Passed convictionStakeDeclared check.");
 
         // Attempt to record the prediction in the PredictionPool.
-        // The `msg.value` (convictionValueSent) is forwarded with this call.
-        try predictionPool.recordPrediction{value: convictionValueSent}(sender, marketId, outcome) {
-            emit PredictionRecorded(sender, marketId, outcome, convictionValueSent);
-        } catch Error(string memory reason) {
-            // Failure from PredictionPool (e.g., market closed, invalid stake, etc.)
-            emit PredictionFailed(sender, marketId, reason);
-            revert PredictionRecordingFailed(reason);
-        } catch {
-            // Generic failure (e.g., out of gas within the try block, or an error without a string reason)
-            emit PredictionFailed(sender, marketId, "Unknown error during prediction recording in PredictionPool");
-            revert PredictionRecordingFailed("Unknown error during prediction recording in PredictionPool");
-        }
+        // The convictionStakeDeclared is passed as an argument. The PredictionPool handles the stake value.
+        // This assumes IPredictionPool.recordPrediction signature is: recordPrediction(address user, uint256 marketId, uint8 outcome, uint128 convictionStake)
+        try predictionPool.recordPrediction(sender, marketId, outcome, convictionStakeDeclared) {
+            console.log("SwapCastHook._afterSwap: predictionPool.recordPrediction call succeeded (or at least did not revert with known error types).");
+            emit PredictionRecorded(sender, key.toId(), marketId, outcome, convictionStakeDeclared);
+            return (BaseHook.afterSwap.selector, 0); // Success
+        } catch (bytes memory lowLevelData) {
+            console.log("SwapCastHook._afterSwap: Caught lowLevelData from PredictionPool.");
+            bytes4 actualPoolErrorSelector = bytes4(keccak256(bytes("UnknownPoolError"))); // Default
+            string memory revertMessageForHook = "PredictionPool reverted with an unspecified error.";
 
-        // Return standard selector indicating successful completion of the afterSwap hook logic.
-        // No currencyDelta is returned as the hook itself doesn't adjust pool balances; ETH was forwarded.
-        return (BaseHook.afterSwap.selector, 0);
+            if (lowLevelData.length >= 4) {
+                assembly {
+                    actualPoolErrorSelector := mload(add(lowLevelData, 0x20))
+                }
+                // Check if it's a standard Error(string)
+                if (actualPoolErrorSelector == bytes4(keccak256("Error(string)"))) {
+                    // Manually copy the slice lowLevelData[4:] to a new bytes memory variable
+                    // to satisfy abi.decode's requirement for a `bytes memory` type, not `bytes memory slice`.
+                    uint encodedStringLength = lowLevelData.length - 4;
+                    bytes memory encodedStringBytes = new bytes(encodedStringLength);
+                    for (uint j = 0; j < encodedStringLength; j++) {
+                        encodedStringBytes[j] = lowLevelData[j + 4];
+                    }
+                    string memory reason = abi.decode(encodedStringBytes, (string));
+                    revertMessageForHook = string(abi.encodePacked("PredictionPool Error: ", reason));
+                } else {
+                    // For custom errors, the selector is now in actualPoolErrorSelector.
+                    // The revert message for PredictionRecordingFailed will be more generic.
+                    revertMessageForHook = "PredictionPool reverted with a custom error.";
+                }
+            } else if (lowLevelData.length > 0) {
+                revertMessageForHook = "PredictionPool reverted with non-standard error data.";
+            } // else lowLevelData.length == 0 (e.g. assert failure), default message & selector are fine.
+
+            emit PredictionFailed(sender, key.toId(), marketId, outcome, convictionStakeDeclared, actualPoolErrorSelector);
+            console.log("SwapCastHook._afterSwap: Emitted PredictionFailed.");
+            revert PredictionRecordingFailed(revertMessageForHook);
+        }
     }
 
     /**

@@ -5,3 +5,5 @@ out/
 # Dotenv file
 .env
 .DS_Store
+.DS_Store
+lcov.info

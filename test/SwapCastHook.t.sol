@@ -1,84 +1,84 @@
-// SPDX-License-Identifier: MIT
+// SPDX-License-Identifier: UNLICENSED
 pragma solidity ^0.8.26;
 
 import {Test} from "forge-std/Test.sol";
 import {Deployers} from "@uniswap/v4-core/test/utils/Deployers.sol";
 import {PoolSwapTest} from "v4-core/test/PoolSwapTest.sol";
-import {MockERC20} from "solmate/src/test/utils/mocks/MockERC20.sol";
-import {PoolManager} from "v4-core/PoolManager.sol";
 import {SwapParams, ModifyLiquidityParams} from "v4-core/types/PoolOperation.sol";
-import {PoolKey} from "v4-core/types/PoolId.sol";
 import {BalanceDelta} from "v4-core/types/BalanceDelta.sol";
-import {IPoolManager} from "v4-core/interfaces/IPoolManager.sol";
 import {Currency, CurrencyLibrary} from "v4-core/types/Currency.sol";
-import {PoolId} from "v4-core/types/PoolId.sol";
+import {PoolKey, PoolIdLibrary} from "v4-core/types/PoolId.sol";
 import {Hooks} from "v4-core/libraries/Hooks.sol";
+import {IHooks} from "v4-core/interfaces/IHooks.sol";
 import {TickMath} from "v4-core/libraries/TickMath.sol";
-import {SqrtPriceMath} from "v4-core/libraries/SqrtPriceMath.sol";
 import {LiquidityAmounts} from "@uniswap/v4-core/test/utils/LiquidityAmounts.sol";
-import "forge-std/console.sol";
 import {SwapCastHook} from "../src/SwapCastHook.sol";
 import {ImmutableState} from "../lib/v4-periphery/src/base/ImmutableState.sol";
 import {SwapCastNFT} from "src/SwapCastNFT.sol";
 import {PredictionPool} from "src/PredictionPool.sol";
-import {RewardDistributor} from "src/RewardDistributor.sol";
-
-import {SwapCastNFT} from "src/SwapCastNFT.sol";
 
 contract TestableSwapCastNFT is SwapCastNFT {
-    constructor(address _predictionPool) SwapCastNFT(_predictionPool) {}
-
-    address public predictionPool;
-
-    function setPredictionPool(address _pool) public {
-        predictionPool = _pool;
-    }
+    constructor(address initialOwner) SwapCastNFT(initialOwner, "TestSwapCastNFT", "TSCNFT") {}
 }
 
 contract TestSwapCastHook is Test, Deployers {
-    MockERC20 token;
-    Currency ethCurrency = Currency.wrap(address(0));
-    Currency tokenCurrency;
-    SwapCastHook hook;
+    using CurrencyLibrary for Currency;
+    using PoolIdLibrary for PoolKey;
+
+    // Define the ERC721 Transfer event
+    event Transfer(address indexed from, address indexed to, uint256 indexed tokenId);
+    
+    error WrappedError(address target, bytes4 selector, bytes reason, bytes details);
+
+    SwapCastHook internal hook;
+    PoolKey internal poolKey;
+    TestableSwapCastNFT internal nft;
+    PredictionPool internal pool;
+
+    address internal constant MOCK_TREASURY = address(0x1001);
+    address internal constant MOCK_ORACLE_RESOLVER = address(0x1002);
+    address internal constant MOCK_REWARD_DISTRIBUTOR = address(0x1003);
+    uint256 internal constant INITIAL_FEE_BASIS_POINTS = 100;
+    uint256 internal constant INITIAL_MIN_STAKE_AMOUNT = 0.01 ether;
 
     function setUp() public {
-        // Deploy PoolManager and routers
         deployFreshManagerAndRouters();
+        deployMintAndApprove2Currencies();
 
-        // Deploy test token
-        token = new MockERC20("Test Token", "TEST", 18);
-        tokenCurrency = Currency.wrap(address(token));
-        token.mint(address(this), 1000 ether);
-        token.mint(address(1), 1000 ether);
-
-        // Deploy a testable NFT for SwapCastHook dependency
-        TestableSwapCastNFT nft = new TestableSwapCastNFT(address(0));
-        uint160 flags = uint160(Hooks.AFTER_SWAP_FLAG);
-        deployCodeTo("SwapCastHook.sol", abi.encode(manager, address(nft)), address(flags));
-        hook = SwapCastHook(address(flags));
-
-        // Approve tokens for routers
-        token.approve(address(swapRouter), type(uint256).max);
-        token.approve(address(modifyLiquidityRouter), type(uint256).max);
-
-        // Initialize a pool
-        (key,) = initPool(
-            ethCurrency,
-            tokenCurrency,
-            hook,
-            3000, // Swap Fees
-            SQRT_PRICE_1_1
+        nft = new TestableSwapCastNFT(address(this));
+        pool = new PredictionPool(
+            address(nft),
+            MOCK_TREASURY,
+            INITIAL_FEE_BASIS_POINTS,
+            address(this),
+            MOCK_ORACLE_RESOLVER,
+            MOCK_REWARD_DISTRIBUTOR,
+            INITIAL_MIN_STAKE_AMOUNT
         );
+        nft.setPredictionPoolAddress(address(pool));
 
-        // Add liquidity
-        uint160 sqrtPriceAtTickLower = TickMath.getSqrtPriceAtTick(-60);
+        // Deploy hook to an address that has the proper flags set
+        // Following the example from points-hook repository
+        uint160 flags = uint160(Hooks.AFTER_SWAP_FLAG);
+        deployCodeTo("SwapCastHook.sol", abi.encode(manager, address(pool)), address(flags));
+        hook = SwapCastHook(payable(address(flags)));
+        
+        poolKey = PoolKey({
+            currency0: currency0,
+            currency1: currency1,
+            fee: 3000,
+            tickSpacing: 60,
+            hooks: IHooks(address(hook))
+        });
+        manager.initialize(poolKey, SQRT_PRICE_1_1);
+
         uint160 sqrtPriceAtTickUpper = TickMath.getSqrtPriceAtTick(60);
-        uint256 ethToAdd = 0.1 ether;
-        uint128 liquidityDelta = LiquidityAmounts.getLiquidityForAmount0(SQRT_PRICE_1_1, sqrtPriceAtTickUpper, ethToAdd);
-        // tokenToAdd is unused, so we omit it to avoid compiler warnings
-        LiquidityAmounts.getAmount1ForLiquidity(sqrtPriceAtTickLower, SQRT_PRICE_1_1, liquidityDelta);
-        modifyLiquidityRouter.modifyLiquidity{value: ethToAdd}(
-            key,
+        uint256 token0ToAdd = 0.003 ether;
+        uint128 liquidityDelta =
+            LiquidityAmounts.getLiquidityForAmount0(SQRT_PRICE_1_1, sqrtPriceAtTickUpper, token0ToAdd);
+
+        modifyLiquidityRouter.modifyLiquidity{value: token0ToAdd}(
+            poolKey,
             ModifyLiquidityParams({
                 tickLower: -60,
                 tickUpper: 60,
@@ -89,59 +89,151 @@ contract TestSwapCastHook is Test, Deployers {
         );
     }
 
-    // Add/expand tests here following this structure
+    function testRecordPredictionSuccess() public {
+        uint256 marketId = 1;
+        uint8 predictedOutcome = 1;
+        uint128 convictionStake = 100 ether;
 
-    function testAliceWinsBobLosesIntegration() public {
-        // Use Deployers helper to set up tokens
-        deployAndMint2Currencies(); // currencies unused, avoid warning
-        // Deploy the NFT and prediction pool
-        TestableSwapCastNFT nft = new TestableSwapCastNFT(address(0));
-        PredictionPool pool = new PredictionPool(address(nft));
-        nft.setPredictionPool(address(pool));
+        pool.createMarket(marketId);
+        vm.deal(address(this), convictionStake + 1 ether);
+        vm.deal(address(pool), convictionStake);
 
-        RewardDistributor distributor = new RewardDistributor(address(pool), address(nft));
+        bytes memory hookData = abi.encodePacked(marketId, predictedOutcome, convictionStake);
+        SwapParams memory swapParams = SwapParams({
+            zeroForOne: true,
+            amountSpecified: int256(1 ether),
+            sqrtPriceLimitX96: 4295128739 + 1
+        });
+        PoolSwapTest.TestSettings memory settings = PoolSwapTest.TestSettings({takeClaims: false, settleUsingBurn: false});
 
-        // Fund distributor with ETH for reward payout
-        vm.deal(address(distributor), 10 ether);
+        uint256 protocolFeeBps = pool.protocolFeeBasisPoints();
+        uint256 expectedFee = (convictionStake * protocolFeeBps) / 10000;
+        uint256 expectedNetStake = convictionStake - expectedFee;
 
-        // Create a market
-        uint256 endTime = block.timestamp + 1 days;
-        uint256 marketId = pool.createMarket("Alice vs Bob", endTime);
+        swapRouter.swap{value: convictionStake}(
+            poolKey, swapParams, settings, hookData
+        );
 
-        // Alice and Bob addresses
-        address alice = address(0xA11CE);
-        address bob = address(0xB0B);
+        address actualOwner = nft.ownerOf(0);
+        assertTrue(actualOwner != address(0), "NFT not minted");
 
-        // Alice and Bob place predictions (Alice: outcome 1, Bob: outcome 2)
-        vm.prank(alice);
-        pool.recordPrediction(alice, marketId, 1, 100);
-        vm.prank(bob);
-        pool.recordPrediction(bob, marketId, 0, 100);
+        (
+            , // marketId
+            , // exists
+            , // resolved
+            , // winningOutcome
+            uint256 totalStakeOutcome0,
+            uint256 totalStakeOutcome1
+        ) = pool.markets(marketId);
 
-        // Warp to after market end and resolve in Alice's favor
-        vm.warp(endTime + 1);
-        pool.resolveMarket(marketId, 1);
-
-        // Alice claims reward (should succeed)
-        uint256 aliceBalanceBefore = alice.balance;
-        vm.prank(alice);
-        distributor.claim(0); // tokenId 0 should be Alice's
-        uint256 aliceBalanceAfter = alice.balance;
-        assertTrue(aliceBalanceAfter > aliceBalanceBefore, "Alice should get paid");
-        assertTrue(distributor.claimed(0));
-
-        // Bob tries to claim (should revert)
-        vm.prank(bob);
-        vm.expectRevert("Not winning outcome");
-        distributor.claim(1);
+        if (predictedOutcome == 0) {
+            assertEq(totalStakeOutcome0, expectedNetStake, "Total stake for outcome 0 mismatch");
+        } else {
+            assertEq(totalStakeOutcome1, expectedNetStake, "Total stake for outcome 1 mismatch");
+        }
     }
 
-    function testDecodePredictionRevertsOnBadData() public {
+    function testRevertsIfNotPoolManager() public {
         PoolKey memory key;
         SwapParams memory params;
         BalanceDelta delta = BalanceDelta.wrap(0);
-        bytes memory badData = new bytes(10);
+        bytes memory hookData = new bytes(33);
         vm.expectRevert(ImmutableState.NotPoolManager.selector);
-        hook.afterSwap(address(1), key, params, delta, badData);
+        hook.afterSwap(address(1), key, params, delta, hookData);
+    }
+
+    function testRevertsOnMalformedHookDataLength() public {
+        uint256 marketId = 1;
+
+        pool.createMarket(marketId);
+        SwapParams memory swapParams =
+            SwapParams({zeroForOne: true, amountSpecified: -0.05 ether, sqrtPriceLimitX96: TickMath.MIN_SQRT_PRICE + 1});
+        bytes memory badHookData = new bytes(10); // Malformed hookData (10 bytes instead of expected 49)
+        vm.deal(address(this), 1 ether);
+        
+        bytes memory expectedReason = abi.encodeWithSelector(SwapCastHook.InvalidHookDataLength.selector, badHookData.length, 49);
+        bytes4 hookCallFailedSelector = bytes4(keccak256(bytes("HookCallFailed()")));
+        bytes4 afterSwapSelector = IHooks.afterSwap.selector;
+
+        vm.expectRevert(
+            abi.encodeWithSelector(
+                WrappedError.selector,
+                address(hook),
+                afterSwapSelector,
+                expectedReason,
+                abi.encodePacked(hookCallFailedSelector)
+            )
+        );
+
+        swapRouter.swap{value: 0.1 ether}(
+            poolKey, swapParams, PoolSwapTest.TestSettings({takeClaims: false, settleUsingBurn: false}), badHookData
+        );
+    }
+
+    function testRevertsIfZeroConvictionStakeInHookData() public {
+        uint256 marketId = 1;
+
+        pool.createMarket(marketId);
+        SwapParams memory swapParams =
+            SwapParams({zeroForOne: true, amountSpecified: -0.05 ether, sqrtPriceLimitX96: TickMath.MIN_SQRT_PRICE + 1});
+
+        uint8 predictedOutcome = 1;
+        bytes memory hookData = abi.encodePacked(marketId, predictedOutcome, uint128(0));
+
+        bytes memory expectedReason = abi.encodePacked(SwapCastHook.NoConvictionStakeDeclaredInHookData.selector);
+        bytes4 hookCallFailedSelector = bytes4(keccak256(bytes("HookCallFailed()")));
+        bytes4 afterSwapSelector = IHooks.afterSwap.selector;
+
+        vm.expectRevert(
+            abi.encodeWithSelector(
+                WrappedError.selector,
+                address(hook),
+                afterSwapSelector,
+                expectedReason,
+                abi.encodePacked(hookCallFailedSelector)
+            )
+        );
+
+        swapRouter.swap(
+            poolKey, swapParams, PoolSwapTest.TestSettings({takeClaims: false, settleUsingBurn: false}), hookData
+        );
+    }
+
+    function testPredictionFailedIfPoolReverts() public {
+        uint256 marketId = 999; // Non-existent market ID
+        uint8 predictedOutcome = 1;
+        uint128 convictionStake = 100e18;
+
+        bytes memory hookData = abi.encodePacked(marketId, predictedOutcome, convictionStake);
+
+        uint256 feeBasisPoints = pool.protocolFeeBasisPoints();
+        uint256 calculatedFee = (convictionStake * feeBasisPoints) / 10000;
+        uint256 msgValue = calculatedFee + convictionStake;
+        vm.deal(address(this), msgValue);
+
+        // When we try to record a prediction for a non-existent market,
+        // the SwapCastHook should catch the error from PredictionPool and revert with PredictionRecordingFailed
+        bytes4 expectedSelector = SwapCastHook.PredictionRecordingFailed.selector;
+        
+        vm.expectRevert(
+            abi.encodeWithSelector(
+                WrappedError.selector,
+                address(hook),
+                IHooks.afterSwap.selector,
+                abi.encodeWithSelector(expectedSelector, "PredictionPool reverted with a custom error."),
+                abi.encodePacked(bytes4(keccak256(bytes("HookCallFailed()"))))
+            )
+        );
+        
+        swapRouter.swap{value: msgValue}(
+            poolKey,
+            SwapParams({
+                zeroForOne: true,
+                amountSpecified: -1e18,
+                sqrtPriceLimitX96: TickMath.MIN_SQRT_PRICE + 1
+            }),
+            PoolSwapTest.TestSettings({takeClaims: false, settleUsingBurn: false}),
+            hookData
+        );
     }
 }

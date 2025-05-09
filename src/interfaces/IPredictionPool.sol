@@ -12,7 +12,8 @@ interface IPredictionPool {
      * @param user The address of the user making the prediction.
      * @param marketId The ID of the market for which the prediction is made.
      * @param outcome The predicted outcome (e.g., 0 for Bearish, 1 for Bullish).
-     * @dev This function is expected to be payable to receive the ETH stake for the prediction.
+     * @param convictionStakeDeclared The amount of conviction (stake) declared for this prediction.
+     * @dev This function is called by the hook, which passes the stake amount declared in hookData.
      */
-    function recordPrediction(address user, uint256 marketId, uint8 outcome) external payable;
+    function recordPrediction(address user, uint256 marketId, uint8 outcome, uint128 convictionStakeDeclared) external;
 }

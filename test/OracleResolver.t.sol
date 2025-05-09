@@ -18,24 +18,13 @@ contract OracleResolverTest is Test {
 
     uint256 constant DEFAULT_MARKET_ID = 1;
     uint256 constant DEFAULT_PRICE_THRESHOLD = 2000 * 1e8;
-    uint256 constant DEFAULT_MAX_STALENESS = 3600; 
+    uint256 constant DEFAULT_MAX_STALENESS = 3600;
 
-    event OracleRegistered(
-        uint256 indexed marketId,
-        address indexed oracleAddress,
-        uint256 priceThreshold
-    );
+    event OracleRegistered(uint256 indexed marketId, address indexed oracleAddress, uint256 priceThreshold);
 
-    event MarketResolved(
-        uint256 indexed marketId,
-        int256 price,
-        uint8 winningOutcome
-    );
+    event MarketResolved(uint256 indexed marketId, int256 price, uint8 winningOutcome);
 
-    event MaxPriceStalenessSet(
-        uint256 oldStaleness,
-        uint256 newStaleness
-    );
+    event MaxPriceStalenessSet(uint256 oldStaleness, uint256 newStaleness);
 
     error OracleNotRegistered(uint256 marketId);
     error InvalidAggregatorAddress();
@@ -60,7 +49,9 @@ contract OracleResolverTest is Test {
     }
 
     function testConstructor_SuccessfulDeployment() public view {
-        assertEq(address(oracleResolver.predictionPool()), address(mockPredictionPool), "PredictionPool address mismatch");
+        assertEq(
+            address(oracleResolver.predictionPool()), address(mockPredictionPool), "PredictionPool address mismatch"
+        );
         assertEq(oracleResolver.owner(), owner, "Owner mismatch");
         assertEq(oracleResolver.maxPriceStalenessSeconds(), DEFAULT_MAX_STALENESS, "MaxPriceStalenessSeconds mismatch");
     }
@@ -76,7 +67,8 @@ contract OracleResolverTest is Test {
         emit OracleRegistered(DEFAULT_MARKET_ID, address(mockAggregatorEthUsd), DEFAULT_PRICE_THRESHOLD);
         oracleResolver.registerOracle(DEFAULT_MARKET_ID, address(mockAggregatorEthUsd), DEFAULT_PRICE_THRESHOLD);
 
-        (address aggregator, uint256 priceThreshold, bool isRegistered) = oracleResolver.marketOracles(DEFAULT_MARKET_ID);
+        (address aggregator, uint256 priceThreshold, bool isRegistered) =
+            oracleResolver.marketOracles(DEFAULT_MARKET_ID);
         assertTrue(isRegistered, "Oracle should be registered");
         assertEq(aggregator, address(mockAggregatorEthUsd), "Aggregator address mismatch");
         assertEq(priceThreshold, DEFAULT_PRICE_THRESHOLD, "Price threshold mismatch");
@@ -133,7 +125,10 @@ contract OracleResolverTest is Test {
         mockAggregatorEthUsd.setLatestRoundData(1, price, currentTime - 10 minutes, currentTime, 1);
 
         vm.prank(user1);
-        vm.expectCall(address(mockPredictionPool), abi.encodeWithSelector(MockPredictionPool.resolveMarket.selector, DEFAULT_MARKET_ID, 0, price));
+        vm.expectCall(
+            address(mockPredictionPool),
+            abi.encodeWithSelector(MockPredictionPool.resolveMarket.selector, DEFAULT_MARKET_ID, 0, price)
+        );
         vm.expectEmit(true, true, true, true, address(oracleResolver));
         emit MarketResolved(DEFAULT_MARKET_ID, price, 0);
         oracleResolver.resolveMarket(DEFAULT_MARKET_ID);
@@ -149,7 +144,10 @@ contract OracleResolverTest is Test {
         mockAggregatorEthUsd.setLatestRoundData(1, price, currentTime - 10 minutes, currentTime, 1);
 
         vm.prank(user1);
-        vm.expectCall(address(mockPredictionPool), abi.encodeWithSelector(MockPredictionPool.resolveMarket.selector, DEFAULT_MARKET_ID, 1, price));
+        vm.expectCall(
+            address(mockPredictionPool),
+            abi.encodeWithSelector(MockPredictionPool.resolveMarket.selector, DEFAULT_MARKET_ID, 1, price)
+        );
         vm.expectEmit(true, true, true, true, address(oracleResolver));
         emit MarketResolved(DEFAULT_MARKET_ID, price, 1);
         oracleResolver.resolveMarket(DEFAULT_MARKET_ID);
@@ -172,7 +170,11 @@ contract OracleResolverTest is Test {
         mockAggregatorEthUsd.setLatestRoundData(1, price, staleTimestamp - 10 minutes, staleTimestamp, 1);
 
         vm.prank(user1);
-        vm.expectRevert(abi.encodeWithSelector(OracleResolver.PriceIsStale.selector, DEFAULT_MARKET_ID, staleTimestamp, block.timestamp));
+        vm.expectRevert(
+            abi.encodeWithSelector(
+                OracleResolver.PriceIsStale.selector, DEFAULT_MARKET_ID, staleTimestamp, block.timestamp
+            )
+        );
         oracleResolver.resolveMarket(DEFAULT_MARKET_ID);
     }
 
