@@ -4,6 +4,7 @@ pragma solidity ^0.8.26;
 import {Ownable} from "@openzeppelin/contracts/access/Ownable.sol";
 import {IPredictionManagerForResolver} from "./interfaces/IPredictionManagerForResolver.sol";
 import {AggregatorV3Interface} from "@chainlink/contracts/v0.8/interfaces/AggregatorV3Interface.sol";
+import {IFeedRegistry} from "./interfaces/IFeedRegistry.sol";
 import {PredictionTypes} from "./types/PredictionTypes.sol";
 
 /**
@@ -23,14 +24,22 @@ contract OracleResolver is Ownable {
     IPredictionManagerForResolver public immutable predictionManager;
 
     /**
+     * @notice The address of the Chainlink Feed Registry contract.
+     * @dev This is set immutably during contract deployment.
+     */
+    IFeedRegistry public immutable feedRegistry;
+
+    /**
      * @notice Represents the oracle configuration for a specific market.
-     * @param aggregator The address of the Chainlink price feed aggregator for this market.
+     * @param baseToken The base token address (e.g., ETH)
+     * @param quoteToken The quote token address (e.g., USD)
      * @param priceThreshold The price level that determines the winning outcome. If the oracle price is at or above this threshold,
      *                       outcome 0 wins; otherwise, outcome 1 wins.
      * @param isRegistered A flag indicating whether an oracle has been registered for this market ID.
      */
     struct MarketOracle {
-        address aggregator; // Chainlink price feed address
+        address baseToken; // Base token address
+        address quoteToken; // Quote token address
         uint256 priceThreshold; // Price at or above which outcome 0 is winning
         bool isRegistered;
     }
@@ -52,10 +61,11 @@ contract OracleResolver is Ownable {
     /**
      * @notice Emitted when a new oracle is registered for a market.
      * @param marketId The ID of the market for which the oracle is registered.
-     * @param aggregator The address of the Chainlink price feed aggregator.
+     * @param baseToken The base token address.
+     * @param quoteToken The quote token address.
      * @param priceThreshold The price threshold set for this market's resolution.
      */
-    event OracleRegistered(uint256 indexed marketId, address indexed aggregator, uint256 priceThreshold);
+    event OracleRegistered(uint256 indexed marketId, address baseToken, address quoteToken, uint256 priceThreshold);
 
     /**
      * @notice Emitted when a market is successfully resolved by this contract.
@@ -68,68 +78,78 @@ contract OracleResolver is Ownable {
     /**
      * @notice Emitted when the `maxPriceStalenessSeconds` value is updated by the owner.
      */
-    event MaxPriceStalenessSet(uint256 oldStalenessSeconds, uint256 newStalenessSeconds);
+    event MaxPriceStalenessSet(uint256 oldStaleness, uint256 newStaleness);
 
-    /**
-     * @notice Reverts if an attempt is made to resolve a market for which no oracle is registered.
-     */
-    error OracleNotRegistered(uint256 marketId);
     /**
      * @notice Reverts if an attempt is made to register an oracle for a market that already has one registered.
      */
     error OracleAlreadyRegistered(uint256 marketId);
     /**
-     * @notice Reverts if an attempt is made to register an oracle with a zero address for the aggregator.
+     * @notice Reverts if an attempt is made to resolve a market that doesn't have a registered oracle.
      */
-    error InvalidAggregatorAddress();
+    error OracleNotRegistered(uint256 marketId);
     /**
-     * @notice Reverts if the PredictionPool address provided during construction is the zero address.
+     * @notice Reverts if an attempt is made to register an oracle with a zero address for the token.
      */
-    error PredictionPoolZeroAddress();
+    error InvalidTokenAddress();
     /**
-     * @notice Reverts if the call to `PredictionPool.resolveMarket()` fails during market resolution.
+     * @notice Reverts if the PredictionManager address provided during construction is the zero address.
      */
-    error ResolutionFailedInPool(uint256 marketId);
+    error PredictionManagerZeroAddress();
+    /**
+     * @notice Reverts if the call to `PredictionManager.resolveMarket()` fails during market resolution.
+     */
+    error ResolutionFailedInManager(uint256 marketId);
     /**
      * @notice Reverts if the Chainlink price feed data is older than `maxPriceStalenessSeconds`.
      */
     error PriceIsStale(uint256 marketId, uint256 lastUpdatedAt, uint256 currentBlockTimestamp);
 
     /**
-     * @notice Contract constructor.
-     * @param _predictionPoolAddress The address of the PredictionManager contract. Must not be the zero address.
-     *                               This address is stored immutably.
-     * @param initialOwner The initial owner of this OracleResolver contract.
+     * @notice Constructs a new OracleResolver instance.
+     * @param _predictionManagerAddress The address of the PredictionManager contract this resolver will interact with.
+     * @param _feedRegistryAddress The address of the Chainlink Feed Registry contract.
+     * @param initialOwner The address that will be set as the initial owner of this contract.
      */
-    constructor(address _predictionPoolAddress, address initialOwner) {
-        if (_predictionPoolAddress == address(0)) revert PredictionPoolZeroAddress();
-        predictionManager = IPredictionManagerForResolver(_predictionPoolAddress);
-        maxPriceStalenessSeconds = 3600; // Default to 1 hour
-        emit MaxPriceStalenessSet(0, maxPriceStalenessSeconds);
+    constructor(address _predictionManagerAddress, address _feedRegistryAddress, address initialOwner) {
+        if (_predictionManagerAddress == address(0)) revert PredictionManagerZeroAddress();
+        if (_feedRegistryAddress == address(0)) revert InvalidTokenAddress();
 
-        // Transfer ownership to the initialOwner if it's not the deployer
-        if (initialOwner != msg.sender) {
-            transferOwnership(initialOwner);
-        }
+        predictionManager = IPredictionManagerForResolver(_predictionManagerAddress);
+        feedRegistry = IFeedRegistry(_feedRegistryAddress);
+
+        // Default to 1 hour (3600 seconds) staleness check
+        maxPriceStalenessSeconds = 3600;
+
+        _transferOwnership(initialOwner);
     }
 
     /**
-     * @notice Registers a Chainlink oracle for a specific market, defining its price feed and resolution threshold.
+     * @notice Registers an oracle for a market using token pair from the Feed Registry.
      * @dev Only callable by the contract owner. Emits {OracleRegistered}.
-     *      The market must not have an oracle already registered, and the aggregator address must not be zero.
      * @param _marketId The ID of the market to register the oracle for.
-     * @param _aggregator The address of the Chainlink price feed aggregator (e.g., ETH/USD feed).
-     * @param _priceThreshold The price threshold. If the oracle reports a price at or above this value,
-     *                        outcome 0 is considered the winner; otherwise, outcome 1 wins.
+     * @param _baseToken The base token address (e.g., ETH).
+     * @param _quoteToken The quote token address (e.g., USD).
+     * @param _priceThreshold The price threshold for determining the winning outcome.
      */
-    function registerOracle(uint256 _marketId, address _aggregator, uint256 _priceThreshold) external onlyOwner {
+    function registerOracle(uint256 _marketId, address _baseToken, address _quoteToken, uint256 _priceThreshold)
+        external
+        onlyOwner
+    {
         if (marketOracles[_marketId].isRegistered) revert OracleAlreadyRegistered(_marketId);
-        if (_aggregator == address(0)) revert InvalidAggregatorAddress();
+        if (_baseToken == address(0) || _quoteToken == address(0)) revert InvalidTokenAddress();
 
-        marketOracles[_marketId] =
-            MarketOracle({aggregator: _aggregator, priceThreshold: _priceThreshold, isRegistered: true});
+        // Verify the feed exists by attempting to get the feed address
+        feedRegistry.getFeed(_baseToken, _quoteToken);
 
-        emit OracleRegistered(_marketId, _aggregator, _priceThreshold);
+        marketOracles[_marketId] = MarketOracle({
+            baseToken: _baseToken,
+            quoteToken: _quoteToken,
+            priceThreshold: _priceThreshold,
+            isRegistered: true
+        });
+
+        emit OracleRegistered(_marketId, _baseToken, _quoteToken, _priceThreshold);
     }
 
     /**
@@ -151,15 +171,15 @@ contract OracleResolver is Ownable {
      *      Calls `PredictionManager.resolveMarket()` to finalize the resolution.
      *      Emits {MarketResolved} on successful resolution via the PredictionManager.
      *      Reverts with {OracleNotRegistered} if no oracle is set for the market,
-     *      or {ResolutionFailedInPool} if the call to PredictionPool fails.
+     *      or {ResolutionFailedInManager} if the call to PredictionManager fails.
      * @param _marketId The ID of the market to resolve.
      */
     function resolveMarket(uint256 _marketId) external {
         MarketOracle storage mo = marketOracles[_marketId];
         if (!mo.isRegistered) revert OracleNotRegistered(_marketId);
 
-        // Fetch the latest price from the Chainlink oracle
-        (, int256 price,, uint256 lastUpdatedAt,) = AggregatorV3Interface(mo.aggregator).latestRoundData();
+        // Fetch the latest price from the Chainlink Feed Registry
+        (, int256 price,, uint256 lastUpdatedAt,) = feedRegistry.latestRoundData(mo.baseToken, mo.quoteToken);
 
         if (block.timestamp - lastUpdatedAt > maxPriceStalenessSeconds) {
             revert PriceIsStale(_marketId, lastUpdatedAt, block.timestamp);
@@ -170,9 +190,9 @@ contract OracleResolver is Ownable {
         // they are positive. Casting `price` (int256) to `uint256` is safe if positive prices are expected.
         // `priceThreshold` is uint256, implying positive comparison values.
         if (uint256(price) >= mo.priceThreshold) {
-            winningOutcome = PredictionTypes.Outcome.Bearish; // e.g., Price will be AT or ABOVE X
+            winningOutcome = PredictionTypes.Outcome.Bullish; // e.g., Price will be AT or ABOVE X
         } else {
-            winningOutcome = PredictionTypes.Outcome.Bullish; // e.g., Price will be BELOW X
+            winningOutcome = PredictionTypes.Outcome.Bearish; // e.g., Price will be BELOW X
         }
 
         try predictionManager.resolveMarket(_marketId, winningOutcome, price) {
@@ -180,7 +200,7 @@ contract OracleResolver is Ownable {
             // PredictionManager might emit its own event as well (e.g., IPredictionManagerForResolver.MarketResolved).
             emit MarketResolved(_marketId, price, winningOutcome);
         } catch {
-            revert ResolutionFailedInPool(_marketId);
+            revert ResolutionFailedInManager(_marketId);
         }
     }
 }

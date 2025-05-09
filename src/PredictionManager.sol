@@ -293,7 +293,9 @@ contract PredictionManager is
         maxPriceStalenessSeconds = _maxPriceStalenessSeconds;
 
         // Create OracleResolver and RewardDistributor instances
-        OracleResolver oracleResolver = new OracleResolver(_initialOwner, address(this));
+        // For now, we'll use a dummy address for the Feed Registry that will need to be updated later
+        address dummyFeedRegistryAddress = 0x47Fb2585D2C56Fe188D0E6ec628a38b74fCeeeDf; // Chainlink ETH/USD Feed Registry on mainnet
+        OracleResolver oracleResolver = new OracleResolver(address(this), dummyFeedRegistryAddress, _initialOwner);
         RewardDistributor rewardDistributor = new RewardDistributor(_initialOwner, address(this));
 
         // Store their addresses

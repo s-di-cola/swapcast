@@ -96,8 +96,12 @@ contract DeploySwapCast is Script {
             uint256 priceThreshold = 1000; // Example price threshold
 
             if (mockAggregator != address(0)) {
-                // First register the oracle for this market
-                oracleResolver.registerOracle(marketId, mockAggregator, priceThreshold);
+                // Define token addresses for ETH and USD
+                address ethAddress = 0xEeeeeEeeeEeEeeEeEeEeeEEEeeeeEeeeeeeeEEeE; // Standard ETH address used by Chainlink
+                address usdAddress = 0x0000000000000000000000000000000000000348; // Standard USD address used by Chainlink
+
+                // First register the oracle for this market using token pair
+                oracleResolver.registerOracle(marketId, ethAddress, usdAddress, priceThreshold);
                 console2.log("Registered oracle for market ID:", marketId);
 
                 // Then create the market with oracle
