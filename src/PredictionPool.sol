@@ -9,11 +9,12 @@ import {IPredictionPoolForResolver} from "./interfaces/IPredictionPoolForResolve
 import {ISwapCastNFT} from "./interfaces/ISwapCastNFT.sol";
 import {PredictionTypes} from "./types/PredictionTypes.sol";
 import {ILogAutomation, Log} from "@chainlink/contracts/v0.8/automation/interfaces/ILogAutomation.sol";
+import {AutomationCompatibleInterface} from "@chainlink/contracts/v0.8/automation/AutomationCompatible.sol";
 import {AggregatorV3Interface} from "@chainlink/contracts/v0.8/interfaces/AggregatorV3Interface.sol";
 
 /**
  * @title PredictionPool
- * @author Your Name/Organization
+ * @author Simone Di Cola
  * @notice Manages prediction markets, records user predictions, handles fees, resolves markets,
  *         and allows users to claim rewards based on a pari-mutuel system.
  * @dev Integrates with SwapCastNFT for prediction representation, Treasury for fee collection,
@@ -27,6 +28,7 @@ contract PredictionPool is
     IPredictionPoolForDistributor,
     IPredictionPoolForResolver,
     ILogAutomation,
+    AutomationCompatibleInterface,
     Ownable,
     IERC721Receiver
 {
@@ -671,33 +673,56 @@ contract PredictionPool is
      * @dev Called by Chainlink Automation after checkLog returns upkeepNeeded=true.
      * @param performData The encoded market ID to be resolved.
      */
-    function performUpkeep(bytes calldata performData) external override {
+    function performUpkeep(bytes calldata performData)
+        external
+        override(ILogAutomation, AutomationCompatibleInterface)
+    {
+        // Check if this is time-based or log-based upkeep
+        if (performData.length >= 64) {
+            // At least enough bytes for a bool and some data
+            // Try to decode as time-based upkeep data (bool flag, uint256[] marketIds)
+            // We can't use try/catch with abi.decode, so we'll use a different approach
+            bool isTimeBased;
+            uint256[] memory expiredMarketIds;
+
+            // Use assembly to safely decode without reverting
+            bool decodeSuccess;
+            assembly {
+                // Load the first word (32 bytes) which should contain the boolean
+                if gt(calldatasize(), 64) {
+                    // Ensure we have enough data
+                    // Skip the 4-byte function selector and 32 bytes for the performData pointer
+                    let dataPtr := add(performData.offset, 32)
+                    isTimeBased := eq(mload(dataPtr), 1) // 1 = true in Solidity
+                    decodeSuccess := isTimeBased // Only proceed if isTimeBased is true
+                }
+            }
+
+            if (decodeSuccess) {
+                // Manually decode the uint256[] portion
+                (, expiredMarketIds) = abi.decode(performData, (bool, uint256[]));
+
+                // This is time-based upkeep - emit MarketExpired events
+                for (uint256 i = 0; i < expiredMarketIds.length; i++) {
+                    uint256 expiredMarketId = expiredMarketIds[i];
+                    Market storage market = markets[expiredMarketId];
+
+                    // Double-check that the market still needs expiration checking
+                    if (
+                        market.exists && !market.resolved && market.expirationTime > 0
+                            && block.timestamp >= market.expirationTime
+                    ) {
+                        // Emit the MarketExpired event which will trigger log-based automation
+                        emit MarketExpired(expiredMarketId, block.timestamp);
+                    }
+                }
+                return;
+            }
+        }
+
+        // Default to log-based upkeep (market resolution)
         uint256 marketId = abi.decode(performData, (uint256));
-
-        // Get the market data
-        Market storage market = markets[marketId];
-        if (!market.exists || market.resolved) {
-            return; // Safety check
-        }
-
-        // Fetch the latest price from the Chainlink oracle
-        (, int256 price,, uint256 lastUpdatedAt,) = AggregatorV3Interface(market.priceAggregator).latestRoundData();
-
-        // Check if the price is stale
-        if (block.timestamp - lastUpdatedAt > maxPriceStalenessSeconds) {
-            return; // Skip resolution if price is stale, will retry later
-        }
-
-        // Determine the winning outcome based on the price threshold
-        PredictionTypes.Outcome winningOutcome;
-        if (uint256(price) >= market.priceThreshold) {
-            winningOutcome = PredictionTypes.Outcome.Bearish; // Price is AT or ABOVE threshold
-        } else {
-            winningOutcome = PredictionTypes.Outcome.Bullish; // Price is BELOW threshold
-        }
-
-        // Resolve the market
-        this.resolveMarket(marketId, winningOutcome, price);
+        _resolveMarketWithOracle(marketId);
     }
 
     /**
@@ -724,5 +749,89 @@ contract PredictionPool is
      */
     function setMaxPriceStaleness(uint256 _newStalenessSeconds) external onlyOwner {
         maxPriceStalenessSeconds = _newStalenessSeconds;
+    }
+
+    /**
+     * @notice Checks if any markets need to be checked for expiration.
+     * @dev This function is called by Chainlink Automation on a time-based schedule (e.g., hourly).
+     *      It scans through markets to find those that have reached their expiration time but haven't
+     *      had the MarketExpired event emitted yet.
+     * @param checkData Optional data passed by the automation service. Can be used to filter which markets to check.
+     * @return upkeepNeeded Boolean indicating if there are markets that need expiration checking.
+     * @return performData Encoded data containing the IDs of markets that need checking.
+     */
+    function checkUpkeep(bytes calldata checkData)
+        external
+        view
+        override(AutomationCompatibleInterface)
+        returns (bool upkeepNeeded, bytes memory performData)
+    {
+        // Parse the check data to determine which markets to scan
+        // If no specific data is provided, we'll check all markets
+        (uint256 startId, uint256 endId) =
+            checkData.length > 0 ? abi.decode(checkData, (uint256, uint256)) : (1, type(uint256).max); // Default to checking all markets
+
+        // Collect market IDs that need expiration checking
+        uint256[] memory expiredMarketIds = new uint256[](100); // Limit to 100 markets per upkeep for gas efficiency
+        uint256 count = 0;
+
+        // Iterate through markets in the specified range
+        for (uint256 i = startId; i <= endId && count < 100; i++) {
+            Market storage market = markets[i];
+
+            // Skip if market doesn't exist, is already resolved, or has no expiration time
+            if (!market.exists || market.resolved || market.expirationTime == 0) continue;
+
+            // Check if market has expired but hasn't been marked for resolution
+            if (block.timestamp >= market.expirationTime) {
+                expiredMarketIds[count] = i;
+                count++;
+            }
+        }
+
+        if (count > 0) {
+            // Resize the array to the actual number of expired markets
+            uint256[] memory result = new uint256[](count);
+            for (uint256 i = 0; i < count; i++) {
+                result[i] = expiredMarketIds[i];
+            }
+
+            // Include a flag to indicate this is for time-based upkeep
+            bytes memory timeBasedData = abi.encode(true, result);
+            return (true, timeBasedData);
+        }
+
+        return (false, "");
+    }
+
+    /**
+     * @dev Internal function to resolve a market using oracle data.
+     * @param marketId The ID of the market to resolve.
+     */
+    function _resolveMarketWithOracle(uint256 marketId) internal {
+        // Get the market data
+        Market storage market = markets[marketId];
+        if (!market.exists || market.resolved) {
+            return; // Safety check
+        }
+
+        // Fetch the latest price from the Chainlink oracle
+        (, int256 price,, uint256 lastUpdatedAt,) = AggregatorV3Interface(market.priceAggregator).latestRoundData();
+
+        // Check if the price is stale
+        if (block.timestamp - lastUpdatedAt > maxPriceStalenessSeconds) {
+            return; // Skip resolution if price is stale, will retry later
+        }
+
+        // Determine the winning outcome based on the price threshold
+        PredictionTypes.Outcome winningOutcome;
+        if (uint256(price) >= market.priceThreshold) {
+            winningOutcome = PredictionTypes.Outcome.Bearish; // Price is AT or ABOVE threshold
+        } else {
+            winningOutcome = PredictionTypes.Outcome.Bullish; // Price is BELOW threshold
+        }
+
+        // Resolve the market
+        this.resolveMarket(marketId, winningOutcome, price);
     }
 }
