@@ -1,0 +1,31 @@
+#!/bin/sh
+#
+# Pre-commit hook to run forge fmt on Solidity files before commit
+# This ensures all Solidity code is properly formatted
+
+# Get all staged Solidity files
+STAGED_SOLIDITY_FILES=$(git diff --cached --name-only --diff-filter=ACM | grep -E '\.sol$')
+
+# Exit if no Solidity files are staged
+if [ -z "$STAGED_SOLIDITY_FILES" ]; then
+    echo "No Solidity files staged for commit. Skipping forge fmt."
+    exit 0
+fi
+
+echo "Running forge fmt on staged Solidity files..."
+
+# Run forge fmt on the project
+forge fmt
+
+# Check if forge fmt succeeded
+if [ $? -ne 0 ]; then
+    echo "Error: forge fmt failed. Please fix the formatting issues and try again."
+    exit 1
+fi
+
+# Add the formatted files back to the staging area
+echo "Adding formatted files back to the staging area..."
+git add $STAGED_SOLIDITY_FILES
+
+echo "Pre-commit hook: forge fmt completed successfully."
+exit 0
