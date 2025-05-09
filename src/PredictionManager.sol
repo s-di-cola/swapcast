@@ -295,11 +295,11 @@ contract PredictionManager is
         // Create OracleResolver and RewardDistributor instances
         OracleResolver oracleResolver = new OracleResolver(_initialOwner, address(this));
         RewardDistributor rewardDistributor = new RewardDistributor(_initialOwner, address(this));
-        
+
         // Store their addresses
         oracleResolverAddress = address(oracleResolver);
         rewardDistributorAddress = address(rewardDistributor);
-        
+
         emit FeeConfigurationChanged(_treasuryAddress, _initialFeeBasisPoints);
         emit MinStakeAmountChanged(_initialMinStakeAmount);
 
