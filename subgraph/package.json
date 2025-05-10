@@ -1,0 +1,23 @@
+{
+  "name": "swapcast-subgraph",
+  "version": "0.1.0",
+  "private": true,
+  "license": "MIT",
+  "scripts": {
+    "codegen": "graph codegen",
+    "build": "graph build",
+    "deploy": "graph deploy --node https://api.thegraph.com/deploy/ --ipfs https://api.thegraph.com/ipfs/ swapcast-subgraph",
+    "create-local": "graph create --node http://localhost:8020/ swapcast-subgraph",
+    "remove-local": "graph remove --node http://localhost:8020/ swapcast-subgraph",
+    "deploy-local": "graph deploy --node http://localhost:8020/ --ipfs http://localhost:5001 swapcast-subgraph",
+    "deploy-local-auto": "graph deploy --node http://localhost:8020/ --ipfs http://localhost:5001 swapcast-subgraph --version-label v0.0.1",
+    "update-address": "node scripts/update-contract-address.js"
+  },
+  "dependencies": {
+    "@graphprotocol/graph-cli": "^0.95.0",
+    "@graphprotocol/graph-ts": "^0.31.0"
+  },
+  "devDependencies": {
+    "js-yaml": "^4.1.0"
+  }
+}

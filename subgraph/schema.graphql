@@ -1,0 +1,55 @@
+type Market @entity {
+  id: ID!
+  marketId: BigInt!
+  creationTimestamp: BigInt!
+  expirationTimestamp: BigInt!
+  description: String!
+  priceThreshold: BigInt
+  baseToken: String
+  quoteToken: String
+  isResolved: Boolean!
+  winningOutcome: Int
+  finalPrice: BigInt
+  totalStakedOutcome0: BigInt!
+  totalStakedOutcome1: BigInt!
+  predictions: [Prediction!]! @derivedFrom(field: "market")
+  resolution: MarketResolution @derivedFrom(field: "market")
+}
+
+type Prediction @entity {
+  id: ID!
+  market: Market!
+  user: User!
+  outcome: Int!
+  amount: BigInt!
+  timestamp: BigInt!
+  tokenId: BigInt
+  claimed: Boolean!
+  reward: BigInt
+}
+
+type User @entity {
+  id: ID!
+  address: String!
+  predictions: [Prediction!]! @derivedFrom(field: "user")
+  totalStaked: BigInt!
+  totalWon: BigInt!
+  totalClaimed: BigInt!
+}
+
+type MarketResolution @entity {
+  id: ID!
+  market: Market!
+  winningOutcome: Int!
+  finalPrice: BigInt!
+  resolutionTimestamp: BigInt!
+}
+
+type GlobalStat @entity {
+  id: ID!
+  totalMarkets: BigInt!
+  totalPredictions: BigInt!
+  totalStaked: BigInt!
+  totalUsers: BigInt!
+  totalClaimed: BigInt!
+}
