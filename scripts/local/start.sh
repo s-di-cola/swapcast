@@ -462,7 +462,7 @@ print_summary() {
     echo -e "    - Stop Docker services: ${YELLOW}docker-compose -f "${DOCKER_COMPOSE_FILE}" down${NC}"
   fi
   
-  echo -e "\n${GREEN}You're now ready to start developing the frontend!${NC}"
+  echo -e "\n${GREEN}Local development environment is ready! Check the logs folder for more information.${NC}"
   
   if [ "$SKIP_SUBGRAPH" = true ]; then
     echo -e "\n${YELLOW}Note: Subgraph setup was skipped. To set up the subgraph later, run:${NC}"
