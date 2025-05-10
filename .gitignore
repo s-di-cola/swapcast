@@ -4,6 +4,25 @@ out/
 
 # Dotenv file
 .env
+
+# MacOS files
 .DS_Store
-.DS_Store
+
+# Coverage files
 lcov.info
+
+# Local development environment
+logs/
+data/
+docker-compose.yml
+
+# Subgraph generated files
+subgraph/build/
+subgraph/generated/
+broadcast/
+
+# Node.js
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*

@@ -1,0 +1,12 @@
+# Local development environment data
+data/
+*.log
+*.pid
+
+# Temporary files
+*.tmp
+*.bak
+
+# Docker volume data
+data/ipfs/
+data/postgres/
