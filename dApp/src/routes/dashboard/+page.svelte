@@ -1,244 +1,194 @@
 <script lang="ts">
-  import { Button, Card, Badge, Tooltip } from 'flowbite-svelte';
-  
   import SwapPanel from '$lib/components/SwapPanel.svelte';
-  
-  
-  // TODO: Replace with real wallet/user state
-  let walletConnected = true;
-  let userAddress = '0x71...4a92';
-  let network = 'Ethereum Mainnet';
-  // Dummy data for demo
-  let payAmount: number | null = 0.5;
-  let payToken = 'ETH';
-  let receiveAmount = 1194.71;
-  let receiveToken = 'USDC';
-  let ethPrice = 2389.42;
-  let networkFee = 3.24;
-  let predictionValue = 2250;
-  let marketConsensus = 2500;
-  let accuracy = 68;
-  let rank = 28;
-  let predictionSide = 'bullish';
-  let positions = [
-    { market: 'ETH/USDC 24h', side: 'Bullish', amount: '0.5 ETH', status: 'Open', date: '2025-05-10' },
-    { market: 'ETH/USDC 1w', side: 'Bearish', amount: '1.0 ETH', status: 'Pending', date: '2025-05-05' },
-    { market: 'ETH/USDC 24h Long Name Market Example For Wrapping', side: 'Bullish', amount: '0.2 ETH', status: 'Win', date: '2025-05-01' },
-    { market: 'ETH/USDC 1w', side: 'Bearish', amount: '0.3 ETH', status: 'Lose', date: '2025-04-30' }
+  import { Badge, Button, Card } from 'flowbite-svelte';
+  import { ChartLineUpOutline, ChartPieOutline, AwardOutline, AdjustmentsHorizontalOutline } from 'flowbite-svelte-icons';
+  import type { Token, PredictionSide } from '../../lib/types';
+
+  // Define Token Objects
+  const ethToken: Token = { symbol: 'ETH', name: 'Ethereum' };
+  const usdcToken: Token = { symbol: 'USDC', name: 'USD Coin' };
+
+  // Dummy data - replace with actual data fetching
+  let payAmount = 0;
+  let payToken: Token = ethToken; // Initialize with ethToken object
+  let receiveAmount = 0;
+  let receiveToken: Token = usdcToken; // Initialize with usdcToken object
+  let ethPrice = 2389.42; // Example current price
+  let networkFee = 0.0012; // Example network fee
+  let predictionSide: PredictionSide = undefined; // Initialize with undefined
+  let totalBullWeight = 7500; // Example total bullish stakes
+  let totalBearWeight = 5500; // Example total bearish stakes
+  let protocolFeeRate = 0.05; // 5%
+
+  // Placeholder for performance stats
+  let accuracy = 78; // Example accuracy
+  let rank = 12;     // Example rank
+
+  const onPredictionSelect = (side: PredictionSide, targetPrice: number | undefined) => {
+    console.log('Dashboard: Prediction selected:', side, 'Target Price:', targetPrice);
+  };
+
+  // Placeholder for prediction history
+  const predictionHistory = [
+    { id: 1, timestamp: '2023-11-10 10:00', marketName: 'ETH Price', assetPair: 'ETH/USDC', predictedDirection: 'Above', predictedPrice: '$2400', stakedAmount: '0.5 ETH', outcome: 'Won' },
+    { id: 2, timestamp: '2023-11-09 14:30', marketName: 'ETH Price', assetPair: 'ETH/USDC', predictedDirection: 'Below', predictedPrice: '$2300', stakedAmount: '1.2 ETH', outcome: 'Lost' },
+    { id: 3, timestamp: '2023-11-12 09:00', marketName: 'BTC Target', assetPair: 'BTC/USDT', predictedDirection: 'Above', predictedPrice: '$35000', stakedAmount: '0.1 BTC', outcome: 'Pending' },
   ];
 
-  let convictionStake: number = 0; // Initialize
-  $: {
-    if (typeof payAmount === 'number' && !isNaN(payAmount)) {
-      convictionStake = payAmount * 0.01;
-    } else {
-      convictionStake = 0; // Default to 0 if payAmount is not a valid number
-    }
+  function getStatusColor(outcome: string) {
+    if (outcome === 'Won') return 'green';
+    if (outcome === 'Lost') return 'red';
+    return 'gray'; // For Pending or other states
   }
-
 </script>
 
-<!-- Main page container with light gradient theme -->
-<section class="min-h-screen bg-gradient-to-br from-emerald-50 via-white to-amber-50 text-gray-800 flex flex-col font-sans justify-between">
-  <!-- Header -->
-  <header class="px-6 py-4 flex justify-between items-center border-b border-emerald-200">
-    <h1 class="text-xl font-semibold text-gray-800">Uniswap v4 <span class="text-gray-500">|</span> Prediction Oracle</h1>
-    <div class="flex items-center gap-3">
-      <div class="w-2 h-2 bg-green-500 rounded-full"></div>
-      <span class="text-sm text-emerald-700 bg-emerald-100 px-3 py-1 rounded-full">{userAddress}</span>
-      <button class="text-gray-500 hover:text-gray-700" aria-label="User menu">
-        <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 12h.01M12 12h.01M19 12h.01M6 12a1 1 0 11-2 0 1 1 0 012 0zm7 0a1 1 0 11-2 0 1 1 0 012 0zm7 0a1 1 0 11-2 0 1 1 0 012 0z" /></svg>
-      </button>
-    </div>
-  </header>
+<svelte:head>
+  <title>SwapCast Dashboard</title>
+  <meta name="description" content="SwapCast Decentralized Prediction Market Dashboard" />
+</svelte:head>
 
-  <!-- Main content area -->
-  <main class="flex-grow p-6 lg:p-8">
-    <div class="w-full max-w-7xl mx-auto flex flex-col items-center">
-      <!-- NEW Intermediate Wrapper for two-column row and prediction table -->
-      <div class="w-full lg:w-auto flex flex-col gap-6 lg:gap-8">
-        <!-- Two-column layout div and the Prediction History table div in a new parent div -->
-        <div class="flex flex-col lg:flex-row items-start justify-center gap-6">
-          
-          <!-- Left Panel: Swap & Prediction -->
-          <div class="flex-1 lg:max-w-lg bg-white bg-opacity-80 rounded-2xl shadow-lg p-8 border border-amber-100">
-            <h2 class="text-xl font-bold text-gray-800 mb-1">Swap</h2>
-            
-            <!-- You Pay Section -->
-            <div class="bg-emerald-50/50 rounded-lg p-4 border border-emerald-200">
-              <div class="text-xs text-emerald-700 mb-1">You pay</div>
-              <div class="flex items-center justify-between">
-                <input type="number" bind:value={payAmount} class="text-2xl font-bold bg-transparent text-gray-800 outline-none w-full" placeholder="0.0" />
-                <button class="px-3 py-1.5 rounded-md bg-emerald-100 hover:bg-emerald-200 text-emerald-700 font-semibold text-sm transition">
-                  ETH
-                </button>
-              </div>
-            </div>
+<div class="min-h-screen bg-slate-100 text-gray-800 p-4 md:p-6 lg:p-8">
+  <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+    <header class="mb-8 text-center">
+      <h1 class="text-4xl font-bold tracking-tight text-gray-800 sm:text-5xl">Dashboard</h1>
+      <p class="mt-3 text-lg text-gray-600">Manage your swaps, predictions, and track your market performance.</p>
+    </header>
 
-            <!-- Arrow Icon -->
-            <div class="flex justify-center my-3">
-              <button class="p-2.5 rounded-full bg-emerald-500 hover:bg-emerald-600 text-white shadow-md transition" aria-label="Swap direction">
-                <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 8l4 4m0 0l-4 4m4-4H3" /></svg>
-              </button>
-            </div>
+    <!-- Top Section: Two Columns (SwapPanel on Left, Charts/Performance on Right) -->
+    <div class="grid grid-cols-1 lg:grid-cols-5 gap-6 items-start mb-8 md:mb-12">
+      
+      <!-- Left Column: Swap Panel (takes 2/5 on lg screens) -->
+      <div class="lg:col-span-2 space-y-6">
+        <Card class="!bg-white !border-gray-200 !shadow-xl p-0 overflow-hidden">
+          <SwapPanel 
+            bind:payAmount
+            bind:payToken
+            bind:receiveAmount
+            bind:receiveToken
+            {ethPrice}
+            {networkFee}
+            {totalBullWeight}
+            {totalBearWeight}
+            {protocolFeeRate}
+            {onPredictionSelect}
+          />
+        </Card>
+      </div>
 
-            <!-- You Receive Section -->
-            <div class="bg-emerald-50/50 rounded-lg p-4 border border-emerald-200">
-              <div class="text-xs text-emerald-700 mb-1">You receive</div>
-              <div class="flex items-center justify-between">
-                <input type="text" value={receiveAmount.toFixed(2)} readonly class="text-2xl font-bold bg-transparent text-gray-800 outline-none w-full" placeholder="0.0" />
-                <button class="px-3 py-1.5 rounded-md bg-emerald-100 hover:bg-emerald-200 text-emerald-700 font-semibold text-sm transition">
-                  USDC
-                </button>
-              </div>
-            </div>
-
-            <!-- Rate and Network Fee -->
-            <div class="text-xs text-gray-500 flex justify-between px-1 mt-3">
-              <span>Rate <span class="text-gray-700 font-medium">1 ETH = {ethPrice} USDC</span></span>
-              <span>Network fee <span class="text-gray-700 font-medium">≈ ${networkFee}</span></span>
-            </div>
-
-            <!-- Add Prediction Section -->
-            <div class="bg-emerald-50/50 rounded-lg p-4 border border-emerald-200 mt-6">
-              <div class="text-sm font-medium text-gray-800 mb-2">Add prediction</div>
-              <div class="text-xs text-emerald-700 mb-2">ETH price in 24h:</div>
-              <div class="flex items-center gap-2">
-                <input type="number" bind:value={predictionValue} class="flex-1 bg-white border border-gray-300 text-gray-800 rounded-md px-3 py-2 outline-none focus:border-emerald-500 placeholder-gray-400" placeholder="$2,250" />
-                <button class="p-2.5 rounded-md bg-emerald-500 hover:bg-emerald-600 text-white font-bold text-lg transition w-12 h-10 flex items-center justify-center" aria-label="Predict price up">
-                  <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2.5" stroke="currentColor" class="w-5 h-5"><path stroke-linecap="round" stroke-linejoin="round" d="M4.5 15.75l7.5-7.5 7.5 7.5" /></svg>
-                </button>
-                <button class="p-2.5 rounded-md bg-red-500 hover:bg-red-600 text-white font-bold text-lg transition w-12 h-10 flex items-center justify-center" aria-label="Predict price down">
-                  <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2.5" stroke="currentColor" class="w-5 h-5"><path stroke-linecap="round" stroke-linejoin="round" d="M19.5 8.25l-7.5 7.5-7.5-7.5" /></svg>
-                </button>
-              </div>
-              <div class="text-sm font-medium text-emerald-600 mt-3">
-                Prediction Stake: {convictionStake.toFixed(6)} {payToken}
-              </div>
-            </div>
-            
-            <!-- SWAP Button -->
-            <button class="w-full py-3 mt-6 rounded-lg bg-gradient-to-r from-yellow-400 via-emerald-400 to-emerald-500 text-white font-bold text-md shadow-lg hover:shadow-xl transition hover:scale-[1.02]">SWAP</button>
+      <!-- Right Column: Charts and Performance (takes 3/5 on lg screens) -->
+      <div class="lg:col-span-3 flex flex-col gap-6 lg:gap-8">
+        <!-- Placeholder: Price History Chart -->
+        <Card class="!bg-white !border-gray-200 !shadow-lg">
+          <h3 class="text-lg font-semibold text-gray-700 mb-3 flex items-center">
+            <ChartLineUpOutline class="w-5 h-5 mr-2 text-sky-600" /> Price History (ETH/USDC)
+          </h3>
+          <div class="flex-grow flex items-center justify-center text-gray-400 bg-slate-50 rounded-md border border-gray-200 p-4">
+            <!-- Realistic Line Chart SVG Placeholder -->
+            <svg viewBox="0 0 100 50" class="w-full h-auto text-gray-400" fill="none" stroke="currentColor" stroke-width="1">
+              <path d="M 0 40 C 10 10, 20 30, 30 20 S 50 45, 60 35 S 80 15, 90 25 L 100 20" />
+              <line x1="0" y1="48" x2="100" y2="48" stroke-width="0.5" stroke-dasharray="2 2" class="text-gray-300"/>
+              <line x1="0" y1="2" x2="100" y2="2" stroke-width="0.5" stroke-dasharray="2 2" class="text-gray-300"/>
+              <line x1="2" y1="0" x2="2" y2="50" stroke-width="0.5" stroke-dasharray="2 2" class="text-gray-300"/>
+              <line x1="98" y1="0" x2="98" y2="50" stroke-width="0.5" stroke-dasharray="2 2" class="text-gray-300"/>
+            </svg>
           </div>
+        </Card>
 
-          <!-- Right Panel: Charts & Performance -->
-          <div class="flex-1 w-full lg:max-w-xl flex flex-col gap-6">
-            <!-- Price History Chart -->
-            <div class="bg-white bg-opacity-80 rounded-2xl shadow-lg p-6 border border-amber-100">
-              <h3 class="text-lg font-semibold text-gray-800 mb-4">Price History</h3>
-              <div class="h-60 flex items-center justify-center text-emerald-600 bg-emerald-50/30 rounded-md border border-emerald-200">
-                <!-- Simple SVG Line Graph Placeholder -->
-                <svg viewBox="0 0 100 40" class="w-full h-full" preserveAspectRatio="none">
-                  <path d="M0 30 L10 25 L20 28 L30 20 L40 22 L50 15 L60 18 L70 10 L80 15 L90 5 L100 10" fill="none" stroke="#34d399" stroke-width="1" />
-                  <circle cx="100" cy="10" r="1.5" fill="#34d399" />
-                </svg>
-              </div>
-            </div>
-
-            <!-- Market Predictions Chart -->
-            <div class="bg-white bg-opacity-80 rounded-2xl shadow-lg p-6 border border-amber-100">
-              <h3 class="text-lg font-semibold text-gray-800 mb-4">Market Predictions</h3>
-              <div class="h-40 flex items-center justify-center text-emerald-600 bg-emerald-50/30 rounded-md border border-emerald-200 p-4">
-                <!-- Simple SVG Bar Chart Placeholder -->
-                <svg viewBox="0 0 100 40" class="w-full h-full" preserveAspectRatio="none">
-                  <rect x="10" y="10" width="20" height="30" fill="#34d399" />
-                  <rect x="40" y="20" width="20" height="20" fill="#fbbf24" />
-                  <rect x="70" y="5" width="20" height="35" fill="#f87171" />
-                </svg>
-              </div>
-              <div class="text-xs text-gray-500 mt-3 text-center">Market consensus: <span class="text-gray-800 font-semibold">${marketConsensus} (bullish)</span></div>
-            </div>
-            
-            <!-- Your Performance -->
-            <div class="bg-white bg-opacity-80 rounded-2xl shadow-lg p-6 border border-amber-100">
-                <h3 class="text-lg font-semibold text-gray-800 mb-4">Your Performance</h3>
-                <div class="flex gap-4">
-                  <div class="flex-1 bg-emerald-50/50 rounded-lg p-4 text-center border border-emerald-200">
-                    <div class="text-xs text-emerald-700 mb-1">Accuracy</div>
-                    <div class="text-3xl font-bold text-gray-800">{accuracy}%</div>
-                  </div>
-                  <div class="flex-1 bg-emerald-50/50 rounded-lg p-4 text-center border border-emerald-200">
-                    <div class="text-xs text-emerald-700 mb-1">Rank</div>
-                    <div class="text-3xl font-bold text-gray-800">#{rank}</div>
-                  </div>
-                   <div class="flex-1 bg-emerald-50/50 rounded-lg p-4 items-center justify-center flex border-dashed border-emerald-300 hover:border-emerald-400 cursor-pointer text-emerald-500 hover:text-emerald-600">
-                    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="w-10 h-10">
-                      <path stroke-linecap="round" stroke-linejoin="round" d="M12 4.5v15m7.5-7.5h-15" />
-                    </svg>
-                  </div>
-                </div>
-            </div>
+        <Card class="!bg-white !border-gray-200 !shadow-lg">
+          <h3 class="text-lg font-semibold text-gray-700 mb-3 flex items-center">
+            <ChartPieOutline class="w-5 h-5 mr-2 text-sky-600" /> Market Sentiment
+          </h3>
+          <div class="flex-grow flex items-center justify-center text-gray-400 bg-slate-50 rounded-md border border-gray-200 p-4">
+            <!-- Realistic Gauge/Donut Chart SVG Placeholder -->
+            <svg viewBox="0 0 36 36" class="w-24 h-24">
+              <path class="text-rose-200" stroke="currentColor" stroke-width="3" fill="none"
+                    d="M18 2.0845
+                       a 15.9155 15.9155 0 0 1 0 31.831
+                       a 15.9155 15.9155 0 0 1 0 -31.831" />
+              <path class="text-sky-500" stroke="currentColor" stroke-width="3" fill="none"
+                    stroke-dasharray="{ (totalBullWeight / (totalBullWeight + totalBearWeight)) * 100 }, 100"
+                    d="M18 2.0845
+                       a 15.9155 15.9155 0 0 1 0 31.831
+                       a 15.9155 15.9155 0 0 1 0 -31.831" />
+              <text x="18" y="20.35" class="fill-current text-gray-700 text-[5px] font-bold" text-anchor="middle">{( (totalBullWeight / (totalBullWeight + totalBearWeight)) * 100 ).toFixed(1)}% Bullish</text>
+            </svg>
           </div>
-        </div>
+        </Card>
 
-        <!-- Prediction History Table (Now Full Width within the new intermediate wrapper) -->
-        <div class="w-full bg-white bg-opacity-80 rounded-2xl shadow-lg p-6 border border-amber-100">
-          <h3 class="text-xl font-bold text-gray-800 mb-4">Prediction History</h3>
-          <div class="overflow-x-auto">
-            <table class="min-w-full divide-y divide-emerald-200">
-              <thead class="bg-emerald-50/50">
-                <tr>
-                  <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-emerald-700 uppercase tracking-wider">Date</th>
-                  <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-emerald-700 uppercase tracking-wider">Market</th>
-                  <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-emerald-700 uppercase tracking-wider">Side</th>
-                  <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-emerald-700 uppercase tracking-wider">Amount</th>
-                  <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-emerald-700 uppercase tracking-wider">Status</th>
-                  <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-emerald-700 uppercase tracking-wider">Action</th>
-                </tr>
-              </thead>
-              <tbody class="bg-white/70 divide-y divide-gray-200">
-                {#each positions as position, i (i)}
-                  <tr>
-                    <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-600">{position.date}</td>
-                    <td class="px-6 py-4 text-sm text-gray-800 font-medium">{position.market}</td>
-                    <td class="px-6 py-4 whitespace-nowrap text-sm">
-                      <span class:text-emerald-600={position.side === 'Bullish'} class:text-red-600={position.side === 'Bearish'}>
-                        {position.side}
-                      </span>
-                    </td>
-                    <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-600">{position.amount}</td>
-                    <td class="px-6 py-4 whitespace-nowrap text-sm">
-                      {#if position.status === 'Win'}
-                        <Badge color="green">{position.status}</Badge>
-                      {:else if position.status === 'Lose'}
-                        <Badge color="red">{position.status}</Badge>
-                      {:else if position.status === 'Open'}
-                        <Badge color="blue">{position.status}</Badge>
-                      {:else if position.status === 'Pending'}
-                        <Badge color="yellow">{position.status}</Badge>
-                      {:else}
-                        <Badge>{position.status}</Badge>
-                      {/if}
-                    </td>
-                    <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-600">
-                      {#if position.status === 'Win'}
-                        <Button size="xs" class="!py-1 !px-2 bg-gradient-to-r from-emerald-400 to-teal-500 hover:from-teal-500 hover:to-emerald-400 text-white">Claim Reward</Button>
-                      {:else}
-                        -
-                      {/if}
-                    </td>
-                  </tr>
-                {/each}
-              </tbody>
-            </table>
-          </div>
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+          <Card class="!bg-white !border-gray-200 !shadow-lg flex flex-col justify-center items-center text-center">
+            <h3 class="text-lg font-semibold text-gray-700 mb-2 flex items-center">
+              <AwardOutline class="w-5 h-5 mr-2 text-amber-500" /> Your Accuracy
+            </h3>
+            <p class="text-4xl font-bold text-gray-800">{accuracy}%</p>
+            <p class="text-sm text-gray-500 mt-1">Based on last 20 predictions</p>
+          </Card>
+          <Card class="!bg-white !border-gray-200 !shadow-lg flex flex-col justify-center items-center text-center">
+            <h3 class="text-lg font-semibold text-gray-700 mb-2 flex items-center">
+              <AdjustmentsHorizontalOutline class="w-5 h-5 mr-2 text-purple-500" /> Your Rank
+            </h3>
+            <p class="text-4xl font-bold text-gray-800">#{rank}</p>
+            <p class="text-sm text-gray-500 mt-1">Among 100 participants</p>
+          </Card>
         </div>
       </div>
     </div>
-  </main>
 
-  <!-- Bottom Navigation / Footer -->
-  <footer class="px-6 py-4 border-t border-emerald-200 mt-auto">
-    <div class="flex justify-between items-center max-w-7xl mx-auto">
-      <div class="flex gap-6">
-        <a href="/" class="text-sm text-emerald-600 hover:text-emerald-700 font-semibold">Swap</a>
-        <a href="/" class="text-sm text-gray-500 hover:text-gray-700">Pool</a>
-        <a href="/" class="text-sm text-gray-500 hover:text-gray-700">History</a>
-      </div>
-      <div class="flex gap-6">
-        <a href="/" class="text-sm text-gray-500 hover:text-gray-700">Learn more</a>
-        <a href="/" class="text-sm text-gray-500 hover:text-gray-700">Help</a>
+    <!-- Prediction History Table (Full Width Below Two Columns) -->
+    <div class="bg-white p-5 md:p-6 rounded-xl shadow-lg border border-gray-200">
+      <h2 class="text-xl font-semibold text-gray-700 mb-4">Prediction History</h2>
+      <div class="overflow-x-auto">
+        <table class="min-w-full divide-y divide-gray-200">
+          <thead class="bg-slate-50">
+            <tr>
+              <th scope="col" class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Date</th>
+              <th scope="col" class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Market</th>
+              <th scope="col" class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Side / Target</th>
+              <th scope="col" class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Amount</th>
+              <th scope="col" class="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
+              <th scope="col" class="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">Action</th>
+            </tr>
+          </thead>
+          <tbody class="bg-white divide-y divide-gray-200">
+            {#each predictionHistory as prediction (prediction.id)}
+              <tr class="hover:bg-slate-50/70 transition-colors duration-100">
+                <td class="px-4 py-3 whitespace-nowrap text-sm text-gray-600">{prediction.timestamp}</td>
+                <td class="px-4 py-3 text-sm text-gray-700">
+                  {prediction.marketName}
+                  <span class="block text-xs text-gray-500">{prediction.assetPair}</span>
+                </td>
+                <td class="px-4 py-3 whitespace-nowrap text-sm">
+                  {#if prediction.predictedDirection === 'Above'}
+                    <span class="font-medium text-sky-600">{prediction.predictedDirection}</span>
+                  {:else}
+                    <span class="font-medium text-rose-600">{prediction.predictedDirection}</span>
+                  {/if}
+                  {#if prediction.predictedPrice}
+                    <span class="block text-xs text-gray-500">{prediction.predictedPrice}</span>
+                  {/if}
+                </td>
+                <td class="px-4 py-3 whitespace-nowrap text-sm text-gray-600">{prediction.stakedAmount}</td>
+                <td class="px-4 py-3 whitespace-nowrap text-sm text-center">
+                  <Badge color={getStatusColor(prediction.outcome)} class="!text-xs !font-medium px-2 py-0.5">{prediction.outcome}</Badge>
+                </td>
+                <td class="px-4 py-3 whitespace-nowrap text-sm text-center">
+                  {#if prediction.outcome === 'Won'}
+                    <Button pill={true} color="light" size="xs" class="!font-medium !text-xs !bg-sky-500 !text-white hover:!bg-sky-600 focus:!ring-sky-300 !border-sky-500">Claim</Button>
+                  {:else if prediction.outcome === 'Pending'}
+                    <span class="text-xs text-gray-400 italic">Pending</span>
+                  {:else}
+                    <span class="text-xs text-gray-400">-</span>
+                  {/if}
+                </td>
+              </tr>
+            {/each}
+          </tbody>
+        </table>
       </div>
     </div>
-  </footer>
-</section>
+
+    <footer class="text-center py-8 mt-8 text-gray-500 text-sm">
+      &copy; {new Date().getFullYear()} SwapCast. All rights reserved.
+    </footer>
+  </div>
+</div>

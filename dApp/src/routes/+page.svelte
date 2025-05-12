@@ -1,6 +1,6 @@
 <script lang="ts">
   import { Button, Card } from 'flowbite-svelte';
-  import { AwardSolid, TicketOutline, ArrowRightOutline } from 'flowbite-svelte-icons';
+  import { AwardSolid, TicketOutline, ArrowRightOutline, CogOutline, LinkOutline, ChartPieOutline } from 'flowbite-svelte-icons';
   import { onMount } from 'svelte';
   // If you have a wallet connect component, import it here
   // import WalletConnect from '$lib/components/WalletConnect.svelte';
@@ -19,13 +19,13 @@
   ];
 </script>
 
-<section class="relative min-h-screen bg-gradient-to-br from-emerald-50 via-white to-amber-50 flex flex-col justify-between overflow-hidden">
+<section class="relative min-h-screen bg-slate-50 flex flex-col justify-between overflow-hidden">
   <!-- Animated SVG background -->
   <svg class="absolute -top-32 -left-32 w-[48rem] h-[48rem] opacity-30 blur-2xl animate-spin-slow pointer-events-none z-0" viewBox="0 0 700 700" fill="none" xmlns="http://www.w3.org/2000/svg">
     <defs>
       <radialGradient id="a" cx="50%" cy="50%" r="50%" fx="50%" fy="50%">
-        <stop stop-color="#34d399"/>
-        <stop offset="1" stop-color="#fbbf24"/>
+        <stop stop-color="#0EA5E9"/>
+        <stop offset="1" stop-color="#14B8A6"/>
       </radialGradient>
     </defs>
     <circle cx="350" cy="350" r="320" fill="url(#a)" />
@@ -35,28 +35,28 @@
     <div class="max-w-2xl w-full text-center animate-fade-in-up">
       <!-- Logo/Icon -->
       <div class="flex justify-center mb-4">
-        <span class="inline-flex items-center justify-center w-16 h-16 rounded-full bg-white shadow-lg ring-2 ring-emerald-200">
-          <AwardSolid class="w-10 h-10 text-amber-500" />
+        <span class="inline-flex items-center justify-center w-20 h-20 rounded-full bg-white shadow-lg ring-2 ring-sky-200">
+          <ChartPieOutline class="w-12 h-12 text-sky-500" />
         </span>
       </div>
       <h1 class="text-5xl md:text-6xl font-extrabold mb-2 text-gray-900">
-        <span class="bg-gradient-to-r from-amber-500 to-emerald-500 bg-clip-text text-transparent">SwapCast</span>
+        <span class="bg-gradient-to-r from-sky-600 to-teal-500 bg-clip-text text-transparent">SwapCast</span>
       </h1>
+      <p class="mt-2 text-xl md:text-2xl text-gray-600 font-medium">
+        Swap, Predict, Earn. Seamlessly integrate market predictions into your Uniswap trades and get rewarded for your foresight. Your conviction, your NFT.
+      </p>
       <div class="flex justify-center mb-4">
-        <span class="inline-flex items-center gap-2 px-3 py-1 rounded-full text-xs font-semibold bg-emerald-100 text-emerald-700 shadow-sm animate-bounce-slow">
-          <AwardSolid class="w-4 h-4 text-amber-500" /> Live on Ethereum
+        <span class="inline-flex items-center gap-2 px-3 py-1 rounded-full text-xs font-semibold bg-sky-100 text-sky-700 shadow-sm animate-bounce-slow">
+          <AwardSolid class="w-4 h-4 text-sky-500" /> Live on Ethereum
         </span>
       </div>
-      <p class="mt-2 text-xl md:text-2xl text-gray-600 font-medium">
-        Predict the market while you swap. Earn rewards, own your signal.
-      </p>
       <div class="mt-8 flex flex-col items-center gap-4">
         {#if !walletConnected}
-          <Button color="primary" size="xl" class="px-8 py-3 text-lg font-semibold shadow-lg bg-gradient-to-r from-amber-400 to-emerald-400 hover:from-emerald-400 hover:to-amber-400 transition-all duration-300 animate-pulse-on-hover flex items-center gap-2" on:click={connectWallet}>
+          <Button color="primary" size="xl" class="px-8 py-3 text-lg font-semibold shadow-lg bg-gradient-to-r from-sky-500 to-teal-500 hover:from-teal-500 hover:to-sky-500 transition-all duration-300 animate-pulse-on-hover flex items-center gap-2" on:click={connectWallet}>
             <ArrowRightOutline class="w-5 h-5" /> Connect Wallet
           </Button>
         {:else}
-          <Button color="success" size="xl" class="px-8 py-3 text-lg font-semibold shadow-lg flex items-center gap-2" disabled>
+          <Button color="green" size="xl" class="px-8 py-3 text-lg font-semibold shadow-lg flex items-center gap-2" disabled>
             Wallet Connected
           </Button>
         {/if}
@@ -65,35 +65,35 @@
   </div>
 
   <!-- Highlights Section -->
-  <div class="bg-white bg-opacity-80 py-12 px-4 border-t border-amber-100">
+  <div class="bg-white bg-opacity-80 py-12 px-4 border-t border-slate-200">
     <div class="max-w-4xl mx-auto grid grid-cols-1 md:grid-cols-4 gap-6 animate-fade-in">
       <Card class="text-center shadow-none border-0 bg-transparent transition-transform hover:-translate-y-2 hover:shadow-xl group">
         <div class="flex justify-center mb-2">
-          <AwardSolid class="w-8 h-8 text-amber-500 group-hover:scale-110 transition-transform" />
+          <AwardSolid class="w-8 h-8 text-sky-500 group-hover:scale-110 transition-transform" />
         </div>
         <div class="font-semibold text-gray-800">Predict While You Swap</div>
-        <div class="text-gray-500 text-sm mt-1">Every Uniswap v4 swap is a prediction opportunity.</div>
+        <div class="text-gray-500 text-sm mt-1">Turn every Uniswap v4 trade into a strategic play. Express your market conviction (bullish or bearish) on the asset pair directly during your swap.</div>
       </Card>
       <Card class="text-center shadow-none border-0 bg-transparent transition-transform hover:-translate-y-2 hover:shadow-xl group">
         <div class="flex justify-center mb-2">
-          <TicketOutline class="w-8 h-8 text-emerald-500 group-hover:scale-110 transition-transform" />
+          <TicketOutline class="w-8 h-8 text-teal-500 group-hover:scale-110 transition-transform" />
         </div>
         <div class="font-semibold text-gray-800">NFT Positions</div>
-        <div class="text-gray-500 text-sm mt-1">Each prediction is minted as an NFT you own & trade.</div>
+        <div class="text-gray-500 text-sm mt-1">Your prediction, your asset. Every stance you take is minted as a unique SwapCast NFT, representing your position and potential rewards. Tradeable, transferable, verifiable.</div>
       </Card>
       <Card class="text-center shadow-none border-0 bg-transparent transition-transform hover:-translate-y-2 hover:shadow-xl group">
         <div class="flex justify-center mb-2">
-          <AwardSolid class="w-8 h-8 text-emerald-500 group-hover:scale-110 transition-transform" />
+          <CogOutline class="w-8 h-8 text-teal-500 group-hover:scale-110 transition-transform" />
         </div>
         <div class="font-semibold text-gray-800">Automated Rewards</div>
-        <div class="text-gray-500 text-sm mt-1">Chainlink oracles & automation resolve markets and pay winners.</div>
+        <div class="text-gray-500 text-sm mt-1">Fair, transparent, and automated. We leverage Chainlink's industry-standard oracles for accurate market resolution and smart contracts to distribute rewards efficiently to winning predictions.</div>
       </Card>
       <Card class="text-center shadow-none border-0 bg-transparent transition-transform hover:-translate-y-2 hover:shadow-xl group">
         <div class="flex justify-center mb-2">
-          <AwardSolid class="w-8 h-8 text-emerald-400 group-hover:scale-110 transition-transform" />
+          <LinkOutline class="w-8 h-8 text-sky-400 group-hover:scale-110 transition-transform" />
         </div>
         <div class="font-semibold text-gray-800">Powered by Uniswap & Chainlink</div>
-        <div class="text-gray-500 text-sm mt-1">Built on the most advanced DeFi infrastructure.</div>
+        <div class="text-gray-500 text-sm mt-1">Harnessing the power of DeFi's titans. SwapCast integrates deeply with Uniswap v4 hooks and Chainlink's decentralized services to provide a robust and cutting-edge prediction market experience.</div>
       </Card>
     </div>
   </div>
@@ -101,7 +101,7 @@
   <footer class="text-center py-6 text-gray-400 text-xs flex flex-col items-center gap-2">
     <div class="flex gap-4 justify-center mb-1">
       {#each socials as social}
-        <a href={social.href} target="_blank" rel="noopener" aria-label={social.label} class="hover:text-emerald-500 transition-colors">
+        <a href={social.href} target="_blank" rel="noopener" aria-label={social.label} class="hover:text-sky-500 transition-colors">
           <svg width="24" height="24" fill="currentColor" viewBox="0 0 24 24">
             <path d={social.icon}></path>
           </svg>
