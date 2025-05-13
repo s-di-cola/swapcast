@@ -266,7 +266,7 @@ contract LogAutomationTest is Test {
         bytes memory performDataForResolve = abi.encode(PredictionManager.LogAction.ResolveMarket, localMarketId);
 
         // Now, with the oracle price being stale, performUpkeep with ResolveMarket action should revert.
-        vm.expectRevert(MarketLogic.PriceOracleStaleL.selector); // Update vm.expectRevert to MarketLogic.PriceOracleStaleL.selector
+        vm.expectRevert(MarketLogic.PriceOracleStale.selector); // Expect revert due to stale price data
         pool.performUpkeep(performDataForResolve); // This call should attempt resolution and revert due to stale price
 
         // Verify market is NOT resolved

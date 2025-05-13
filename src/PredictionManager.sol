@@ -39,8 +39,10 @@ contract PredictionManager is
     ISwapCastNFT public swapCastNFT;
     address public treasuryAddress;
     uint256 public protocolFeeBasisPoints;
-    uint256 public minStakeAmount;
+    uint256 public minStakeAmount; // Global minimum stake amount
+    uint256 public defaultMarketMinStake; // Default minimum stake for new markets
     mapping(uint256 => Market) internal markets;
+    mapping(uint256 => uint256) public marketMinStakes; // Market-specific minimum stakes
     uint256[] private _marketIdsList;
     uint256 public maxPriceStalenessSeconds;
     address public oracleResolverAddress; // For permissioning OracleResolver calls
@@ -96,6 +98,8 @@ contract PredictionManager is
     );
     event FeeConfigurationChanged(address indexed newTreasuryAddress, uint256 newFeeBasisPoints);
     event MinStakeAmountChanged(uint256 newMinStakeAmount);
+    event DefaultMarketMinStakeChanged(uint256 newDefaultMinStake);
+    event MarketMinStakeChanged(uint256 indexed marketId, uint256 marketMinStake);
     event FeePaid(uint256 indexed marketId, address indexed user, uint256 protocolFee);
     event OracleResolverAddressSet(address indexed oldAddress, address indexed newAddress);
     event RewardDistributorAddressSet(address indexed oldAddress, address indexed newAddress);
@@ -108,6 +112,7 @@ contract PredictionManager is
 
     // --- Errors ---
     error InvalidFeeBasisPoints(uint256 feeBasisPoints);
+    error InvalidMinStakeAmount(uint256 minStakeAmount);
     error MarketAlreadyExists(uint256 marketId);
     error MarketDoesNotExist(uint256 marketId);
     error MarketAlreadyResolved(uint256 marketId); // Can be emitted by PM or bubbled from MarketLogic
@@ -158,11 +163,15 @@ contract PredictionManager is
         if (_initialFeeBasisPoints > 10000) {
             revert InvalidFeeBasisPoints(_initialFeeBasisPoints);
         }
+        if (_initialMinStakeAmount == 0) {
+            revert InvalidMinStakeAmount(_initialMinStakeAmount);
+        }
 
         swapCastNFT = ISwapCastNFT(_swapCastNFTAddress);
         treasuryAddress = _treasuryAddress;
         protocolFeeBasisPoints = _initialFeeBasisPoints;
         minStakeAmount = _initialMinStakeAmount;
+        defaultMarketMinStake = _initialMinStakeAmount; // Initialize default market min stake to global min stake
         maxPriceStalenessSeconds = _maxPriceStalenessSeconds;
         oracleResolverAddress = _oracleResolverAddress;
         rewardDistributorAddress = _rewardDistributorAddress;
@@ -198,6 +207,9 @@ contract PredictionManager is
         market.priceAggregator = _priceAggregator;
         market.priceThreshold = _priceThreshold;
 
+        // Set market-specific minimum stake to the default value
+        marketMinStakes[_marketId] = defaultMarketMinStake;
+
         _marketIdsList.push(_marketId);
         emit MarketCreated(_marketId, _name, _assetSymbol, _expirationTime, _priceAggregator, _priceThreshold);
     }
@@ -213,9 +225,53 @@ contract PredictionManager is
         emit FeeConfigurationChanged(_newTreasuryAddress, _newFeeBasisPoints);
     }
 
+    /**
+     * @notice Sets the global minimum stake amount for all markets
+     * @dev This affects the minimum stake amount for all markets, but doesn't update
+     *      the default for new markets or existing market-specific minimums.
+     * @param _newMinStakeAmount The new minimum stake amount in wei
+     */
     function setMinStakeAmount(uint256 _newMinStakeAmount) external onlyOwner {
+        if (_newMinStakeAmount == 0) {
+            revert InvalidMinStakeAmount(_newMinStakeAmount);
+        }
         minStakeAmount = _newMinStakeAmount;
         emit MinStakeAmountChanged(_newMinStakeAmount);
+    }
+
+    /**
+     * @notice Sets the default minimum stake amount for new markets
+     * @dev This affects only markets created after this call
+     * @param _newDefaultMinStake The new default minimum stake amount in wei
+     */
+    function setDefaultMarketMinStake(uint256 _newDefaultMinStake) external onlyOwner {
+        if (_newDefaultMinStake == 0) {
+            revert InvalidMinStakeAmount(_newDefaultMinStake);
+        }
+        if (_newDefaultMinStake < minStakeAmount) {
+            revert InvalidMinStakeAmount(_newDefaultMinStake);
+        }
+        defaultMarketMinStake = _newDefaultMinStake;
+        emit DefaultMarketMinStakeChanged(_newDefaultMinStake);
+    }
+
+    /**
+     * @notice Sets the minimum stake amount for a specific market
+     * @dev This allows for market-specific minimum stakes that can be adjusted based on
+     *      market conditions, popularity, or risk profile
+     * @param _marketId The ID of the market to update
+     * @param _marketMinStake The new minimum stake amount for this market in wei
+     */
+    function setMarketMinStake(uint256 _marketId, uint256 _marketMinStake) external onlyOwner {
+        if (!markets[_marketId].exists) revert MarketDoesNotExist(_marketId);
+        if (_marketMinStake == 0) {
+            revert InvalidMinStakeAmount(_marketMinStake);
+        }
+        if (_marketMinStake < minStakeAmount) {
+            revert InvalidMinStakeAmount(_marketMinStake);
+        }
+        marketMinStakes[_marketId] = _marketMinStake;
+        emit MarketMinStakeChanged(_marketId, _marketMinStake);
     }
 
     function setMaxPriceStaleness(uint256 _newStalenessSeconds) external onlyOwner {
@@ -265,6 +321,9 @@ contract PredictionManager is
         if (!market.exists) revert MarketDoesNotExist(_marketId);
         // MarketLogic will handle checks for market resolved, already predicted, amounts, expiration, etc.
 
+        // Get the market-specific minimum stake amount, or fall back to global minimum if not set
+        uint256 marketSpecificMinStake = marketMinStakes[_marketId];
+
         // Call the library function which now does most of the work including fee calculation, fee transfer, and NFT minting.
         (uint256 stakeAmountNet, uint256 protocolFee) = market.recordPrediction(
             _user,
@@ -273,7 +332,7 @@ contract PredictionManager is
             swapCastNFT, // Pass the ISwapCastNFT instance directly
             treasuryAddress, // Pass the address for fees
             protocolFeeBasisPoints, // Pass the fee percentage
-            minStakeAmount // Pass the minimum stake amount
+            marketSpecificMinStake // Pass the market-specific minimum stake amount
         );
 
         // Emit events based on values returned from the library call

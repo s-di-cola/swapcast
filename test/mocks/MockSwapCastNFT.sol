@@ -55,6 +55,15 @@ contract MockSwapCastNFT is ISwapCastNFT, Ownable {
         predictionPoolAddress = _newAddress;
     }
 
+    /**
+     * @notice Alias for setPredictionPoolAddress to match the test requirements.
+     * @dev Only callable by the owner.
+     * @param _newAddress The address of the PredictionManager.
+     */
+    function setPredictionManager(address _newAddress) external onlyOwner {
+        predictionPoolAddress = _newAddress;
+    }
+
     // --- ISwapCastNFT Implementation ---
     function mint(address _to, uint256 _marketId, PredictionTypes.Outcome _outcome, uint256 _convictionStake)
         external

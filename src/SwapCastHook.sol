@@ -181,6 +181,8 @@ contract SwapCastHook is BaseHook {
         BalanceDelta, /*delta*/
         bytes calldata hookData
     ) internal override returns (bytes4 hookReturnData, int128 currencyDelta) {
+        // Suppress unused parameter warning
+        if (false) sender;
         if (hookData.length == 0) {
             return (BaseHook.afterSwap.selector, 0); // Standard return for no-op or successful completion without currency delta.
         }
