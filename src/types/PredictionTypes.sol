@@ -15,4 +15,11 @@ contract PredictionTypes {
         Bearish,
         Bullish
     }
+
+    error InvalidMarketId();
+    error InvalidAssetSymbol();
+    error InvalidMarketName();
+    error InvalidPriceAggregator(); // Added this line
+    error ValueMismatch(); // For when msg.value != declared conviction stake
+    error PriceAtThreshold(); // Added this line
 }

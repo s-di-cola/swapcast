@@ -37,7 +37,7 @@ contract SwapCastNFTTest is Test {
     }
 
     /// @notice Test that minting emits event and sets metadata
-    function testMintAndMetadata() public {
+    function test_mint_and_metadata() public {
         pool.callMint(nft, user, 1, PredictionTypes.Outcome.Bullish, 100);
         (uint256 marketId, PredictionTypes.Outcome outcome, uint256 convictionStake, uint256 mintedAt) =
             nft.tokenPredictionMetadata(0);
@@ -48,46 +48,42 @@ contract SwapCastNFTTest is Test {
     }
 
     /// @notice Test that only PredictionPool can mint
-    function testOnlyPredictionPoolCanMint() public {
-        vm.prank(address(0xBEEF)); // Prank as a non-pool address
+    function test_only_prediction_pool_can_mint() public {
+        vm.prank(address(0xBEEF));
         vm.expectRevert(SwapCastNFT.NotPredictionManager.selector);
         nft.mint(user, 1, PredictionTypes.Outcome.Bullish, 100);
     }
 
     /// @notice Test that minting to zero address reverts
-    function testMintToZeroAddressReverts() public {
-        // Reverts with ERC721 error message for mint to zero address
+    function test_mint_to_zero_address_reverts() public {
         vm.expectRevert("ERC721: mint to the zero address");
         pool.callMint(nft, address(0), 1, PredictionTypes.Outcome.Bullish, 100);
     }
 
     /// @notice Test that unauthorized burn reverts
-    function testUnauthorizedBurnReverts() public {
-        pool.callMint(nft, user, 1, PredictionTypes.Outcome.Bullish, 100); // Mint a token first
-        vm.prank(address(0xBEEF)); // Prank as a non-pool address
+    function test_unauthorized_burn_reverts() public {
+        pool.callMint(nft, user, 1, PredictionTypes.Outcome.Bullish, 100);
+        vm.prank(address(0xBEEF));
         vm.expectRevert(SwapCastNFT.NotPredictionManager.selector);
         nft.burn(0);
     }
 
-    /// @notice Test burning a non-existent token (if it's meant to revert)
-    function testBurnNonExistentToken() public {
-        // Reverts with ERC721 error message for non-existent token
+    /// @notice Test that burning a non-existent token reverts
+    function test_burn_non_existent_token() public {
         vm.expectRevert("ERC721: invalid token ID");
-        pool.callBurn(nft, 0); // Attempt to burn token 0 which doesn't exist yet
+        pool.callBurn(nft, 0);
     }
 
     /// @notice Test successful burn by PredictionPool
-    function testBurnByPredictionPool() public {
-        pool.callMint(nft, user, 1, PredictionTypes.Outcome.Bullish, 100); // Mint token 0
-        // No need to approve, prediction pool is authorized implicitly by design
-        pool.callBurn(nft, 0); // Burn as predictionPool
-        // Check that token is no longer owned / URI reverts
+    function test_burn_by_prediction_pool() public {
+        pool.callMint(nft, user, 1, PredictionTypes.Outcome.Bullish, 100);
+        pool.callBurn(nft, 0);
         vm.expectRevert("ERC721: invalid token ID");
         nft.ownerOf(0);
     }
 
     /// @notice Test setting prediction pool address
-    function testSetPredictionPoolAddress() public {
+    function test_set_prediction_pool_address() public {
         address newPoolAddress = address(0xABCD);
         vm.prank(ownerOfNFTContract);
         vm.expectEmit(true, true, true, true);
@@ -104,23 +100,22 @@ contract SwapCastNFTTest is Test {
     }
 
     /// @notice Test non-owner cannot set prediction pool address
-    function testNonOwnerCannotSetPredictionPoolAddress() public {
+    /// @notice Test that non-owner cannot set prediction pool address
+    function test_non_owner_cannot_set_prediction_pool_address() public {
         address attacker = address(0xDEAD);
         vm.prank(attacker);
-        // Standard Ownable error for older version
         vm.expectRevert("Ownable: caller is not the owner");
         nft.setPredictionManagerAddress(address(0xABCD));
     }
 
-    // Test for tokenURI (optional, if you want to ensure it's generated or reverts for non-existent tokens)
-    function testTokenURIForNonExistentToken() public {
-        // Reverts with our custom NonExistentToken(uint256 tokenId)
+    /// @notice Test that tokenURI for non-existent token reverts
+    function test_token_uri_for_non_existent_token() public {
         vm.expectRevert(abi.encodeWithSelector(SwapCastNFT.NonExistentToken.selector, 0));
         nft.tokenURI(0);
     }
 
     /// @notice Test successful tokenURI generation
-    function testTokenURISuccess() public {
+    function test_token_uri_success() public {
         string memory expectedPrefix = "data:application/json;base64,";
         uint256 marketId = 77;
         uint256 convictionStake = 1e18;

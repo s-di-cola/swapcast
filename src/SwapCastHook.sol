@@ -10,6 +10,7 @@ import {Hooks} from "v4-core/libraries/Hooks.sol";
 import {IPredictionManager} from "./interfaces/IPredictionManager.sol";
 import {SwapParams} from "v4-core/types/PoolOperation.sol";
 import {PredictionTypes} from "./types/PredictionTypes.sol";
+import "forge-std/console.sol"; // Added for debugging
 
 using PoolIdLibrary for PoolKey;
 
@@ -224,9 +225,22 @@ contract SwapCastHook is BaseHook {
         }
 
         // Attempt to record the prediction in the PredictionManager.
+        uint256 feeBps = predictionManager.protocolFeeBasisPoints();
+        uint256 feeAmount = (uint256(convictionStakeDeclared) * feeBps) / 10000;
+        uint256 totalEthToSend = uint256(convictionStakeDeclared) + feeAmount;
+
+        console.log("SwapCastHook: address(this).balance:", address(this).balance);
+        console.log("SwapCastHook: totalEthToSend:", totalEthToSend);
+        console.log(
+            "SwapCastHook: msg.value received by _afterSwap (should be this.balance if hook starts with 0 ETH):",
+            msg.value
+        ); // This msg.value is for the internal _afterSwap, which is 0.
+
         // The convictionStakeDeclared is passed as an argument. The PredictionManager handles the stake value.
         // This assumes IPredictionManager.recordPrediction signature is: recordPrediction(address user, uint256 marketId, PredictionTypes.Outcome outcome, uint128 convictionStake)
-        try predictionManager.recordPrediction(sender, marketId, outcome, convictionStakeDeclared) {
+        try predictionManager.recordPrediction{value: totalEthToSend}(
+            sender, marketId, outcome, convictionStakeDeclared
+        ) {
             emit PredictionRecorded(sender, key.toId(), marketId, outcome, convictionStakeDeclared);
             return (BaseHook.afterSwap.selector, 0); // Success
         } catch (bytes memory lowLevelData) {

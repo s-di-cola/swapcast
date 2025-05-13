@@ -76,6 +76,7 @@ contract OracleResolverTest is Test {
     address public constant ETH_ADDRESS = 0xEeeeeEeeeEeEeeEeEeEeeEEEeeeeEeeeeeeeEEeE;
     address public constant USD_ADDRESS = 0x0000000000000000000000000000000000000348;
 
+    /// @notice Sets up the test environment for OracleResolver tests.
     function setUp() public {
         owner = address(this);
         user1 = makeAddr("user1");
@@ -88,7 +89,8 @@ contract OracleResolverTest is Test {
         oracleResolver = new OracleResolver(address(mockPredictionPool), address(mockFeedRegistry), owner);
     }
 
-    function testConstructor_SuccessfulDeployment() public view {
+    /// @notice Tests that the OracleResolver constructor sets all addresses and values correctly.
+    function test_constructor_successful_deployment() public view {
         assertEq(
             address(oracleResolver.predictionManager()),
             address(mockPredictionPool),
@@ -99,17 +101,20 @@ contract OracleResolverTest is Test {
         assertEq(oracleResolver.maxPriceStalenessSeconds(), DEFAULT_MAX_STALENESS, "MaxPriceStalenessSeconds mismatch");
     }
 
-    function testConstructor_RevertsIfPredictionManagerIsZeroAddress() public {
+    /// @notice Tests that the constructor reverts if the PredictionManager address is zero.
+    function test_constructor_reverts_if_prediction_manager_is_zero_address() public {
         vm.expectRevert(OracleResolver.PredictionManagerZeroAddress.selector);
         new OracleResolver(address(0), address(mockFeedRegistry), owner);
     }
 
-    function testConstructor_RevertsIfFeedRegistryIsZeroAddress() public {
+    /// @notice Tests that the constructor reverts if the FeedRegistry address is zero.
+    function test_constructor_reverts_if_feed_registry_is_zero_address() public {
         vm.expectRevert(OracleResolver.InvalidTokenAddress.selector);
         new OracleResolver(address(mockPredictionPool), address(0), owner);
     }
 
-    function testRegisterOracle_Success() public {
+    /// @notice Tests successful registration of an oracle and event emission.
+    function test_register_oracle_success() public {
         vm.prank(owner);
         vm.expectEmit(true, true, true, true, address(oracleResolver));
         emit OracleRegistered(DEFAULT_MARKET_ID, ETH_ADDRESS, USD_ADDRESS, DEFAULT_PRICE_THRESHOLD);
@@ -129,7 +134,8 @@ contract OracleResolverTest is Test {
         oracleResolver.registerOracle(DEFAULT_MARKET_ID, ETH_ADDRESS, USD_ADDRESS, DEFAULT_PRICE_THRESHOLD);
     }
 
-    function testRegisterOracle_RevertsIfOracleAlreadyRegistered() public {
+    /// @notice Tests that registering an oracle twice for the same market reverts.
+    function test_register_oracle_reverts_if_oracle_already_registered() public {
         vm.prank(owner);
         oracleResolver.registerOracle(DEFAULT_MARKET_ID, ETH_ADDRESS, USD_ADDRESS, DEFAULT_PRICE_THRESHOLD);
 
@@ -148,7 +154,8 @@ contract OracleResolverTest is Test {
         oracleResolver.registerOracle(DEFAULT_MARKET_ID, ETH_ADDRESS, address(0), DEFAULT_PRICE_THRESHOLD);
     }
 
-    function testSetMaxPriceStaleness_Success() public {
+    /// @notice Tests successful update of max price staleness and event emission.
+    function test_set_max_price_staleness_success() public {
         uint256 newStaleness = 7200;
         uint256 oldStaleness = oracleResolver.maxPriceStalenessSeconds();
 
@@ -160,7 +167,8 @@ contract OracleResolverTest is Test {
         assertEq(oracleResolver.maxPriceStalenessSeconds(), newStaleness, "MaxPriceStalenessSeconds should be updated");
     }
 
-    function testSetMaxPriceStaleness_RevertsIfNotOwner() public {
+    /// @notice Tests that only the owner can update max price staleness.
+    function test_set_max_price_staleness_reverts_if_not_owner() public {
         uint256 newStaleness = 7200;
 
         vm.prank(user1);
@@ -168,7 +176,8 @@ contract OracleResolverTest is Test {
         oracleResolver.setMaxPriceStaleness(newStaleness);
     }
 
-    function testResolveMarket_Success_Outcome0Wins() public {
+    /// @notice Tests resolving a market where outcome 0 (Bullish) wins and emits the correct event.
+    function test_resolve_market_success_outcome0_wins() public {
         vm.warp(1 days);
         vm.prank(owner);
         oracleResolver.registerOracle(DEFAULT_MARKET_ID, ETH_ADDRESS, USD_ADDRESS, DEFAULT_PRICE_THRESHOLD);
@@ -189,7 +198,8 @@ contract OracleResolverTest is Test {
         oracleResolver.resolveMarket(DEFAULT_MARKET_ID);
     }
 
-    function testResolveMarket_Success_Outcome1Wins() public {
+    /// @notice Tests resolving a market where outcome 1 (Bearish) wins and emits the correct event.
+    function test_resolve_market_success_outcome1_wins() public {
         vm.warp(1 days);
         vm.prank(owner);
         oracleResolver.registerOracle(DEFAULT_MARKET_ID, ETH_ADDRESS, USD_ADDRESS, DEFAULT_PRICE_THRESHOLD);
@@ -210,14 +220,16 @@ contract OracleResolverTest is Test {
         oracleResolver.resolveMarket(DEFAULT_MARKET_ID);
     }
 
-    function testResolveMarket_RevertsIfOracleNotRegistered() public {
+    /// @notice Tests that resolving a market with no registered oracle reverts.
+    function test_resolve_market_reverts_if_oracle_not_registered() public {
         uint256 unregisteredMarketId = 99;
         vm.prank(user1);
         vm.expectRevert(abi.encodeWithSelector(OracleResolver.OracleNotRegistered.selector, unregisteredMarketId));
         oracleResolver.resolveMarket(unregisteredMarketId);
     }
 
-    function testResolveMarket_RevertsIfPriceIsStale() public {
+    /// @notice Tests that resolving a market with a stale price reverts.
+    function test_resolve_market_reverts_if_price_is_stale() public {
         vm.warp(oracleResolver.maxPriceStalenessSeconds() + 1000 seconds);
         vm.prank(owner);
         oracleResolver.registerOracle(DEFAULT_MARKET_ID, ETH_ADDRESS, USD_ADDRESS, DEFAULT_PRICE_THRESHOLD);
@@ -235,7 +247,8 @@ contract OracleResolverTest is Test {
         oracleResolver.resolveMarket(DEFAULT_MARKET_ID);
     }
 
-    function testResolveMarket_RevertsIfPredictionPoolCallFails() public {
+    /// @notice Tests that a failed call to PredictionManager during resolution reverts with the correct error.
+    function test_resolve_market_reverts_if_prediction_pool_call_fails() public {
         vm.warp(1 days);
         vm.prank(owner);
         oracleResolver.registerOracle(DEFAULT_MARKET_ID, ETH_ADDRESS, USD_ADDRESS, DEFAULT_PRICE_THRESHOLD);

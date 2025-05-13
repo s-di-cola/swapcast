@@ -5,7 +5,7 @@ import {Ownable} from "@openzeppelin/contracts/access/Ownable.sol";
 
 /**
  * @title Treasury
- * @author SwapCast Team (Please update with actual author/team name)
+ * @author Simone Di Cola
  * @notice Holds protocol fees (ETH) collected, primarily from the PredictionPool, and allows the owner to withdraw them.
  * @dev This contract uses a `receive()` fallback to accept ETH deposits. Only the owner, designated
  *      at deployment, can initiate withdrawals. It employs standard OpenZeppelin Ownable for access control.

@@ -22,5 +22,11 @@ interface IPredictionManager {
         uint256 marketId,
         PredictionTypes.Outcome outcome,
         uint128 convictionStakeDeclared
-    ) external;
+    ) external payable;
+
+    /**
+     * @notice Returns the current protocol fee in basis points.
+     * @return The protocol fee in basis points (e.g., 100 for 1%).
+     */
+    function protocolFeeBasisPoints() external view returns (uint256);
 }

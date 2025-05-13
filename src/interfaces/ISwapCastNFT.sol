@@ -50,4 +50,10 @@ interface ISwapCastNFT {
         external
         view
         returns (uint256 marketId, PredictionTypes.Outcome outcome, uint256 convictionStake, address owner);
+
+    /**
+     * @notice Returns the owner of the given tokenId, matching the ERC721 standard.
+     * @param tokenId The ID of the NFT to query.
+     * @return owner The address of the owner.
+     */
 }
