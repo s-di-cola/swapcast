@@ -1,5 +1,5 @@
 # PredictionManager
-[Git Source](https://github.com/s-di-cola/swapcast/blob/17a4b422a4b3b80fb3df2e3566e02dd13f4b7b14/src/PredictionManager.sol)
+[Git Source](https://github.com/s-di-cola/swapcast/blob/4769078b9eaa8e01d9802412e863313928216687/src/PredictionManager.sol)
 
 **Inherits:**
 Ownable, [IPredictionManager](/src/interfaces/IPredictionManager.sol/interface.IPredictionManager.md), [IPredictionManagerForResolver](/src/interfaces/IPredictionManagerForResolver.sol/interface.IPredictionManagerForResolver.md), [IPredictionManagerForDistributor](/src/interfaces/IPredictionManagerForDistributor.sol/interface.IPredictionManagerForDistributor.md), ILogAutomation, AutomationCompatibleInterface, IERC721Receiver
@@ -48,10 +48,24 @@ uint256 public minStakeAmount;
 ```
 
 
+### defaultMarketMinStake
+
+```solidity
+uint256 public defaultMarketMinStake;
+```
+
+
 ### markets
 
 ```solidity
 mapping(uint256 => Market) internal markets;
+```
+
+
+### marketMinStakes
+
+```solidity
+mapping(uint256 => uint256) public marketMinStakes;
 ```
 
 
@@ -136,10 +150,57 @@ function setFeeConfiguration(address _newTreasuryAddress, uint256 _newFeeBasisPo
 
 ### setMinStakeAmount
 
+Sets the global minimum stake amount for all markets
+
+*This affects the minimum stake amount for all markets, but doesn't update
+the default for new markets or existing market-specific minimums.*
+
 
 ```solidity
 function setMinStakeAmount(uint256 _newMinStakeAmount) external onlyOwner;
 ```
+**Parameters**
+
+|Name|Type|Description|
+|----|----|-----------|
+|`_newMinStakeAmount`|`uint256`|The new minimum stake amount in wei|
+
+
+### setDefaultMarketMinStake
+
+Sets the default minimum stake amount for new markets
+
+*This affects only markets created after this call*
+
+
+```solidity
+function setDefaultMarketMinStake(uint256 _newDefaultMinStake) external onlyOwner;
+```
+**Parameters**
+
+|Name|Type|Description|
+|----|----|-----------|
+|`_newDefaultMinStake`|`uint256`|The new default minimum stake amount in wei|
+
+
+### setMarketMinStake
+
+Sets the minimum stake amount for a specific market
+
+*This allows for market-specific minimum stakes that can be adjusted based on
+market conditions, popularity, or risk profile*
+
+
+```solidity
+function setMarketMinStake(uint256 _marketId, uint256 _marketMinStake) external onlyOwner;
+```
+**Parameters**
+
+|Name|Type|Description|
+|----|----|-----------|
+|`_marketId`|`uint256`|The ID of the market to update|
+|`_marketMinStake`|`uint256`|The new minimum stake amount for this market in wei|
+
 
 ### setMaxPriceStaleness
 
@@ -363,6 +424,18 @@ event FeeConfigurationChanged(address indexed newTreasuryAddress, uint256 newFee
 event MinStakeAmountChanged(uint256 newMinStakeAmount);
 ```
 
+### DefaultMarketMinStakeChanged
+
+```solidity
+event DefaultMarketMinStakeChanged(uint256 newDefaultMinStake);
+```
+
+### MarketMinStakeChanged
+
+```solidity
+event MarketMinStakeChanged(uint256 indexed marketId, uint256 marketMinStake);
+```
+
 ### FeePaid
 
 ```solidity
@@ -410,6 +483,12 @@ event MarketResolutionFailed(uint256 indexed marketId, string reason);
 
 ```solidity
 error InvalidFeeBasisPoints(uint256 feeBasisPoints);
+```
+
+### InvalidMinStakeAmount
+
+```solidity
+error InvalidMinStakeAmount(uint256 minStakeAmount);
 ```
 
 ### MarketAlreadyExists
