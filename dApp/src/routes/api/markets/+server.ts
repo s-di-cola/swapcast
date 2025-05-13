@@ -1,6 +1,6 @@
 import { json } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
-import { createMarket } from '$lib/contract/contracts';
+import { createMarketFromUI } from '$lib/services/marketService';
 
 /**
  * POST handler for creating a new prediction market
@@ -97,19 +97,25 @@ export const POST: RequestHandler = async ({ request }) => {
       priceFeedKey = 'USDC/USD';
     }
     
-    // Create the market
-    const result = await createMarket(
+    // Calculate expiration time based on duration hours
+    const expirationTime = new Date();
+    expirationTime.setHours(expirationTime.getHours() + durationHours);
+    
+    console.log(`Creating market with expiration time: ${expirationTime.toISOString()}`);
+    
+    // Create the market using the updated service function
+    const result = await createMarketFromUI(
       data.marketName,
-      durationHours,
-      targetPrice,
-      priceFeedKey
+      priceFeedKey,
+      expirationTime,
+      targetPrice.toString()
     );
     
     if (!result.success) {
       return json({
         success: false,
         error: 'Market creation failed',
-        details: result.error || 'An unexpected error occurred'
+        details: result.message || 'An unexpected error occurred'
       }, { status: 500 });
     }
     
@@ -117,8 +123,7 @@ export const POST: RequestHandler = async ({ request }) => {
     return json({
       success: true,
       marketId: result.marketId,
-      txHash: result.txHash,
-      message: 'Market created successfully'
+      message: result.message || 'Market created successfully'
     }, { status: 201 });
     
   } catch (error: any) {

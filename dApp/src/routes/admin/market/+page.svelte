@@ -47,44 +47,69 @@
   let createdMarketId: string | null = null;
 
   async function handleSubmit() {
+    // Validate form data
+    if (!marketName || !tokenA_address || !tokenB_address || !durationHours || !resolutionSource) {
+      submissionError = 'Please fill in all required fields';
+      return;
+    }
+    
+    if (predictionMarketType === 'price_binary' && !targetPrice) {
+      submissionError = 'Please enter a target price for binary markets';
+      return;
+    }
+    
+    if (predictionMarketType === 'price_range' && (!lowerBoundPrice || !upperBoundPrice)) {
+      submissionError = 'Please enter both lower and upper bound prices for range markets';
+      return;
+    }
+    
+    // Reset submission state
     isSubmitting = true;
-    submissionError = null;
     submissionSuccess = false;
-    
-    const marketData = {
-      marketName,
-      tokenA_address,
-      tokenB_address,
-      predictionMarketType,
-      targetPrice: predictionMarketType === 'price_binary' ? targetPrice : undefined,
-      lowerBoundPrice: predictionMarketType === 'price_range' ? lowerBoundPrice : undefined,
-      upperBoundPrice: predictionMarketType === 'price_range' ? upperBoundPrice : undefined,
-      durationHours,
-      resolutionSource
-    };
-    
-    console.log('Submitting new market creation:', marketData);
+    submissionError = null;
     
     try {
+      // Prepare the request payload
+      const payload: any = {
+        marketName,
+        tokenA_address,
+        tokenB_address,
+        predictionMarketType,
+        durationHours: parseInt(durationHours.toString()),
+        resolutionSource
+      };
+      
+      // Add market type specific fields
+      if (predictionMarketType === 'price_binary' && targetPrice !== null) {
+        payload.targetPrice = parseFloat(targetPrice.toString());
+      } else if (predictionMarketType === 'price_range' && lowerBoundPrice !== null && upperBoundPrice !== null) {
+        payload.lowerBoundPrice = parseFloat(lowerBoundPrice.toString());
+        payload.upperBoundPrice = parseFloat(upperBoundPrice.toString());
+      }
+      
+      console.log('Submitting market creation request:', payload);
+      
+      // Send the request to the API
       const response = await fetch('/api/markets', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json'
         },
-        body: JSON.stringify(marketData)
+        body: JSON.stringify(payload)
       });
       
       const result = await response.json();
       
-      if (!response.ok) {
-        throw new Error(result.error || 'Failed to create market');
+      if (!response.ok || !result.success) {
+        throw new Error(result.details || result.error || 'Failed to create market');
       }
       
-      console.log('Market created successfully:', result);
+      // Handle successful response
       submissionSuccess = true;
       createdMarketId = result.marketId;
+      console.log('Market created successfully:', result);
       
-      // Optional: Reset form after successful submission
+      // Optional: Reset form fields after successful submission
       // resetForm();
     } catch (error: any) {
       console.error('Error creating market:', error);
@@ -94,7 +119,20 @@
     }
   }
 
-  // Reset conditional fields when market type changes
+  // Reset form fields
+  function resetForm() {
+    marketName = '';
+    tokenA_address = '';
+    tokenB_address = '';
+    predictionMarketType = 'price_binary';
+    targetPrice = null;
+    lowerBoundPrice = null;
+    upperBoundPrice = null;
+    durationHours = 24;
+    resolutionSource = '';
+  }
+
+  // Update form fields based on market type
   $: {
     if (predictionMarketType === 'price_binary') {
       lowerBoundPrice = null;

@@ -10,13 +10,31 @@ const PREDICTION_MANAGER_ADDRESS: Address = (import.meta.env.VITE_PREDICTIONMANA
 // Cast the imported array directly to the Abi type
 const predictionManagerAbi = predictionManagerGeneratedAbi as Abi;
 
-// Chainlink Price Feed addresses for common pairs
-const CHAINLINK_PRICE_FEEDS: Record<string, string> = {
-  '0x5f4ec3df9cbd43714fe2740f5e3616155c5b8419': 'ETH/USD',
-  '0xf4030086522a5beea4988f8ca5b36dbc97bee88c': 'BTC/USD',
-  '0x2c1d072e956affc0d435cb7ac38ef18d24d9127c': 'LINK/USD',
-  '0x8fffffd4afb6115b954bd326cbe7b4ba576818f6': 'USDC/USD'
+// Import Chainlink Denominations from the contract if needed
+// These are the special addresses used by Chainlink for denominations
+const Denominations = {
+  ETH: '0xEeeeeEeeeEeEeeEeEeEeeEEEeeeeEeeeeeeeEEeE' as Address, // Special Chainlink ETH address
+  BTC: '0x2260FAC5E5542a773Aa44fBCfeDf7C193bc2C599' as Address, // wBTC
+  LINK: '0x514910771AF9Ca656af840dff83E8264EcF986CA' as Address,
+  USDC: '0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48' as Address,
+  DAI: '0x6B175474E89094C44Da98b954EedeAC495271d0F' as Address,
+  USD: '0x0000000000000000000000000000000000000348' as Address // Special Chainlink USD address
 };
+
+// For display purposes - mapping asset pairs to readable formats
+const ASSET_PAIR_DISPLAY: Record<string, string> = {
+  'ETH/USD': 'ETH/USD',
+  'BTC/USD': 'BTC/USD',
+  'LINK/USD': 'LINK/USD',
+  'USDC/USD': 'USDC/USD',
+  'DAI/USD': 'DAI/USD'
+};
+
+// Helper function to get token address from symbol
+function getTokenAddress(symbol: string): Address {
+  const normalizedSymbol = symbol.toUpperCase();
+  return Denominations[normalizedSymbol as keyof typeof Denominations] || Denominations.ETH;
+}
 
 // Market interface
 export interface Market {
@@ -35,7 +53,8 @@ export interface Market {
 }
 
 // Define the expected return type for getMarketDetails based on ABI
-type MarketDetailsTuple = readonly [bigint, boolean, boolean, number, bigint, bigint, bigint, Address, bigint];
+// The contract returns: marketId, name, assetSymbol, exists, resolved, winningOutcome, totalStake0, totalStake1, expirationTime, priceAggregator, priceThreshold
+type MarketDetailsTuple = readonly [bigint, string, string, boolean, boolean, number, bigint, bigint, bigint, Address, bigint];
 
 /**
  * Get the total number of markets
@@ -108,22 +127,53 @@ export async function getMarketDetails(marketId: string | bigint): Promise<Marke
   try {
     const id = typeof marketId === 'string' ? BigInt(marketId) : marketId;
     
-    // Explicitly type the return value as MarketDetailsTuple
+    // Get market details from the contract
     const details = await publicClient.readContract({
       address: PREDICTION_MANAGER_ADDRESS,
       abi: predictionManagerAbi,
       functionName: 'getMarketDetails',
       args: [id]
-    }) as MarketDetailsTuple; // Type assertion
+    }) as MarketDetailsTuple;
     
-    const expirationTime = Number(details[6]);
+    // The contract returns: marketId, name, assetSymbol, exists, resolved, winningOutcome, totalStake0, totalStake1, expirationTime, priceAggregator, priceThreshold
+    console.log(`[marketService] Got market details for ID ${id}:`, details);
+    
+    // Extract values from the tuple
+    const marketName = details[1];
+    const assetSymbol = details[2];
+    const exists = details[3];
+    const resolved = details[4];
+    const winningOutcome = details[5];
+    const totalStake0 = details[6];
+    const totalStake1 = details[7];
+    const expirationTime = Number(details[8]);
+    const priceAggregator = details[9] as Address;
+    const priceThreshold = Number(details[10]) / 10**18;
+    
+    // If the market doesn't exist, return early with default values
+    if (!exists) {
+      return {
+        id: id.toString(),
+        name: 'Unknown Market',
+        status: 'Open',
+        assetPair: 'Unknown',
+        expirationTime: 0,
+        expirationDisplay: 'Unknown',
+        priceThreshold: '0',
+        totalStake: '0',
+        exists: false,
+        resolved: false,
+        priceAggregator: '0x0000000000000000000000000000000000000000'
+      };
+    }
+    
     const now = Math.floor(Date.now() / 1000);
     const timeRemaining = expirationTime - now;
     
     let expirationDisplay = 'Expired';
     let status: 'Open' | 'Expired' | 'Resolved' = 'Expired';
     
-    if (details[2]) { 
+    if (resolved) { 
       status = 'Resolved';
       expirationDisplay = 'Resolved';
     } else if (timeRemaining > 0) {
@@ -142,29 +192,21 @@ export async function getMarketDetails(marketId: string | bigint): Promise<Marke
       }
     }
     
-    const priceAggregator = details[7] as Address;
-    const assetPair = CHAINLINK_PRICE_FEEDS[priceAggregator.toLowerCase()] || 'Unknown';
-    
-    const totalStake0 = details[4];
-    const totalStake1 = details[5];
+    // Calculate total stake
     const totalStake = (totalStake0 + totalStake1) / BigInt(10**18);
-    
-    const priceThreshold = Number(details[8]) / 10**18;
-    
-    const name = `Will ${assetPair} price be above $${priceThreshold.toFixed(2)}?`;
     
     return {
       id: id.toString(),
-      name,
+      name: marketName,
       status,
-      assetPair,
+      assetPair: assetSymbol, // Use the asset symbol from the contract
       expirationTime,
       expirationDisplay,
       priceThreshold: priceThreshold.toFixed(2),
       totalStake: totalStake.toString(),
-      exists: details[1],
-      resolved: details[2],
-      winningOutcome: details[2] ? Number(details[3]) : undefined,
+      exists, // Boolean from the contract
+      resolved, // Boolean from the contract
+      winningOutcome: resolved ? winningOutcome : undefined,
       priceAggregator
     };
   } catch (error) {
@@ -185,56 +227,170 @@ export async function getMarketDetails(marketId: string | bigint): Promise<Marke
 }
 
 /**
- * Create a new prediction market.
- * Requires the admin wallet client to send the transaction.
- * @param name The name or question for the market.
- * @param tokenA Address of the base token.
- * @param tokenB Address of the quote token.
- * @param marketEndTime The market's end time as a Unix timestamp (BigInt).
- * @param priceThreshold The target price threshold (BigInt, formatted with appropriate decimals).
- * @returns Promise with the transaction hash.
+ * Create a new prediction market using the contract's createMarket function
+ * @param name Market name/description
+ * @param assetSymbol Symbol of the asset being predicted (e.g., 'ETH/USD')
+ * @param expirationTime Unix timestamp when the market expires
+ * @param priceAggregator Address of the Chainlink price feed
+ * @param priceThreshold Target price threshold for the market (in wei)
+ * @returns Object containing success status, market ID, and transaction hash
  */
+// Keep track of the last nonce used to avoid nonce conflicts
+let lastNonce = -1;
+
+/**
+ * Get the next available nonce for transactions
+ * This helps prevent "nonce too low" errors when sending multiple transactions
+ */
+async function getNextNonce(): Promise<number> {
+  try {
+    // Get the current nonce from the blockchain
+    const currentNonce = await publicClient.getTransactionCount({
+      address: adminClient.account?.address as `0x${string}`
+    });
+    
+    // Use the higher of the current blockchain nonce or our tracked lastNonce + 1
+    const nextNonce = Math.max(currentNonce, lastNonce + 1);
+    
+    // Update our lastNonce tracker
+    lastNonce = nextNonce;
+    
+    console.log(`[marketService] Using nonce: ${nextNonce}`);
+    return nextNonce;
+  } catch (error) {
+    console.error('[marketService] Error getting next nonce:', error);
+    // If we can't get the nonce, return a safe increment
+    return lastNonce + 1;
+  }
+}
+
 export async function createMarket(
   name: string,
-  tokenA: Address,
-  tokenB: Address,
-  marketEndTime: bigint,
+  assetSymbol: string,
+  expirationTime: bigint,
+  priceAggregator: `0x${string}`,
   priceThreshold: bigint
-): Promise<`0x${string}`> {
+): Promise<{ success: boolean, marketId: string, txHash?: `0x${string}`, error?: string }> {
   try {
-    console.log('[marketService] Attempting to create market with:', {
-        name,
-        tokenA,
-        tokenB,
-        marketEndTime,
-        priceThreshold,
-        address: PREDICTION_MANAGER_ADDRESS
+    // Generate a unique market ID based on timestamp
+    const marketId = BigInt(Date.now());
+    
+    console.log('[marketService] Creating market with parameters:', {
+      marketId: marketId.toString(),
+      name,
+      assetSymbol,
+      expirationTime: new Date(Number(expirationTime) * 1000).toISOString(),
+      priceAggregator,
+      priceThreshold: priceThreshold.toString()
     });
-
-    const txHash = await adminClient.writeContract({
+    
+    // Get the next available nonce
+    const nonce = await getNextNonce();
+    
+    // Send the transaction using the contract's createMarket function with the specific nonce
+    const hash = await adminClient.writeContract({
       address: PREDICTION_MANAGER_ADDRESS,
       abi: predictionManagerAbi,
       functionName: 'createMarket',
-      args: [
-        name,
-        tokenA,
-        tokenB,
-        marketEndTime,
-        priceThreshold
-      ]
+      args: [marketId, name, assetSymbol, expirationTime, priceAggregator, priceThreshold],
+      nonce
     });
-
-    console.log('[marketService] Market creation transaction sent:', txHash);
     
-    // Optional: Wait for transaction confirmation
-    // const receipt = await publicClient.waitForTransactionReceipt({ hash: txHash });
-    // console.log('[marketService] Market creation transaction confirmed:', receipt);
-    // If the contract emits an event with the market ID, we could extract it here.
-
-    return txHash;
-  } catch (error) {
+    console.log(`Created market with ID: ${marketId.toString()}`);
+    
+    return {
+      success: true,
+      marketId: marketId.toString(),
+      txHash: hash
+    };
+  } catch (error: any) {
     console.error('[marketService] Error creating market:', error);
-    // Re-throw the error so the UI layer (modal) can catch it and display feedback
-    throw error; 
+    return {
+      success: false,
+      marketId: '0',
+      error: error.message
+    };
+  }
+}
+
+/**
+ * Create a new prediction market from the UI parameters
+ * @param marketName Name of the market
+ * @param tokenA_address Address of the base token
+ * @param tokenB_address Address of the quote token
+ * @param durationHours Duration of the market in hours
+ * @param targetPrice Target price threshold for the market
+ * @param priceFeedKey Key for the price feed (e.g., 'ETH/USD')
+ * @param expirationTime Expiration time of the market
+ * @param priceThreshold Target price threshold for the market
+ * @returns Object containing success status, market ID, and transaction hash
+ */
+export async function createMarketFromUI(
+  marketName: string,
+  priceFeedKey: string,
+  expirationTime: Date,
+  priceThreshold: string
+): Promise<{ success: boolean; message: string; marketId?: string }> {
+  try {
+    // Parse the price feed key to get base and quote tokens
+    const [baseToken, quoteToken] = priceFeedKey.split('/');
+    
+    // For price aggregator, we'll use the base token address
+    let priceAggregator: Address;
+    
+    // Get the base token address using our helper function
+    if (baseToken) {
+      priceAggregator = getTokenAddress(baseToken);
+      console.log(`[marketService] Creating market for ${priceFeedKey} with base token address: ${priceAggregator}`);
+    } else {
+      // Default to ETH if no base token is specified
+      priceAggregator = Denominations.ETH;
+      console.log(`[marketService] No base token specified, defaulting to ETH: ${priceAggregator}`);
+    }
+    
+    // Create asset symbol from token addresses
+    const assetSymbol = priceFeedKey;
+    
+    // Convert price threshold to wei (assuming 18 decimals)
+    const priceThresholdInWei = BigInt(parseFloat(priceThreshold) * 10**18);
+    
+    // Format expiration time as Unix timestamp (seconds)
+    const expirationTimeUnix = BigInt(Math.floor(expirationTime.getTime() / 1000));
+    
+    console.log(`[marketService] Creating market with parameters: ${JSON.stringify({
+      name: marketName,
+      assetSymbol,
+      expirationTime: expirationTime.toISOString(),
+      priceAggregator,
+      priceThreshold: priceThresholdInWei.toString()
+    })}`);
+    
+    // Call the createMarket function with the correct parameters
+    const result = await createMarket(
+      marketName,
+      assetSymbol,
+      expirationTimeUnix,
+      priceAggregator,
+      priceThresholdInWei
+    );
+    
+    if (result.success) {
+      return {
+        success: true,
+        message: `Market created successfully! Market ID: ${result.marketId}`,
+        marketId: result.marketId
+      };
+    } else {
+      return {
+        success: false,
+        message: `Error creating market: ${result.error || 'Unknown error'}`
+      };
+    }
+  } catch (error: any) {
+    console.error('[marketService] Error creating market from UI:', error);
+    return {
+      success: false,
+      message: `Error creating market: ${error.message}`
+    };
   }
 }
