@@ -126,11 +126,8 @@ contract TestSwapCastHook is Test, Deployers {
         swapRouter.swap{value: 0}(poolKey, swapParams, settings, hookData);
 
         address actualOwner = nft.ownerOf(0);
-        // Just verify that an NFT was minted
-        assertTrue(actualOwner != address(0), "NFT not minted");
-
-        // Note: There appears to be an issue with how the address is encoded/decoded in the hookData
-        // For now, we'll just verify that an NFT was minted to some address
+        // Verify that the NFT was minted to the correct address (the test contract)
+        assertEq(actualOwner, address(this), "NFT not minted to the correct address");
 
         (
             /*uint256 marketId_*/

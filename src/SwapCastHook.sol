@@ -199,15 +199,11 @@ contract SwapCastHook is BaseHook {
 
         // PREDICTION_HOOK_DATA_LENGTH is 20 (actualUser) + 32 (marketId) + 1 (outcome) + 16 (convictionStakeDeclared) = 69 bytes.
         // hookData is abi.encodePacked(address actualUser, uint256 marketId, uint8 outcome, uint128 convictionStakeDeclared)
+        // Extract the first 20 bytes for the address using a safer approach than assembly
+        actualUser = address(bytes20(hookData[:20]));
+
         assembly {
             // hookData.offset points to the start of the slice's data within calldata.
-
-            // actualUser (address = 20 bytes) starts at hookData.offset + 0
-            // For addresses, we need to be careful with endianness
-            // First, load the full 32 bytes
-            let actualUserWord := calldataload(hookData.offset)
-            // Then mask to get only the lower 20 bytes (160 bits) and convert to address
-            actualUser := and(actualUserWord, 0xffffffffffffffffffffffffffffffffffffffff)
 
             // marketId (uint256 = 32 bytes) starts at hookData.offset + 20
             marketId := calldataload(add(hookData.offset, 20))
@@ -237,13 +233,8 @@ contract SwapCastHook is BaseHook {
         uint256 feeAmount = (uint256(convictionStakeDeclared) * feeBps) / 10000;
         uint256 totalEthToSend = uint256(convictionStakeDeclared) + feeAmount;
 
-        console.log("SwapCastHook: address(this).balance:", address(this).balance);
-        console.log("SwapCastHook: totalEthToSend:", totalEthToSend);
-        console.log("SwapCastHook: actualUser:", actualUser);
-        console.log(
-            "SwapCastHook: msg.value received by _afterSwap (should be this.balance if hook starts with 0 ETH):",
-            msg.value
-        ); // This msg.value is for the internal _afterSwap, which is 0.
+        // Note: msg.value in _afterSwap is 0 because the ETH is sent to the hook contract directly,
+        // not as part of the _afterSwap call
 
         // The convictionStakeDeclared is passed as an argument. The PredictionManager handles the stake value.
         // This assumes IPredictionManager.recordPrediction signature is: recordPrediction(address user, uint256 marketId, PredictionTypes.Outcome outcome, uint128 convictionStake)
