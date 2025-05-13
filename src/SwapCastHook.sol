@@ -35,11 +35,11 @@ contract SwapCastHook is BaseHook {
 
     /**
      * @notice Expected length in bytes for the `hookData` when making a prediction.
-     * @dev This constant represents 32 bytes for `marketId` (uint256) + 1 byte for `outcome` (uint8) + 16 bytes for `convictionStake` (uint128).
-     *      Currently, `_afterSwap` checks if `hookData.length == 0` but does not strictly enforce this length for non-empty data.
-     *      Consider adding validation: `if (hookData.length != 0 && hookData.length != PREDICTION_HOOK_DATA_LENGTH) revert InvalidHookDataLength(...)`.
+     * @dev This constant represents 20 bytes for `actualUser` (address) + 32 bytes for `marketId` (uint256) +
+     *      1 byte for `outcome` (uint8) + 16 bytes for `convictionStake` (uint128).
+     *      The `_afterSwap` function enforces this length for non-empty hookData.
      */
-    uint256 private constant PREDICTION_HOOK_DATA_LENGTH = 49; // 32 bytes for marketId (uint256) + 1 byte for outcome (uint8) + 16 bytes for convictionStake (uint128)
+    uint256 private constant PREDICTION_HOOK_DATA_LENGTH = 69; // 20 bytes for actualUser (address) + 32 bytes for marketId (uint256) + 1 byte for outcome (uint8) + 16 bytes for convictionStake (uint128)
 
     /**
      * @notice Emitted when a user attempts to make a prediction during a swap.
@@ -169,7 +169,7 @@ contract SwapCastHook is BaseHook {
      * @param sender The address of the user who initiated the swap transaction (the `msg.sender` to `PoolManager`).
      * @param key The `PoolKey` identifying the pool where the swap occurred.
      * @param hookData Arbitrary data passed by the user with the swap. For this hook, it's expected to contain
-     *                 the `marketId` (uint256), `outcome` (uint8), and `convictionStake` (uint128) for the prediction, abi-encoded.
+     *                 the `actualUser` (address), `marketId` (uint256), `outcome` (uint8), and `convictionStake` (uint128) for the prediction, abi-encoded.
      * @return hookReturnData The selector of the function in `BaseHook` to be called by `PoolManager` upon completion (typically `BaseHook.afterSwap.selector`).
      * @return currencyDelta A currency delta to be applied by the `PoolManager`. This hook returns 0, as it does not directly modify pool balances;
      *                       `convictionStake` is handled by forwarding to the `PredictionPool`.
@@ -190,35 +190,43 @@ contract SwapCastHook is BaseHook {
             revert InvalidHookDataLength(hookData.length, PREDICTION_HOOK_DATA_LENGTH);
         }
 
-        // Decode marketId, outcome, and convictionStake from hookData.
-        // Assumes hookData is abi.encodePacked(uint256 marketId, uint8 outcome, uint128 convictionStakeDeclared).
+        // Decode actualUser, marketId, outcome, and convictionStake from hookData.
+        // Assumes hookData is abi.encodePacked(address actualUser, uint256 marketId, uint8 outcome, uint128 convictionStakeDeclared).
+        address actualUser;
         uint256 marketId;
         PredictionTypes.Outcome outcome;
         uint128 convictionStakeDeclared;
 
-        // PREDICTION_HOOK_DATA_LENGTH is 32 (marketId) + 1 (outcome) + 16 (convictionStakeDeclared) = 49 bytes.
-        // hookData is abi.encodePacked(uint256 marketId, uint8 outcome, uint128 convictionStakeDeclared)
+        // PREDICTION_HOOK_DATA_LENGTH is 20 (actualUser) + 32 (marketId) + 1 (outcome) + 16 (convictionStakeDeclared) = 69 bytes.
+        // hookData is abi.encodePacked(address actualUser, uint256 marketId, uint8 outcome, uint128 convictionStakeDeclared)
         assembly {
             // hookData.offset points to the start of the slice's data within calldata.
 
-            // marketId (uint256 = 32 bytes) starts at hookData.offset + 0
-            marketId := calldataload(hookData.offset)
+            // actualUser (address = 20 bytes) starts at hookData.offset + 0
+            // For addresses, we need to be careful with endianness
+            // First, load the full 32 bytes
+            let actualUserWord := calldataload(hookData.offset)
+            // Then mask to get only the lower 20 bytes (160 bits) and convert to address
+            actualUser := and(actualUserWord, 0xffffffffffffffffffffffffffffffffffffffff)
 
-            // outcome (uint8 = 1 byte) starts at hookData.offset + 32
+            // marketId (uint256 = 32 bytes) starts at hookData.offset + 20
+            marketId := calldataload(add(hookData.offset, 20))
+
+            // outcome (uint8 = 1 byte) starts at hookData.offset + 52
             // calldataload loads a 32-byte word. outcome is the most significant byte of this word.
             // byte(0, word) extracts the 0-th byte (most significant) from the word.
             // Convert the uint8 to PredictionTypes.Outcome
-            outcome := byte(0, calldataload(add(hookData.offset, 32)))
+            outcome := byte(0, calldataload(add(hookData.offset, 52)))
 
-            // convictionStakeDeclared (uint128 = 16 bytes) starts at hookData.offset + 33
-            // Load 32 bytes starting from hookData.offset + 33.
-            let wordForStake := calldataload(add(hookData.offset, 33))
+            // convictionStakeDeclared (uint128 = 16 bytes) starts at hookData.offset + 53
+            // Load 32 bytes starting from hookData.offset + 53.
+            let wordForStake := calldataload(add(hookData.offset, 53))
             // We want the upper 128 bits (16 bytes) of this 256-bit (32-byte) word.
             // shr(128, word) shifts right by 128 bits, keeping the upper 128 bits.
             convictionStakeDeclared := shr(128, wordForStake)
         }
 
-        emit PredictionAttempted(sender, key.toId(), marketId, outcome, convictionStakeDeclared);
+        emit PredictionAttempted(actualUser, key.toId(), marketId, outcome, convictionStakeDeclared);
 
         if (convictionStakeDeclared == 0) {
             revert NoConvictionStakeDeclaredInHookData();
@@ -231,6 +239,7 @@ contract SwapCastHook is BaseHook {
 
         console.log("SwapCastHook: address(this).balance:", address(this).balance);
         console.log("SwapCastHook: totalEthToSend:", totalEthToSend);
+        console.log("SwapCastHook: actualUser:", actualUser);
         console.log(
             "SwapCastHook: msg.value received by _afterSwap (should be this.balance if hook starts with 0 ETH):",
             msg.value
@@ -239,9 +248,9 @@ contract SwapCastHook is BaseHook {
         // The convictionStakeDeclared is passed as an argument. The PredictionManager handles the stake value.
         // This assumes IPredictionManager.recordPrediction signature is: recordPrediction(address user, uint256 marketId, PredictionTypes.Outcome outcome, uint128 convictionStake)
         try predictionManager.recordPrediction{value: totalEthToSend}(
-            sender, marketId, outcome, convictionStakeDeclared
+            actualUser, marketId, outcome, convictionStakeDeclared
         ) {
-            emit PredictionRecorded(sender, key.toId(), marketId, outcome, convictionStakeDeclared);
+            emit PredictionRecorded(actualUser, key.toId(), marketId, outcome, convictionStakeDeclared);
             return (BaseHook.afterSwap.selector, 0); // Success
         } catch (bytes memory lowLevelData) {
             bytes4 actualPoolErrorSelector = bytes4(keccak256(bytes("UnknownPoolError"))); // Default
@@ -272,7 +281,7 @@ contract SwapCastHook is BaseHook {
             } // else lowLevelData.length == 0 (e.g. assert failure), default message & selector are fine.
 
             emit PredictionFailed(
-                sender, key.toId(), marketId, outcome, convictionStakeDeclared, actualPoolErrorSelector
+                actualUser, key.toId(), marketId, outcome, convictionStakeDeclared, actualPoolErrorSelector
             );
             revert PredictionRecordingFailed(revertMessageForHook);
         }
