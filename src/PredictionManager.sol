@@ -97,6 +97,8 @@ contract PredictionManager is
     event FeeConfigurationChanged(address indexed newTreasuryAddress, uint256 newFeeBasisPoints);
     event MinStakeAmountChanged(uint256 newMinStakeAmount);
     event FeePaid(uint256 indexed marketId, address indexed user, uint256 protocolFee);
+    event OracleResolverAddressSet(address indexed oldAddress, address indexed newAddress);
+    event RewardDistributorAddressSet(address indexed oldAddress, address indexed newAddress);
     event StakeRecorded(
         uint256 indexed marketId, address indexed user, PredictionTypes.Outcome outcome, uint256 amount
     );
@@ -150,10 +152,7 @@ contract PredictionManager is
         address _oracleResolverAddress, // Injected
         address _rewardDistributorAddress // Injected
     ) Ownable() {
-        if (
-            _swapCastNFTAddress == address(0) || _treasuryAddress == address(0) || _oracleResolverAddress == address(0)
-                || _rewardDistributorAddress == address(0)
-        ) {
+        if (_swapCastNFTAddress == address(0) || _treasuryAddress == address(0)) {
             revert ZeroAddressInput();
         }
         if (_initialFeeBasisPoints > 10000) {
@@ -221,6 +220,28 @@ contract PredictionManager is
 
     function setMaxPriceStaleness(uint256 _newStalenessSeconds) external onlyOwner {
         maxPriceStalenessSeconds = _newStalenessSeconds;
+    }
+
+    /**
+     * @notice Sets the OracleResolver address
+     * @dev Only callable by the contract owner
+     * @param _newOracleResolverAddress The address of the new OracleResolver contract
+     */
+    function setOracleResolverAddress(address _newOracleResolverAddress) external onlyOwner {
+        if (_newOracleResolverAddress == address(0)) revert ZeroAddressInput();
+        oracleResolverAddress = _newOracleResolverAddress;
+        emit OracleResolverAddressSet(oracleResolverAddress, _newOracleResolverAddress);
+    }
+
+    /**
+     * @notice Sets the RewardDistributor address
+     * @dev Only callable by the contract owner
+     * @param _newRewardDistributorAddress The address of the new RewardDistributor contract
+     */
+    function setRewardDistributorAddress(address _newRewardDistributorAddress) external onlyOwner {
+        if (_newRewardDistributorAddress == address(0)) revert ZeroAddressInput();
+        rewardDistributorAddress = _newRewardDistributorAddress;
+        emit RewardDistributorAddressSet(rewardDistributorAddress, _newRewardDistributorAddress);
     }
 
     // --- Prediction Logic (IPredictionManager Implementation) ---

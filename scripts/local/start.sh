@@ -17,7 +17,7 @@ FORK_RPC_URL=""  # Will be set during execution
 
 # Project paths
 PROJECT_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
-DEPLOY_SCRIPT="${PROJECT_ROOT}/script/Deploy.s.sol"
+DEPLOY_SCRIPT="${PROJECT_ROOT}/scripts/local/Deploy.s.sol"
 SUBGRAPH_DIR="${PROJECT_ROOT}/subgraph"
 DATA_DIR="${PROJECT_ROOT}/data"
 DOCKER_COMPOSE_FILE="${PROJECT_ROOT}/scripts/local/docker-compose.yml"
@@ -238,6 +238,7 @@ deploy_contracts() {
   PREDICTION_MANAGER=$(grep -A 10 "SwapCast Deployment Summary" $LOG_DIR/deploy.log | grep "PredictionManager:" | awk '{print $2}')
   ORACLE_RESOLVER=$(grep -A 10 "SwapCast Deployment Summary" $LOG_DIR/deploy.log | grep "OracleResolver:" | awk '{print $2}')
   REWARD_DISTRIBUTOR=$(grep -A 10 "SwapCast Deployment Summary" $LOG_DIR/deploy.log | grep "RewardDistributor:" | awk '{print $2}')
+  SWAP_CAST_HOOK=$(grep -A 10 "SwapCast Deployment Summary" $LOG_DIR/deploy.log | grep "SwapCastHook:" | awk '{print $2}')
   
   # Check if we found the PredictionManager address
   if [ -z "$PREDICTION_MANAGER" ]; then
@@ -253,6 +254,7 @@ deploy_contracts() {
   [ -n "$PREDICTION_MANAGER" ] && echo "VITE_PREDICTIONMANAGER_ADDRESS=$PREDICTION_MANAGER" >> $DAPP_ENV_FILE
   [ -n "$ORACLE_RESOLVER" ] && echo "VITE_ORACLERESOLVER_ADDRESS=$ORACLE_RESOLVER" >> $DAPP_ENV_FILE
   [ -n "$REWARD_DISTRIBUTOR" ] && echo "VITE_REWARDDISTRIBUTOR_ADDRESS=$REWARD_DISTRIBUTOR" >> $DAPP_ENV_FILE
+  [ -n "$SWAP_CAST_HOOK" ] && echo "VITE_SWAPCASTHOOK_ADDRESS=$SWAP_CAST_HOOK" >> $DAPP_ENV_FILE
   
   # Add the hardcoded admin private key
   echo "VITE_ADMIN_PRIVATE_KEY=0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80" >> $DAPP_ENV_FILE
