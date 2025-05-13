@@ -55,22 +55,28 @@ contract DeploySwapCast is Script {
         treasury = new Treasury(deployerAddress);
         console2.log("Treasury deployed at:", address(treasury));
 
-        // 3. Deploy PredictionManager which internally creates OracleResolver and RewardDistributor
+        // 3. Deploy PredictionManager
+        //    NOTE: OracleResolver and RewardDistributor should be deployed BEFORE PredictionManager
+        //    and their addresses passed into this constructor.
+        //    The lines below that try to get these addresses FROM predictionManager are now incorrect.
+        address oracleResolverPlaceholder = address(0); // TODO: Replace with actual OracleResolver deployment
+        address rewardDistributorPlaceholder = address(0); // TODO: Replace with actual RewardDistributor deployment
+
         predictionManager = new PredictionManager(
-            address(swapCastNFT),
-            address(treasury),
-            FEE_PERCENTAGE,
-            deployerAddress,
-            MIN_STAKE_AMOUNT,
-            MAX_PRICE_STALENESS
+            address(swapCastNFT), // _swapCastNFTAddress
+            address(treasury), // _treasuryAddress
+            FEE_PERCENTAGE, // _initialFeeBasisPoints
+            MIN_STAKE_AMOUNT, // _initialMinStakeAmount
+            MAX_PRICE_STALENESS, // _maxPriceStalenessSeconds
+            oracleResolverPlaceholder, // _oracleResolverAddress
+            rewardDistributorPlaceholder // _rewardDistributorAddress
         );
         console2.log("PredictionManager deployed at:", address(predictionManager));
 
         // 4. Get the addresses of the OracleResolver and RewardDistributor created by PredictionManager
-        oracleResolver = OracleResolver(predictionManager.oracleResolverAddress());
-        rewardDistributor = RewardDistributor(predictionManager.rewardDistributorAddress());
-        console2.log("OracleResolver deployed at:", address(oracleResolver));
-        console2.log("RewardDistributor deployed at:", address(rewardDistributor));
+        // !! THIS LOGIC IS NOW INVALID as PM expects these addresses to be injected !!
+        // oracleResolver = OracleResolver(predictionManager.oracleResolverAddress());
+        // rewardDistributor = RewardDistributor(predictionManager.rewardDistributorAddress());
 
         // 5. Set the PredictionManager address in the SwapCastNFT
         swapCastNFT.setPredictionManagerAddress(address(predictionManager));
@@ -105,10 +111,20 @@ contract DeploySwapCast is Script {
                 console2.log("Registered oracle for market ID:", marketId);
 
                 // Then create the market with oracle
-                predictionManager.createMarketWithOracle(marketId, expirationTime, mockAggregator, priceThreshold);
+                predictionManager.createMarket(
+                    marketId,
+                    "DEFAULT_MARKET_NAME",
+                    "DEFAULT_ASSET_SYMBOL",
+                    expirationTime,
+                    mockAggregator,
+                    priceThreshold
+                );
                 console2.log("Created sample market with ID:", marketId);
             } else {
-                predictionManager.createMarket(marketId);
+                // This branch needs review: requires actual aggregator, name, symbol, expiration, threshold
+                predictionManager.createMarket(
+                    marketId, "DEFAULT_MARKET_NAME", "DEFAULT_ASSET_SYMBOL", block.timestamp + 1 days, address(0), 0
+                );
                 console2.log("Created basic sample market with ID:", marketId);
             }
         }

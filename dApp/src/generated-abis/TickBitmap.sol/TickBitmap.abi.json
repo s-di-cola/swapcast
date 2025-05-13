@@ -1,0 +1,18 @@
+[
+  {
+    "type": "error",
+    "name": "TickMisaligned",
+    "inputs": [
+      {
+        "name": "tick",
+        "type": "int24",
+        "internalType": "int24"
+      },
+      {
+        "name": "tickSpacing",
+        "type": "int24",
+        "internalType": "int24"
+      }
+    ]
+  }
+]

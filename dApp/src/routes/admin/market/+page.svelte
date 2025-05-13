@@ -41,8 +41,17 @@
     isLoadingTokens = false;
   });
 
-  function handleSubmit() {
-    console.log('Submitting new market creation:', {
+  let isSubmitting = false;
+  let submissionError: string | null = null;
+  let submissionSuccess = false;
+  let createdMarketId: string | null = null;
+
+  async function handleSubmit() {
+    isSubmitting = true;
+    submissionError = null;
+    submissionSuccess = false;
+    
+    const marketData = {
       marketName,
       tokenA_address,
       tokenB_address,
@@ -52,10 +61,37 @@
       upperBoundPrice: predictionMarketType === 'price_range' ? upperBoundPrice : undefined,
       durationHours,
       resolutionSource
-    });
-    // TODO: Implement actual market creation logic (e.g., call a backend API or smart contract function)
-    alert('New market creation submitted (see console for details). This page is for CREATION ONLY.');
-    // Reset form or redirect as needed after submission
+    };
+    
+    console.log('Submitting new market creation:', marketData);
+    
+    try {
+      const response = await fetch('/api/markets', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify(marketData)
+      });
+      
+      const result = await response.json();
+      
+      if (!response.ok) {
+        throw new Error(result.error || 'Failed to create market');
+      }
+      
+      console.log('Market created successfully:', result);
+      submissionSuccess = true;
+      createdMarketId = result.marketId;
+      
+      // Optional: Reset form after successful submission
+      // resetForm();
+    } catch (error: any) {
+      console.error('Error creating market:', error);
+      submissionError = error.message || 'An unexpected error occurred';
+    } finally {
+      isSubmitting = false;
+    }
   }
 
   // Reset conditional fields when market type changes
@@ -170,9 +206,32 @@
     
     <!-- Consider adding fields for: target price (for binary), price range (for range), initial liquidity, fees, etc. -->
 
+    <!-- Success/Error Messages -->
+    {#if submissionSuccess}
+      <div class="mt-4 p-4 bg-green-100 border border-green-400 text-green-700 rounded-lg">
+        <p class="font-medium">Market created successfully!</p>
+        <p class="text-sm mt-1">Market ID: <span class="font-mono">{createdMarketId}</span></p>
+      </div>
+    {/if}
+    
+    {#if submissionError}
+      <div class="mt-4 p-4 bg-red-100 border border-red-400 text-red-700 rounded-lg">
+        <p class="font-medium">Error creating market</p>
+        <p class="text-sm mt-1">{submissionError}</p>
+      </div>
+    {/if}
+    
     <div class="pt-4">
-      <button type="submit" class="w-full flex justify-center py-3.5 px-4 border border-transparent rounded-lg shadow-lg text-md font-medium text-white bg-gradient-to-r from-emerald-500 to-teal-600 hover:from-emerald-600 hover:to-teal-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-emerald-500 transition-all hover:shadow-xl">
-        Create New Market
+      <button 
+        type="submit" 
+        class="w-full flex justify-center py-3.5 px-4 border border-transparent rounded-lg shadow-lg text-md font-medium text-white bg-gradient-to-r from-emerald-500 to-teal-600 hover:from-emerald-600 hover:to-teal-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-emerald-500 transition-all hover:shadow-xl"
+        disabled={isSubmitting}
+      >
+        {#if isSubmitting}
+          <span class="inline-block mr-2 animate-spin">↻</span> Creating Market...
+        {:else}
+          Create New Market
+        {/if}
       </button>
     </div>
   </form>

@@ -1,11 +1,17 @@
 [profile.default]
 src = "src"
-out = "out"
+out = "dApp/src/generated-abis"
 libs = ["lib"]
 solc_version = "0.8.26"
 evm_version = "cancun"
 optimizer = true
 optimizer_runs = 200
 via_ir = true
+extra_output = ["abi"]
+extra_output_files = ["abi"]
+
+remappings = [
+    "@chainlink/contracts/=lib/foundry-chainlink-toolkit/lib/chainlink-brownie-contracts/contracts/src/"
+]
 
 # See more config options https://github.com/foundry-rs/foundry/blob/master/crates/config/README.md#all-options
