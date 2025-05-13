@@ -2,7 +2,6 @@
 pragma solidity ^0.8.26;
 
 import {Test} from "forge-std/Test.sol";
-import "forge-std/console.sol";
 import {Deployers} from "@uniswap/v4-core/test/utils/Deployers.sol";
 import {PoolSwapTest} from "v4-core/test/PoolSwapTest.sol";
 import {SwapParams, ModifyLiquidityParams} from "v4-core/types/PoolOperation.sol";
@@ -127,14 +126,8 @@ contract TestSwapCastHook is Test, Deployers {
         swapRouter.swap{value: 0}(poolKey, swapParams, settings, hookData);
 
         address actualOwner = nft.ownerOf(0);
-        // Since we're now passing the actual user address in hookData, the NFT should be minted to that address
-        assertTrue(actualOwner != address(0), "NFT not minted");
-        console.log("NFT minted to:", actualOwner);
-        console.log("Test contract address:", address(this));
-
-        // For now, just verify that an NFT was minted
-        // We'll need to debug why the address encoding/decoding isn't working as expected
-        assertTrue(actualOwner != address(0), "NFT not minted");
+        // Verify that the NFT was minted to the correct address (the test contract)
+        assertEq(actualOwner, address(this), "NFT not minted to the correct address");
 
         (
             /*uint256 marketId_*/

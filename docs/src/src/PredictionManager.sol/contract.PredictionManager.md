@@ -1,5 +1,5 @@
 # PredictionManager
-[Git Source](https://github.com/s-di-cola/swapcast/blob/2174af1482c339fd15fd6eb3baaa600ea7d38ee2/src/PredictionManager.sol)
+[Git Source](https://github.com/s-di-cola/swapcast/blob/b76acc7814b84333b46efffc66f79d30bce2b653/src/PredictionManager.sol)
 
 **Inherits:**
 Ownable, [IPredictionManager](/src/interfaces/IPredictionManager.sol/interface.IPredictionManager.md), [IPredictionManagerForResolver](/src/interfaces/IPredictionManagerForResolver.sol/interface.IPredictionManagerForResolver.md), [IPredictionManagerForDistributor](/src/interfaces/IPredictionManagerForDistributor.sol/interface.IPredictionManagerForDistributor.md), ILogAutomation, AutomationCompatibleInterface, IERC721Receiver
@@ -147,6 +147,40 @@ function setMinStakeAmount(uint256 _newMinStakeAmount) external onlyOwner;
 ```solidity
 function setMaxPriceStaleness(uint256 _newStalenessSeconds) external onlyOwner;
 ```
+
+### setOracleResolverAddress
+
+Sets the OracleResolver address
+
+*Only callable by the contract owner*
+
+
+```solidity
+function setOracleResolverAddress(address _newOracleResolverAddress) external onlyOwner;
+```
+**Parameters**
+
+|Name|Type|Description|
+|----|----|-----------|
+|`_newOracleResolverAddress`|`address`|The address of the new OracleResolver contract|
+
+
+### setRewardDistributorAddress
+
+Sets the RewardDistributor address
+
+*Only callable by the contract owner*
+
+
+```solidity
+function setRewardDistributorAddress(address _newRewardDistributorAddress) external onlyOwner;
+```
+**Parameters**
+
+|Name|Type|Description|
+|----|----|-----------|
+|`_newRewardDistributorAddress`|`address`|The address of the new RewardDistributor contract|
+
 
 ### recordPrediction
 
@@ -333,6 +367,18 @@ event MinStakeAmountChanged(uint256 newMinStakeAmount);
 
 ```solidity
 event FeePaid(uint256 indexed marketId, address indexed user, uint256 protocolFee);
+```
+
+### OracleResolverAddressSet
+
+```solidity
+event OracleResolverAddressSet(address indexed oldAddress, address indexed newAddress);
+```
+
+### RewardDistributorAddressSet
+
+```solidity
+event RewardDistributorAddressSet(address indexed oldAddress, address indexed newAddress);
 ```
 
 ### StakeRecorded

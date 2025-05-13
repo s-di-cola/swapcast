@@ -1,5 +1,5 @@
 # SwapCastHook
-[Git Source](https://github.com/s-di-cola/swapcast/blob/2174af1482c339fd15fd6eb3baaa600ea7d38ee2/src/SwapCastHook.sol)
+[Git Source](https://github.com/s-di-cola/swapcast/blob/b76acc7814b84333b46efffc66f79d30bce2b653/src/SwapCastHook.sol)
 
 **Inherits:**
 BaseHook
@@ -33,13 +33,13 @@ IPredictionManager public immutable predictionManager;
 ### PREDICTION_HOOK_DATA_LENGTH
 Expected length in bytes for the `hookData` when making a prediction.
 
-*This constant represents 32 bytes for `marketId` (uint256) + 1 byte for `outcome` (uint8) + 16 bytes for `convictionStake` (uint128).
-Currently, `_afterSwap` checks if `hookData.length == 0` but does not strictly enforce this length for non-empty data.
-Consider adding validation: `if (hookData.length != 0 && hookData.length != PREDICTION_HOOK_DATA_LENGTH) revert InvalidHookDataLength(...)`.*
+*This constant represents 20 bytes for `actualUser` (address) + 32 bytes for `marketId` (uint256) +
+1 byte for `outcome` (uint8) + 16 bytes for `convictionStake` (uint128).
+The `_afterSwap` function enforces this length for non-empty hookData.*
 
 
 ```solidity
-uint256 private constant PREDICTION_HOOK_DATA_LENGTH = 49;
+uint256 private constant PREDICTION_HOOK_DATA_LENGTH = 69;
 ```
 
 
@@ -111,7 +111,7 @@ function _afterSwap(address sender, PoolKey calldata key, SwapParams calldata, B
 |`key`|`PoolKey`|The `PoolKey` identifying the pool where the swap occurred.|
 |`<none>`|`SwapParams`||
 |`<none>`|`BalanceDelta`||
-|`hookData`|`bytes`|Arbitrary data passed by the user with the swap. For this hook, it's expected to contain the `marketId` (uint256), `outcome` (uint8), and `convictionStake` (uint128) for the prediction, abi-encoded.|
+|`hookData`|`bytes`|Arbitrary data passed by the user with the swap. For this hook, it's expected to contain the `actualUser` (address), `marketId` (uint256), `outcome` (uint8), and `convictionStake` (uint128) for the prediction, abi-encoded.|
 
 **Returns**
 
