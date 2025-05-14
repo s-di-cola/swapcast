@@ -70,7 +70,8 @@ export default defineConfig({
 
   /* Run your local dev server before starting the tests */
   webServer: {
-    command: 'npm run dev:local', // Changed from 'npm run dev'
+    // Use dev only (without environment setup) if SKIP_ENV is set
+    command: typeof process !== 'undefined' && process.env.SKIP_ENV ? 'npm run dev' : 'npm run dev:local',
     url: 'http://localhost:5173',
     reuseExistingServer: !process.env.CI,
     stdout: 'pipe', // Ensure stdout is captured
