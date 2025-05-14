@@ -8,14 +8,15 @@
 		"env:start": "../scripts/local/start.sh",
 		"env:stop": "../scripts/local/stop.sh",
 		"dev:local": "npm run env:start && vite dev",
+		
 		"test": "playwright test",
 		"test:headed": "playwright test --headed",
 		"test:ui": "playwright test --ui",
 		"test:debug": "playwright test --debug",
 		"test:report": "playwright show-report",
-		"test:no-env": "SKIP_ENV=true playwright test",
-		"test:headed:no-env": "SKIP_ENV=true playwright test --headed",
-		"test:ui:no-env": "SKIP_ENV=true playwright test --ui",
+		"test:fix": "playwright test --update-snapshots",
+		"setup-and-test": "npm run env:start && npm run test",
+
 		"build": "vite build",
 		"preview": "vite preview",
 		"prepare": "svelte-kit sync || echo ''",
