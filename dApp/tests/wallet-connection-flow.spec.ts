@@ -1,196 +1,108 @@
 import { test, expect, type Page } from '@playwright/test';
+import { createTestClient, createWalletClient, http, type Address } from 'viem';
+import { privateKeyToAccount } from 'viem/accounts';
+import { hardhat } from 'viem/chains';
+import { walletState } from '$lib/stores/wallet';
+import { get } from 'svelte/store';
+
+// Test account from Anvil
+const TEST_ACCOUNT = {
+  address: '0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266' as Address,
+  privateKey: '0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80'
+} as const;
+
+// Create a test client and wallet client
+const testClient = createTestClient({
+  chain: hardhat,
+  mode: 'anvil',
+  transport: http()
+});
+
+const walletClient = createWalletClient({
+  chain: hardhat,
+  transport: http()
+});
+
+const account = privateKeyToAccount(TEST_ACCOUNT.privateKey);
+
+// Helper function to simulate wallet connection
+async function connectWallet(page: Page) {
+  await page.evaluate((address) => {
+    window.dispatchEvent(new CustomEvent('appkit:connect', {
+      detail: { address }
+    }));
+  }, TEST_ACCOUNT.address);
+}
+
+// Helper function to simulate wallet disconnection
+async function disconnectWallet(page: Page) {
+  await page.evaluate(() => {
+    window.dispatchEvent(new Event('appkit:disconnect'));
+  });
+}
 
 /**
  * Test suite for the wallet connection flow
- * This tests the complete flow from landing page to app page,
- * including MetaMask wallet connection and page transition
  */
 test.describe('Wallet Connection Flow', () => {
-  // Set a longer timeout for wallet interactions
-  test.setTimeout(60000);
-
-  // Mock Ethereum provider for testing
-  const mockEthereumProvider = {
-    isMetaMask: true,
-    selectedAddress: '0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266',
-    chainId: '0x1', // Mainnet
-    networkVersion: '1',
-    request: async ({ method, params }: { method: string; params?: any[] }) => {
-      console.log(`Mock Ethereum provider received request: ${method}`, params);
-      
-      // Handle different RPC methods
-      switch (method) {
-        case 'eth_requestAccounts':
-        case 'eth_accounts':
-          return ['0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266'];
-        case 'eth_chainId':
-          return '0x1';
-        case 'net_version':
-          return '1';
-        default:
-          console.log(`Unhandled method: ${method}`);
-          return null;
-      }
-    },
-    on: (eventName: string, callback: Function) => {
-      console.log(`Mock Ethereum provider registered event listener: ${eventName}`);
-    },
-    removeListener: (eventName: string, callback: Function) => {
-      console.log(`Mock Ethereum provider removed event listener: ${eventName}`);
-    }
-  };
-
-  /**
-   * Helper function to inject the mock Ethereum provider
-   */
-  async function injectMockEthereumProvider(page: Page): Promise<void> {
-    // Inject the mock provider into the page
-    await page.addInitScript(`
-      window.ethereum = ${JSON.stringify(mockEthereumProvider)};
-      
-      // Add request method (can't be serialized in JSON.stringify)
-      window.ethereum.request = async ({ method, params }) => {
-        console.log('Mock ethereum.request called with method:', method, params);
-        
-        switch (method) {
-          case 'eth_requestAccounts':
-          case 'eth_accounts':
-            return ['0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266'];
-          case 'eth_chainId':
-            return '0x1';
-          case 'net_version':
-            return '1';
-          default:
-            console.log('Unhandled method:', method);
-            return null;
-        }
-      };
-      
-      // Add event listeners
-      window.ethereum.on = (eventName, callback) => {
-        console.log('Mock ethereum.on called with event:', eventName);
-      };
-      
-      window.ethereum.removeListener = (eventName, callback) => {
-        console.log('Mock ethereum.removeListener called with event:', eventName);
-      };
-      
-      // Dispatch event to notify the page that ethereum is available
-      window.dispatchEvent(new Event('ethereum#initialized'));
-      console.log('Mock Ethereum provider injected');
-    `);
-  }
-
-  /**
-   * Helper function to verify wallet connection UI elements
-   */
-  async function verifyWalletConnectionUI(page: Page): Promise<void> {
-    // Check for connect wallet button in the header
-    const headerConnectButton = page.locator('header button:has-text("Connect Wallet")');
-    await expect(headerConnectButton).toBeVisible();
-
-    // Check for connect wallet button in the hero section
-    const heroConnectButton = page.locator('section button:has-text("Connect Wallet")').first();
-    await expect(heroConnectButton).toBeVisible();
-  }
-
-  /**
-   * Helper function to verify app page UI elements
-   */
-  async function verifyAppPageUI(page: Page): Promise<void> {
-    // Verify we're on the app page
-    expect(page.url()).toContain('/app');
+  test.beforeEach(async ({ page }) => {
+    // Reset wallet state before each test
+    walletState.set({
+      isConnected: false,
+      address: null,
+      chainId: null,
+      isConnecting: false
+    });
     
-    // Check for dashboard title
-    const dashboardTitle = page.locator('h1:has-text("Dashboard")');
-    await expect(dashboardTitle).toBeVisible();
-    
-    // Check for wallet address display
-    const walletAddressSelectors = [
-      '[data-testid="wallet-address"]',
-      '.wallet-address',
-      'text=0xf39F',
-      'text=Connected'
-    ];
-    
-    let walletAddressFound = false;
-    for (const selector of walletAddressSelectors) {
-      const count = await page.locator(selector).count();
-      if (count > 0) {
-        walletAddressFound = true;
-        break;
-      }
-    }
-    
-    expect(walletAddressFound).toBeTruthy();
-  }
-
-  test('should connect wallet and transition to app page', async ({ page }) => {
-    // Inject mock Ethereum provider before navigating
-    await injectMockEthereumProvider(page);
-    
-    // Navigate to the landing page
+    // Navigate to the app
     await page.goto('/');
-    
-    // Wait for the page to load
-    await page.waitForLoadState('networkidle');
-    
-    // Verify wallet connection UI elements
-    await verifyWalletConnectionUI(page);
-    
-    // Click the connect wallet button in the header
-    const connectButton = page.locator('header button:has-text("Connect Wallet")');
-    await connectButton.click();
-    
-    // Wait for the connection process
-    await page.waitForTimeout(2000);
-    
-    // Wait for navigation to the app page
-    try {
-      await page.waitForURL('**/app', { timeout: 5000 });
-    } catch (error) {
-      console.log('Navigation to app page failed, checking for Go to App button');
-      
-      // If direct navigation failed, try clicking the Go to App button
-      const goToAppButton = page.locator('button:has-text("Go to App")');
-      if (await goToAppButton.isVisible()) {
-        await goToAppButton.click();
-        await page.waitForURL('**/app', { timeout: 5000 });
-      } else {
-        throw new Error('Failed to navigate to app page and Go to App button not found');
-      }
-    }
-    
-    // Verify app page UI elements
-    await verifyAppPageUI(page);
   });
 
-  test('should stay on app page when refreshing with connected wallet', async ({ page }) => {
-    // Inject mock Ethereum provider before navigating
-    await injectMockEthereumProvider(page);
+  test('should show connect wallet button on landing page', async ({ page }) => {
+    const connectButton = page.getByRole('button', { name: /connect wallet/i });
+    await expect(connectButton).toBeVisible();
+  });
+
+  test('should connect wallet successfully', async ({ page }) => {
+    // Simulate wallet connection
+    await connectWallet(page);
     
-    // Navigate directly to the app page
+    // Check if the wallet address is displayed (adjust selector based on your UI)
+    const walletAddress = page.locator('[data-testid="wallet-address"]');
+    await expect(walletAddress).toContainText(TEST_ACCOUNT.address.substring(0, 6));
+    
+    // Verify the wallet state
+    const state = get(walletState);
+    expect(state.isConnected).toBe(true);
+    expect(state.address).toBe(TEST_ACCOUNT.address);
+  });
+
+  test('should disconnect wallet when requested', async ({ page }) => {
+    // First connect the wallet
+    await connectWallet(page);
+    
+    // Then disconnect it
+    await disconnectWallet(page);
+    
+    // Check if the connect button is visible again
+    const connectButton = page.getByRole('button', { name: /connect wallet/i });
+    await expect(connectButton).toBeVisible();
+    
+    // Verify the wallet state
+    const state = get(walletState);
+    expect(state.isConnected).toBe(false);
+    expect(state.address).toBeNull();
+  });
+
+  test('should redirect to landing page when accessing app without connected wallet', async ({ page }) => {
+    // Navigate directly to the app page without connecting wallet
     await page.goto('/app');
     
-    // Wait for the page to load
-    await page.waitForLoadState('networkidle');
+    // Should be redirected to the landing page
+    await expect(page).toHaveURL('/');
     
-    // Verify we're still on the app page and not redirected back to landing
-    expect(page.url()).toContain('/app');
-    
-    // Verify app page UI elements
-    await verifyAppPageUI(page);
-    
-    // Refresh the page
-    await page.reload();
-    
-    // Wait for the page to load
-    await page.waitForLoadState('networkidle');
-    
-    // Verify we're still on the app page after refresh
-    expect(page.url()).toContain('/app');
-    
-    // Verify app page UI elements again
-    await verifyAppPageUI(page);
+    // Check for connect wallet button
+    const connectButton = page.getByRole('button', { name: /connect wallet/i });
+    await expect(connectButton).toBeVisible();
   });
 });

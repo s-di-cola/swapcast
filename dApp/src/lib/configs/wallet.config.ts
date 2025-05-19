@@ -1,10 +1,10 @@
 import { createAppKit } from '@reown/appkit';
 import { WagmiAdapter } from '@reown/appkit-adapter-wagmi';
-import { virtual_mainnet } from "$lib/configs/tenderly.config";
+import { anvil } from "$lib/configs/networks";
 import { PUBLIC_REOWN_PROJECT_ID } from '$env/static/public';
 
 const projectId = PUBLIC_REOWN_PROJECT_ID;
-export const networks = [virtual_mainnet];
+export const networks = [anvil];
 
 export const wagmiAdapter = new WagmiAdapter({
     projectId,
@@ -13,12 +13,12 @@ export const wagmiAdapter = new WagmiAdapter({
 
 export const modal = createAppKit({
     adapters: [wagmiAdapter],
-    networks: [virtual_mainnet],
+    networks: [anvil],
     metadata: {
-        name: 'limit-order',
-        description: 'Limit Order Demo dApp',
-        url: 'https://reown.com/appkit',
-        icons: ['https://assets.reown.com/reown-profile-pic.png']
+        name: 'SwapCast',
+        description: 'SwapCast Prediction Market',
+        url: 'https://swapcast.io',
+        icons: ['https://swapcast.io/favicon.ico']
     },
     projectId,
     features: {

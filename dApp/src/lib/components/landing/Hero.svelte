@@ -1,8 +1,10 @@
 <script lang="ts">
-  export let walletConnected = false;
-  export let walletConnecting = false;
-  export let connectWallet = () => {};
-  export let goToApp = () => {};
+  import WalletConnection from '../WalletConnection.svelte';
+  import { goto } from '$app/navigation';
+  
+  function goToApp() {
+    goto('/app');
+  }
 </script>
 
 <section class="pt-32 pb-20 md:pt-40 md:pb-24">
@@ -27,26 +29,7 @@
           SwapCast seamlessly integrates market predictions into your Uniswap trades. Express your conviction, mint your position as an NFT, and get rewarded for your foresight.
         </p>
         <div class="flex flex-wrap gap-4">
-          {#if walletConnecting}
-            <button disabled class="inline-flex items-center px-6 py-3 border border-transparent text-base font-medium rounded-md shadow-sm text-white bg-indigo-600 opacity-75">
-              <svg class="animate-spin -ml-1 mr-3 h-5 w-5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
-                <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-              </svg>
-              Connecting...
-            </button>
-          {:else if walletConnected}
-            <button on:click={goToApp} class="inline-flex items-center px-6 py-3 border border-transparent text-base font-medium rounded-md shadow-sm text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 transition-colors duration-200">
-              Enter App
-              <svg class="ml-2 -mr-1 h-5 w-5" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
-                <path fill-rule="evenodd" d="M10.293 5.293a1 1 0 011.414 0l4 4a1 1 0 010 1.414l-4 4a1 1 0 01-1.414-1.414L12.586 11H5a1 1 0 110-2h7.586l-2.293-2.293a1 1 0 010-1.414z" clip-rule="evenodd" />
-              </svg>
-            </button>
-          {:else}
-            <button on:click={connectWallet} class="inline-flex items-center px-6 py-3 border border-transparent text-base font-medium rounded-md shadow-sm text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 transition-colors duration-200">
-              Connect Wallet
-            </button>
-          {/if}
+          <WalletConnection />
           <a href="#how-it-works" class="inline-flex items-center px-6 py-3 border border-gray-300 shadow-sm text-base font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 transition-colors duration-200">
             Learn more
           </a>
