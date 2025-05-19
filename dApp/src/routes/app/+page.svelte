@@ -1,7 +1,6 @@
 <script lang="ts">
   import { onMount } from 'svelte';
   import { page } from '$app/stores';
-  import { walletState } from '$lib/stores/wallet';
   import SwapPanel from '$lib/components/SwapPanel.svelte';
   import MarketDetailsModal from '$lib/components/admin/MarketDetailsModal.svelte';
   import { Badge, Button, Card, Spinner } from 'flowbite-svelte';
@@ -11,23 +10,6 @@
   import { goto } from '$app/navigation';
   import { browser } from '$app/environment';
   
-  // Import the wallet store type
-  import type { Writable } from 'svelte/store';
-  
-  // Define the wallet state type
-  type WalletState = {
-    isConnected: boolean;
-    address: string | null;
-    chainId: number | null;
-  };
-  
-  // Get the current wallet state
-  const wallet = $walletState as WalletState;
-  
-  // Redirect to home if not connected
-  $: if (browser && !wallet.isConnected) {
-    goto('/');
-  }
 
   // Define Token Objects
   const ethToken: Token = { symbol: 'ETH', name: 'Ethereum' };

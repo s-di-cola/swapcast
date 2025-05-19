@@ -1,6 +1,6 @@
 <script lang="ts">
   import { goto } from '$app/navigation';
-  import WalletConnection from '$lib/components/WalletConnection.svelte';
+  import WalletConnection from '$lib/components/common/WalletConnection.svelte';
   
   let { variant = 'landing' } = $props<{
     variant?: 'landing' | 'app';
