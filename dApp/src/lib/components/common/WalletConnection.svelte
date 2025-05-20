@@ -14,5 +14,5 @@
 	});
 </script>
 
-<appkit-button balance="hide"></appkit-button>
+<appkit-button balance="hide" class="px-6 py-3 font-medium"></appkit-button>
 
