@@ -1,7 +1,7 @@
 <script lang="ts">
   import { onMount } from 'svelte';
   import { page } from '$app/stores';
-  import SwapPanel from '$lib/components/SwapPanel.svelte';
+  import SwapPanel from '$lib/components/app/SwapPanel.svelte';
   import MarketDetailsModal from '$lib/components/admin/MarketDetailsModal.svelte';
   import { Badge, Button, Card, Spinner } from 'flowbite-svelte';
   import { ChartLineUpOutline, ChartPieOutline, AwardOutline, AdjustmentsHorizontalOutline, ArrowRightOutline } from 'flowbite-svelte-icons';

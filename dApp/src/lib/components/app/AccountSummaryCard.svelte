@@ -67,7 +67,7 @@
         <p class="text-3xl font-bold text-gray-900">Loading...</p>
       {:else}
         <p class="text-3xl font-bold text-gray-900">{ethBalance} ETH</p>
-        <p class="text-sm text-gray-500 mt-1">≈ ${parseFloat(ethBalance) * 2389.42}</p>
+        <p class="text-sm text-gray-500 mt-1">≈ ${parseFloat(ethBalance) * 2521.40}</p>
       {/if}
     </div>
 

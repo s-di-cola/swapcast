@@ -1,8 +1,8 @@
 <script lang="ts">
-  import { createEventDispatcher } from 'svelte';
+
   import { Button, Input, Alert, Label, Helper } from 'flowbite-svelte';
   import { SortHorizontalOutline, ArrowRightOutline, ArrowDownOutline, ArrowUpOutline, CheckOutline } from 'flowbite-svelte-icons'; 
-  import type { PredictionSide, Token } from '../types';
+  import type { PredictionSide, Token } from '../../types';
   import { browser } from '$app/environment'; // Import browser check
 
   export let payAmount: number | undefined = undefined;
@@ -20,7 +20,6 @@
   let predictedTargetPrice: number | undefined = undefined;
   let isTargetPriceInputFocused: boolean = false; 
 
-  const dispatch = createEventDispatcher();
 
   let predictionStakeAmount: number = 0;
   let displayStakeInfo: boolean = false;
