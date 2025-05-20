@@ -16,7 +16,7 @@ SUBGRAPH_DIR="${PROJECT_ROOT}/subgraph"
 DATA_DIR="${PROJECT_ROOT}/data"
 DOCKER_COMPOSE_FILE="${PROJECT_ROOT}/scripts/local/docker-compose.yml"
 LOG_DIR="${PROJECT_ROOT}/logs"
-DAPP_ENV_FILE="${PROJECT_ROOT}/dApp/.env"
+DAPP_ENV_FILE="${PROJECT_ROOT}/dApp/.env.local"
 
 # Color codes for output
 GREEN='\033[0;32m'
@@ -89,7 +89,7 @@ setup_environment() {
   export PROJECT_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
   export DEPLOY_SCRIPT="${PROJECT_ROOT}/scripts/local/Deploy.s.sol"
   export SUBGRAPH_DIR="${PROJECT_ROOT}/subgraph"
-  export DAPP_ENV_FILE="${PROJECT_ROOT}/dApp/.env"
+  export DAPP_ENV_FILE="${PROJECT_ROOT}/dApp/.env.local"
   export DOCKER_COMPOSE_FILE="${PROJECT_ROOT}/scripts/local/docker-compose.yml"
   export LOG_DIR="${PROJECT_ROOT}/logs"
   export DATA_DIR="${PROJECT_ROOT}/data"

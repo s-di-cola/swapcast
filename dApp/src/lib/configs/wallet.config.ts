@@ -3,11 +3,9 @@ import { WagmiAdapter } from '@reown/appkit-adapter-wagmi';
 import { anvil } from "$lib/configs/networks";
 import { PUBLIC_REOWN_PROJECT_ID } from '$env/static/public';
 
-const projectId = PUBLIC_REOWN_PROJECT_ID;
 export const networks = [anvil];
-
 export const wagmiAdapter = new WagmiAdapter({
-    projectId,
+    projectId: PUBLIC_REOWN_PROJECT_ID,
     networks
 });
 
@@ -20,7 +18,7 @@ export const modal = createAppKit({
         url: 'https://swapcast.io',
         icons: ['https://swapcast.io/favicon.ico']
     },
-    projectId,
+    projectId: PUBLIC_REOWN_PROJECT_ID,
     features: {
         analytics: true
     }

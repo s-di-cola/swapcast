@@ -216,7 +216,7 @@
           {:else}
             <div class="grid grid-cols-1 md:grid-cols-2 gap-4 p-4">
               {#each markets.slice(0, 4) as market (market.id)}
-                <div class="border border-gray-100 rounded-lg p-4 hover:shadow-md transition-shadow cursor-pointer" on:click={() => openMarketDetails(market.id)}>                  
+                <button type="button" class="w-full text-left border border-gray-100 rounded-lg p-4 hover:shadow-md transition-shadow cursor-pointer" on:click={() => openMarketDetails(market.id)}>
                   <div class="flex justify-between items-start mb-2">
                     <h3 class="font-medium text-gray-900">{market.name}</h3>
                     <span class="px-2 py-1 text-xs font-medium rounded-full {market.resolved ? 'bg-gray-100 text-gray-800' : 'bg-emerald-100 text-emerald-800'}">
@@ -228,7 +228,7 @@
                     <span class="text-gray-500">Threshold: ${market.priceThreshold}</span>
                     <span class="text-gray-500">Expires: {new Date(market.expirationTime * 1000).toLocaleDateString()}</span>
                   </div>
-                </div>
+                </button>
               {/each}
             </div>
           {/if}
