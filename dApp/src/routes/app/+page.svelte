@@ -9,8 +9,8 @@
   import { getAllMarkets } from '$lib/services/marketService';
   import { goto } from '$app/navigation';
   import { browser } from '$app/environment';
+  import AccountSummaryCard from '$lib/components/app/AccountSummaryCard.svelte';
   
-
   // Define Token Objects
   const ethToken: Token = { symbol: 'ETH', name: 'Ethereum' };
   const usdcToken: Token = { symbol: 'USDC', name: 'USD Coin' };
@@ -157,18 +157,7 @@
       <!-- Left Column: Swap Panel -->
       <div class="lg:col-span-5 space-y-6">
         <!-- Account Summary Card -->
-        <div class="bg-white p-6 rounded-lg shadow-sm border border-gray-100">
-          <div class="flex justify-between items-center mb-4">
-            <h2 class="text-sm font-semibold text-gray-600 uppercase tracking-wider">Account Summary</h2>
-            <span class="text-xs text-gray-500">Last updated: 5 min ago</span>
-          </div>
-          <div class="flex justify-between items-center">
-            <div>
-              <p class="text-3xl font-bold text-gray-900">2,500 USDC</p>
-              <p class="text-sm text-gray-500 mt-1">≈ $2,500.00</p>
-            </div>
-          </div>
-        </div>
+        <AccountSummaryCard />
         
         <!-- Swap Panel -->
         <div class="bg-white rounded-lg shadow-sm border border-gray-100 overflow-hidden">
