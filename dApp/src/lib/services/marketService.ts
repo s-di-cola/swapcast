@@ -21,6 +21,17 @@ const Denominations = {
   USD: '0x0000000000000000000000000000000000000348' as Address // Special Chainlink USD address
 };
 
+// Helper function to derive tickSpacing from feeTier
+function getTickSpacingFromFeeTier(feeTier: number): number {
+  switch (feeTier) {
+    case 100: return 1;
+    case 500: return 10;
+    case 3000: return 60;
+    case 10000: return 200;
+    default: throw new Error(`Unsupported fee tier for tick spacing: ${feeTier}`);
+  }
+}
+
 // For display purposes - mapping asset pairs to readable formats
 const ASSET_PAIR_DISPLAY: Record<string, string> = {
   'ETH/USD': 'ETH/USD',
@@ -233,6 +244,8 @@ export async function getMarketDetails(marketId: string | bigint): Promise<Marke
  * @param expirationTime Unix timestamp when the market expires
  * @param priceAggregator Address of the Chainlink price feed
  * @param priceThreshold Target price threshold for the market (in wei)
+ * @param feeTier Fee tier for the market
+ * @param tickSpacing Tick spacing for the market
  * @returns Object containing success status, market ID, and transaction hash
  */
 // Keep track of the last nonce used to avoid nonce conflicts
@@ -269,7 +282,9 @@ export async function createMarket(
   assetSymbol: string,
   expirationTime: bigint,
   priceAggregator: `0x${string}`,
-  priceThreshold: bigint
+  priceThreshold: bigint,
+  feeTier: number,
+  tickSpacing: number
 ): Promise<{ success: boolean, marketId: string, txHash?: `0x${string}`, error?: string }> {
   try {
     // Generate a unique market ID based on timestamp
@@ -281,7 +296,9 @@ export async function createMarket(
       assetSymbol,
       expirationTime: new Date(Number(expirationTime) * 1000).toISOString(),
       priceAggregator,
-      priceThreshold: priceThreshold.toString()
+      priceThreshold: priceThreshold.toString(),
+      feeTier,
+      tickSpacing
     });
     
     // Get the next available nonce
@@ -292,7 +309,7 @@ export async function createMarket(
       address: PREDICTION_MANAGER_ADDRESS,
       abi: predictionManagerAbi,
       functionName: 'createMarket',
-      args: [marketId, name, assetSymbol, expirationTime, priceAggregator, priceThreshold],
+      args: [marketId, name, assetSymbol, expirationTime, priceAggregator, priceThreshold, feeTier, tickSpacing],
       nonce
     });
     
@@ -316,25 +333,26 @@ export async function createMarket(
 /**
  * Create a new prediction market from the UI parameters
  * @param marketName Name of the market
- * @param tokenA_address Address of the base token
- * @param tokenB_address Address of the quote token
- * @param durationHours Duration of the market in hours
- * @param targetPrice Target price threshold for the market
  * @param priceFeedKey Key for the price feed (e.g., 'ETH/USD')
  * @param expirationTime Expiration time of the market
  * @param priceThreshold Target price threshold for the market
+ * @param feeTier Fee tier for the market
  * @returns Object containing success status, market ID, and transaction hash
  */
 export async function createMarketFromUI(
   marketName: string,
   priceFeedKey: string,
   expirationTime: Date,
-  priceThreshold: string
+  priceThreshold: string,
+  feeTier: number
 ): Promise<{ success: boolean; message: string; marketId?: string }> {
   try {
     // Parse the price feed key to get base and quote tokens
     const [baseToken, quoteToken] = priceFeedKey.split('/');
     
+    // Derive tickSpacing from feeTier
+    const tickSpacing = getTickSpacingFromFeeTier(feeTier);
+
     // For price aggregator, we'll use the base token address
     let priceAggregator: Address;
     
@@ -362,7 +380,9 @@ export async function createMarketFromUI(
       assetSymbol,
       expirationTime: expirationTime.toISOString(),
       priceAggregator,
-      priceThreshold: priceThresholdInWei.toString()
+      priceThreshold: priceThresholdInWei.toString(),
+      feeTier,
+      tickSpacing
     })}`);
     
     // Call the createMarket function with the correct parameters
@@ -371,7 +391,9 @@ export async function createMarketFromUI(
       assetSymbol,
       expirationTimeUnix,
       priceAggregator,
-      priceThresholdInWei
+      priceThresholdInWei,
+      feeTier,
+      tickSpacing
     );
     
     if (result.success) {
