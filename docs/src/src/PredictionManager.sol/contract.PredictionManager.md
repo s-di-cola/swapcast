@@ -1,5 +1,5 @@
 # PredictionManager
-[Git Source](https://github.com/s-di-cola/swapcast/blob/4769078b9eaa8e01d9802412e863313928216687/src/PredictionManager.sol)
+[Git Source](https://github.com/s-di-cola/swapcast/blob/fad58d146ceec24a381bacc00435a7ccd6d46a34/src/PredictionManager.sol)
 
 **Inherits:**
 Ownable, [IPredictionManager](/src/interfaces/IPredictionManager.sol/interface.IPredictionManager.md), [IPredictionManagerForResolver](/src/interfaces/IPredictionManagerForResolver.sol/interface.IPredictionManagerForResolver.md), [IPredictionManagerForDistributor](/src/interfaces/IPredictionManagerForDistributor.sol/interface.IPredictionManagerForDistributor.md), ILogAutomation, AutomationCompatibleInterface, IERC721Receiver
