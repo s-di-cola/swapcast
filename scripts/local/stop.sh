@@ -37,7 +37,4 @@ if command -v docker >/dev/null 2>&1 && docker info >/dev/null 2>&1; then
 fi
 
 echo -e "${GREEN}========== Cleanup Complete ==========${NC}"
-echo "You can restart the local development environment with:"
-echo -e "${YELLOW}./scripts/local/start.sh${NC}"
-
 exit 0
