@@ -22,18 +22,18 @@
       <div>
         <h3 class="text-sm font-semibold text-gray-400 tracking-wider uppercase">Resources</h3>
         <ul class="mt-4 space-y-4">
-          <li><a href="/faq" class="text-base text-gray-500 hover:text-gray-900">FAQ</a></li>
-          <li><a href="/support" class="text-base text-gray-500 hover:text-gray-900">Support</a></li>
-          <li><a href="https://github.com/s-di-cola/swapcast" target="_blank" rel="noopener" class="text-base text-gray-500 hover:text-gray-900">GitHub</a></li>
-          <li><a href="/status" class="text-base text-gray-500 hover:text-gray-900">Status</a></li>
+          <li><a href="#top" class="text-base text-gray-500 hover:text-gray-900">FAQ</a></li>
+          <li><a href="#top" class="text-base text-gray-500 hover:text-gray-900">Support</a></li>
+          <li><a href="#top" class="text-base text-gray-500 hover:text-gray-900">GitHub</a></li>
+          <li><a href="#top" class="text-base text-gray-500 hover:text-gray-900">Status</a></li>
         </ul>
       </div>
       <div>
         <h3 class="text-sm font-semibold text-gray-400 tracking-wider uppercase">Legal</h3>
         <ul class="mt-4 space-y-4">
-          <li><a href="/privacy" class="text-base text-gray-500 hover:text-gray-900">Privacy Policy</a></li>
-          <li><a href="/terms" class="text-base text-gray-500 hover:text-gray-900">Terms of Service</a></li>
-          <li><a href="/cookies" class="text-base text-gray-500 hover:text-gray-900">Cookie Policy</a></li>
+          <li><a href="#top" class="text-base text-gray-500 hover:text-gray-900">Privacy Policy</a></li>
+          <li><a href="#top" class="text-base text-gray-500 hover:text-gray-900">Terms of Service</a></li>
+          <li><a href="#top" class="text-base text-gray-500 hover:text-gray-900">Cookie Policy</a></li>
         </ul>
       </div>
     </div>
