@@ -354,8 +354,12 @@ deploy_contracts() {
   [ -n "$REWARD_DISTRIBUTOR" ] && echo "VITE_RewardDistributor_ADDRESS=$REWARD_DISTRIBUTOR" >> $DAPP_ENV_FILE
   [ -n "$SWAP_CAST_HOOK" ] && echo "VITE_SwapCastHook_ADDRESS=$SWAP_CAST_HOOK" >> $DAPP_ENV_FILE
   
-  # Add the admin private key
+  # Add the admin private key and address (using first Anvil account)
+  # First Anvil account private key: 0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80
   echo "VITE_ADMIN_PRIVATE_KEY=$PRIVATE_KEY" >> $DAPP_ENV_FILE
+  
+  # First Anvil account address: 0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266
+  echo "VITE_ADMIN_ADDRESS=0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266" >> $DAPP_ENV_FILE
 
   # Set the PREDICTION_MANAGER_ADDRESS variable for subgraph
   PREDICTION_MANAGER_ADDRESS=$PREDICTION_MANAGER
@@ -693,6 +697,10 @@ fi
 
 # Main execution
 main() {
+  # Stop any running services first
+  log_info "Stopping any running services..."
+  "${PROJECT_ROOT}/scripts/local/stop.sh"
+  
   # Initialize variables
   DEPLOYMENT_SUCCESS=false
   SUBGRAPH_DEPLOYED=false

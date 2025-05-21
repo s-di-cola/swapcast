@@ -1,18 +1,17 @@
 <script lang="ts">
 	import { modal } from '$lib/configs/wallet.config';
-	import { onMount, onDestroy } from 'svelte';
-	import { goto } from '$app/navigation';
-	import { browser } from '$app/environment';
+	import { walletStore } from '$lib/stores/wallet';
+	import { onMount } from 'svelte';
 	import type { UseAppKitAccountReturn } from '@reown/appkit';
-	import { isConnected } from '$lib/stores/wallet';
-	// Track connection status
+
 	onMount(() => {
-		// Subscribe to account changes (address, connection status)
 		modal.subscribeAccount((newAccount: UseAppKitAccountReturn) => {
-			isConnected.set(!!newAccount.address);
+			walletStore.set({
+				isConnected: !!newAccount.address,
+				address: newAccount.address ?? null
+			});
 		});
 	});
 </script>
 
-<appkit-button balance="hide" class="px-6 py-3 font-medium"></appkit-button>
-
+<appkit-button> </appkit-button>

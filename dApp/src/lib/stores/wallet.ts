@@ -1,4 +1,13 @@
-import { writable } from 'svelte/store';
+import { writable, type Writable } from 'svelte/store';
 
-// true = connected, false = not connected
-export const isConnected = writable(false);
+export interface WalletState {
+	isConnected: boolean;
+	address: string | null;
+}
+
+const initialWalletState: WalletState = {
+	isConnected: false,
+	address: null,
+};
+
+export const walletStore: Writable<WalletState> = writable(initialWalletState);

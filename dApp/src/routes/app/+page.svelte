@@ -9,7 +9,7 @@
   import { getAllMarkets } from '$lib/services/marketService';
   import { goto } from '$app/navigation';
   import { browser } from '$app/environment';
-  import AccountSummaryCard from '$lib/components/app/AccountSummaryCard.svelte';
+
   
   // Define Token Objects
   const ethToken: Token = { symbol: 'ETH', name: 'Ethereum' };
@@ -156,9 +156,6 @@
     <div class="grid grid-cols-1 lg:grid-cols-12 gap-6">
       <!-- Left Column: Swap Panel -->
       <div class="lg:col-span-5 space-y-6">
-        <!-- Account Summary Card -->
-        <AccountSummaryCard />
-        
         <!-- Swap Panel -->
         <div class="bg-white rounded-lg shadow-sm border border-gray-100 overflow-hidden">
           <SwapPanel 

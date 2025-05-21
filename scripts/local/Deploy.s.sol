@@ -76,6 +76,7 @@ contract DeploySwapCast is Script, StdCheats {
             address(0)  // Zero address for RewardDistributor (will be set later)
         );
         console2.log("PredictionManager deployed at:", address(predictionManager));
+        console2.log("ADMIN_ADDRESS:", predictionManager.owner());
         
         // 4. Deploy OracleResolver with the real Chainlink Feed Registry and PredictionManager address
         // Chainlink Feed Registry on Ethereum mainnet: 0x47Fb2585D2C56Fe188D0E6ec628a38b74fCeeeDf
