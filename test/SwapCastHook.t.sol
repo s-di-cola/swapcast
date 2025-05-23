@@ -32,6 +32,7 @@ contract TestSwapCastHook is Test, Deployers {
 
     SwapCastHook internal hook;
     PoolKey internal poolKey;
+    PoolKey internal testPoolKey;
     TestableSwapCastNFT internal nft;
     PredictionManager internal pool;
 
@@ -73,6 +74,15 @@ contract TestSwapCastHook is Test, Deployers {
         });
         manager.initialize(poolKey, SQRT_PRICE_1_1);
 
+        // Initialize PredictionManager's testPoolKey using values from Uniswap's poolKey
+        testPoolKey = PoolKey({
+            currency0: poolKey.currency0,
+            currency1: poolKey.currency1,
+            fee: poolKey.fee,
+            tickSpacing: poolKey.tickSpacing,
+            hooks: poolKey.hooks
+        });
+
         uint160 sqrtPriceAtTickUpper = TickMath.getSqrtPriceAtTick(60);
         uint256 token0ToAdd = 0.003 ether;
         uint128 liquidityDelta =
@@ -92,12 +102,12 @@ contract TestSwapCastHook is Test, Deployers {
 
     /// @notice Tests a successful prediction recording via the hook and verifies NFT minting and fee transfer.
     function test_record_prediction_success() public {
-        uint256 marketId = 1;
         uint8 predictedOutcome = 1;
         uint128 convictionStake = 100 ether;
 
-        pool.createMarket(
-            marketId, "Test Market Hook", "ETHUSD-Hook", block.timestamp + 1 hours, MOCK_ORACLE_RESOLVER, 3000 * 10 ** 8
+        // Create a market with the test pool key
+        uint256 marketId = pool.createMarket(
+            "Test Market", "ETHUSD", block.timestamp + 1 hours, MOCK_ORACLE_RESOLVER, 3000 * 10 ** 8, testPoolKey
         );
 
         uint256 protocolFeeBps = pool.protocolFeeBasisPoints();
@@ -179,15 +189,14 @@ contract TestSwapCastHook is Test, Deployers {
 
     /// @notice Tests that afterSwap reverts if hookData length is malformed.
     function test_reverts_on_malformed_hook_data_length() public {
-        uint256 marketId = 1;
-
+        // Create a market with the test pool key
         pool.createMarket(
-            marketId,
             "Test Market Hook Length",
             "ETHUSD-HookLength",
             block.timestamp + 1 hours,
             MOCK_ORACLE_RESOLVER,
-            3000 * 10 ** 8
+            3000 * 10 ** 8,
+            testPoolKey
         );
         SwapParams memory swapParams =
             SwapParams({zeroForOne: true, amountSpecified: -0.05 ether, sqrtPriceLimitX96: TickMath.MIN_SQRT_PRICE + 1});
@@ -216,15 +225,14 @@ contract TestSwapCastHook is Test, Deployers {
 
     /// @notice Tests that afterSwap reverts if conviction stake in hookData is zero.
     function test_reverts_if_zero_conviction_stake_in_hook_data() public {
-        uint256 marketId = 1;
-
-        pool.createMarket(
-            marketId,
+        // Create a market with the test pool key
+        uint256 marketId = pool.createMarket(
             "Test Market Hook ZeroStake",
             "ETHUSD-HookZeroStake",
             block.timestamp + 1 hours,
             MOCK_ORACLE_RESOLVER,
-            3000 * 10 ** 8
+            3000 * 10 ** 8,
+            testPoolKey
         );
         SwapParams memory swapParams =
             SwapParams({zeroForOne: true, amountSpecified: -0.05 ether, sqrtPriceLimitX96: TickMath.MIN_SQRT_PRICE + 1});

@@ -12,14 +12,14 @@ import {IPredictionManagerForResolver} from "./interfaces/IPredictionManagerForR
 import {IPredictionManagerForDistributor} from "./interfaces/IPredictionManagerForDistributor.sol";
 import {PredictionTypes} from "./types/PredictionTypes.sol";
 import {MarketLogic} from "./MarketLogic.sol"; // Import the new library
-import "forge-std/console.sol";
+import {PoolKey} from "v4-core/types/PoolKey.sol";
 
 /**
  * @title PredictionManager Contract
  * @author SwapCast Team
  * @notice Manages the creation and registry of prediction markets. Coordinates with OracleResolver,
  *         RewardDistributor, and SwapCastNFT. Uses MarketLogic library for core market operations.
- *         Integrates with Chainlink Automation for market expiration and resolution.
+ *         Integrates with Chainlink Automtion for market expiration and resolution.
  */
 contract PredictionManager is
     Ownable,
@@ -46,7 +46,9 @@ contract PredictionManager is
     uint256[] private _marketIdsList;
     uint256 public maxPriceStalenessSeconds;
     address public oracleResolverAddress; // For permissioning OracleResolver calls
-    address public rewardDistributorAddress; // For permissioning RewardDistributor calls
+    address public rewardDistributorAddress; // For permissioning RewardDistributor calls  uint256 private _nextMarketId = 1; // Start market IDs from 1
+    mapping(uint256 => PoolKey) public marketIdToPoolKey;
+    uint256 private _nextMarketId = 1;
 
     // --- Enums ---
     enum LogAction {
@@ -133,6 +135,7 @@ contract PredictionManager is
     error ResolutionFailedOracleError(); // If oracle call fails in PM
     error InvalidUpkeepData(string reason);
     error StakeMismatch(uint256 actual, uint256 declared);
+    error EmptyMarketName();
 
     // --- Modifiers ---
     modifier onlyOracleResolverContract() {
@@ -143,7 +146,9 @@ contract PredictionManager is
 
     modifier onlyRewardDistributorContract() {
         // Renamed
-        if (msg.sender != rewardDistributorAddress) revert NotRewardDistributor();
+        if (msg.sender != rewardDistributorAddress) {
+            revert NotRewardDistributor();
+        }
         _;
     }
 
@@ -182,36 +187,45 @@ contract PredictionManager is
 
     // --- Market Management Functions ---
     function createMarket(
-        uint256 _marketId,
         string memory _name,
         string memory _assetSymbol,
         uint256 _expirationTime,
         address _priceAggregator,
-        uint256 _priceThreshold
-    ) external onlyOwner {
-        if (_marketId == 0) revert InvalidMarketId();
-        if (markets[_marketId].exists) revert MarketAlreadyExists(_marketId);
+        uint256 _priceThreshold,
+        PoolKey calldata _poolKey
+    ) external onlyOwner returns (uint256 marketId) {
+        marketId = _nextMarketId++; // Assign and increment next market ID
+
+        if (marketId == 0) revert InvalidMarketId(); // Should not happen with _nextMarketId starting at 1
+        if (markets[marketId].exists) revert MarketAlreadyExists(marketId); // Should not happen with auto-incrementing ID
         if (_expirationTime <= block.timestamp) revert InvalidExpirationTime();
         if (_priceAggregator == address(0)) revert ZeroAddressInput();
-        if (bytes(_name).length == 0) revert PredictionTypes.InvalidMarketName();
-        if (bytes(_assetSymbol).length == 0) revert PredictionTypes.InvalidAssetSymbol();
+        if (bytes(_name).length == 0) revert EmptyMarketName();
 
-        Market storage market = markets[_marketId];
-        market.marketId = _marketId;
-        market.name = _name;
-        market.assetSymbol = _assetSymbol;
-        market.exists = true;
-        // market.resolved is false by default
-        // market.winningOutcome is PredictionTypes.Outcome.Bearish by default
-        market.expirationTime = _expirationTime;
-        market.priceAggregator = _priceAggregator;
-        market.priceThreshold = _priceThreshold;
+        Market storage newMarket = markets[marketId];
+        newMarket.marketId = marketId;
+        newMarket.name = _name;
+        newMarket.assetSymbol = _assetSymbol;
+        newMarket.exists = true;
+        newMarket.resolved = false;
+        newMarket.winningOutcome = PredictionTypes.Outcome.Bearish; // Default to Bearish (0)
+        newMarket.totalConvictionStakeOutcome0 = 0;
+        newMarket.totalConvictionStakeOutcome1 = 0;
+        newMarket.expirationTime = _expirationTime;
+        newMarket.priceAggregator = _priceAggregator;
+        newMarket.priceThreshold = _priceThreshold;
 
-        // Set market-specific minimum stake to the default value
-        marketMinStakes[_marketId] = defaultMarketMinStake;
+        marketIdToPoolKey[marketId] = _poolKey; // Store the PoolKey for this market
 
-        _marketIdsList.push(_marketId);
-        emit MarketCreated(_marketId, _name, _assetSymbol, _expirationTime, _priceAggregator, _priceThreshold);
+        // Set market-specific min stake to the current default if not already set
+        // (This logic might need adjustment based on how you want to handle default vs specific min stakes at creation)
+        if (marketMinStakes[marketId] == 0) {
+            marketMinStakes[marketId] = defaultMarketMinStake;
+        }
+
+        _marketIdsList.push(marketId);
+        emit MarketCreated(marketId, _name, _assetSymbol, _expirationTime, _priceAggregator, _priceThreshold);
+        return marketId;
     }
 
     // --- Fee and Stake Configuration ---
@@ -295,7 +309,9 @@ contract PredictionManager is
      * @param _newRewardDistributorAddress The address of the new RewardDistributor contract
      */
     function setRewardDistributorAddress(address _newRewardDistributorAddress) external onlyOwner {
-        if (_newRewardDistributorAddress == address(0)) revert ZeroAddressInput();
+        if (_newRewardDistributorAddress == address(0)) {
+            revert ZeroAddressInput();
+        }
         rewardDistributorAddress = _newRewardDistributorAddress;
         emit RewardDistributorAddressSet(rewardDistributorAddress, _newRewardDistributorAddress);
     }
@@ -436,12 +452,10 @@ contract PredictionManager is
     }
 
     // --- Log Automation Logic (ILogAutomation) ---
-    function checkLog(Log calldata _log, bytes calldata /*_checkData*/ )
-        external
-        view
-        override // Implements ILogAutomation
-        returns (bool upkeepNeeded, bytes memory performData)
-    {
+    function checkLog(
+        Log calldata _log,
+        bytes calldata /*_checkData*/ // Implements ILogAutomation
+    ) external view override returns (bool upkeepNeeded, bytes memory performData) {
         // Check if the log was emitted by this contract and is a MarketExpired event
         if (_log.source != address(this) || _log.topics.length < 2 || _log.topics[0] != MARKET_EXPIRED_SIGNATURE) {
             return (false, bytes(""));
@@ -473,37 +487,19 @@ contract PredictionManager is
         LogAction action = abi.decode(performData, (LogAction));
 
         if (action == LogAction.EmitMarketExpired) {
-            console.log("PM: performUpkeep - Action: EmitMarketExpired"); // Log 1
             // Now decode the full structure for EmitMarketExpired
             (, uint256[] memory marketIdsToProcess) = abi.decode(performData, (LogAction, uint256[]));
-
-            console.log("PM: performUpkeep - Num markets to process:", marketIdsToProcess.length); // Log 2
-
             for (uint256 i = 0; i < marketIdsToProcess.length; i++) {
                 uint256 marketIdToEmit = marketIdsToProcess[i];
-                console.log("PM: performUpkeep - Processing marketIdToEmit:", marketIdToEmit); // Log 3
-
-                Market storage market = markets[marketIdToEmit]; // Access market struct
-                console.log("PM: performUpkeep - Market exists:", market.exists); // Log 4
-                console.log("PM: performUpkeep - Market resolved:", market.resolved); // Log 5
-                console.log("PM: performUpkeep - Market expirationTime:", market.expirationTime); // Log 6
-                console.log("PM: performUpkeep - Current block.timestamp:", block.timestamp); // Log 7
-
+                Market storage market = markets[marketIdToEmit];
                 if (
                     market.exists && !market.resolved && market.expirationTime > 0
                         && market.expirationTime <= block.timestamp
                 ) {
-                    console.log("PM: performUpkeep - Emitting MarketExpired for market:", marketIdToEmit); // Log 8
                     emit MarketExpired(marketIdToEmit, block.timestamp);
-                } else {
-                    console.log(
-                        "PM: performUpkeep - Conditions not met to emit MarketExpired for market:", marketIdToEmit
-                    ); // Log 9
                 }
             }
-            console.log("PM: performUpkeep - Finished EmitMarketExpired loop"); // Log 10
         } else if (action == LogAction.ResolveMarket) {
-            console.log("PM: performUpkeep - Action: ResolveMarket");
             // Now decode the full structure for ResolveMarket
             (, uint256 marketIdToResolve) = abi.decode(performData, (LogAction, uint256));
 
@@ -547,7 +543,9 @@ contract PredictionManager is
     function checkUpkeep(bytes calldata /* checkData */ )
         external
         view
-        override(AutomationCompatibleInterface) // Specify which override if multiple interfaces have it
+        override(
+            AutomationCompatibleInterface // Specify which override if multiple interfaces have it
+        )
         returns (bool upkeepNeeded, bytes memory performData)
     {
         uint256[] memory marketIdsToNotify = new uint256[](_marketIdsList.length); // Max possible size
@@ -583,12 +581,15 @@ contract PredictionManager is
     }
 
     // --- IERC721Receiver Implementation ---
-    function onERC721Received(address, /*operator*/ address, /*from*/ uint256, /*tokenId*/ bytes calldata /*data*/ )
-        external
-        pure
-        override
-        returns (bytes4)
-    {
+    function onERC721Received(
+        address,
+        /*operator*/
+        address,
+        /*from*/
+        uint256,
+        /*tokenId*/
+        bytes calldata /*data*/
+    ) external pure override returns (bytes4) {
         return IERC721Receiver.onERC721Received.selector;
     }
 }

@@ -5,7 +5,7 @@ import {Test, console} from "forge-std/Test.sol";
 import {Vm} from "forge-std/Vm.sol";
 import {PredictionManager} from "src/PredictionManager.sol"; // For PredictionManager.LogAction and the contract instance
 import {ILogAutomation, Log} from "@chainlink/contracts/v0.8/automation/interfaces/ILogAutomation.sol"; // Correct Chainlink import
-
+import {PoolKey} from "v4-core/types/PoolKey.sol";
 import "@openzeppelin/contracts/utils/Strings.sol";
 import {ISwapCastNFT} from "src/interfaces/ISwapCastNFT.sol";
 import {PredictionTypes} from "src/types/PredictionTypes.sol";
@@ -15,9 +15,12 @@ import {MockSwapCastNFT} from "./mocks/MockSwapCastNFT.sol";
 import {Ownable} from "@openzeppelin/contracts/access/Ownable.sol";
 import {AggregatorV3Interface} from "@chainlink/contracts/v0.8/interfaces/AggregatorV3Interface.sol";
 import {OracleResolver} from "src/OracleResolver.sol";
+import {Currency} from "v4-core/types/Currency.sol";
+import {IHooks} from "v4-core/interfaces/IHooks.sol";
 
 contract LogAutomationTest is Test {
     PredictionManager internal pool;
+    PoolKey internal testPoolKey; // Added testPoolKey state variable
     address internal owner;
     address internal user1;
     address internal user2;
@@ -68,16 +71,26 @@ contract LogAutomationTest is Test {
         vm.prank(owner);
         mockNft.setPredictionPoolAddress(address(pool));
         vm.stopPrank();
+
+        // Initialize testPoolKey with example values
+        testPoolKey = PoolKey({
+            currency0: Currency.wrap(vm.addr(0xA0)), // Convert address to Currency type
+            currency1: Currency.wrap(vm.addr(0xB0)), // Convert address to Currency type
+            fee: 3000, // Standard fee, e.g., 0.3%
+            tickSpacing: 60, // Standard tick spacing
+            hooks: IHooks(address(0)) // Cast address to IHooks interface
+        });
     }
 
     /// @notice Tests that a newly created market has correct initial details.
     function test_get_market_details_initial_values() public {
-        uint256 marketId = 1;
         uint256 expirationTime = block.timestamp + 1 days;
         uint256 priceThreshold = 5500 * 10 ** 8; // $5500 with 8 decimals
 
         vm.prank(owner);
-        pool.createMarket(marketId, "Test Market", "TEST", expirationTime, address(mockPriceFeed), priceThreshold);
+        uint256 marketId = pool.createMarket(
+            "Test Market", "TEST", expirationTime, address(mockPriceFeed), priceThreshold, testPoolKey
+        ); // New: marketId is returned, PoolKey added
 
         (
             uint256 mId,
@@ -110,22 +123,26 @@ contract LogAutomationTest is Test {
 
     /// @notice Tests that creating a market with a past expiration time reverts.
     function test_create_market_invalid_expiration_time() public {
-        uint256 marketId = 1;
+        // uint256 marketId = 1; // Old: marketId was an input parameter
         uint256 pastExpirationTime = block.timestamp - 1 hours;
 
         vm.prank(owner);
         vm.expectRevert(PredictionManager.InvalidExpirationTime.selector);
-        pool.createMarket(marketId, "Test Market", "TEST", pastExpirationTime, address(mockPriceFeed), 5000 * 10 ** 8);
+        pool.createMarket(
+            "Test Market", "TEST", pastExpirationTime, address(mockPriceFeed), 5000 * 10 ** 8, testPoolKey
+        ); // New: marketId not passed, PoolKey added
     }
 
     /// @notice Tests that performUpkeep emits MarketExpired when a market expires.
     function test_check_market_expiration_emits_event() public {
-        uint256 marketId = 1;
+        // uint256 marketId = 1; // Old: marketId was an input parameter
         uint256 expirationTime = block.timestamp + 1 hours;
         uint256 priceThreshold = 5000 * 10 ** 8;
 
         vm.prank(owner);
-        pool.createMarket(marketId, "Test Market", "TEST", expirationTime, address(mockPriceFeed), priceThreshold);
+        uint256 marketId = pool.createMarket(
+            "Test Market", "TEST", expirationTime, address(mockPriceFeed), priceThreshold, testPoolKey
+        ); // New: marketId is returned, PoolKey added
 
         vm.warp(expirationTime);
 
@@ -139,12 +156,12 @@ contract LogAutomationTest is Test {
 
     /// @notice Tests that checkUpkeep returns false when there are no expired markets.
     function test_check_upkeep_no_expired_markets() public {
-        uint256 marketId = 1;
+        // uint256 marketId = 1; // Old: marketId was an input parameter
         uint256 expirationTime = block.timestamp + 1 days;
         uint256 priceThreshold = 5000 * 10 ** 8;
 
         vm.prank(owner);
-        pool.createMarket(marketId, "Test Market", "TEST", expirationTime, address(mockPriceFeed), priceThreshold);
+        pool.createMarket("Test Market", "TEST", expirationTime, address(mockPriceFeed), priceThreshold, testPoolKey); // New: marketId is returned, PoolKey added
 
         (bool upkeepNeeded,) = pool.checkUpkeep("");
         assertFalse(upkeepNeeded, "Upkeep should not be needed for non-expired market");
@@ -152,11 +169,11 @@ contract LogAutomationTest is Test {
 
     /// @notice Tests that MarketExpired is not emitted before the market expiration.
     function test_check_market_expiration_no_event_before_expiration() public {
-        uint256 marketId = 1;
+        // uint256 marketId = 1; // Old: marketId was an input parameter
         uint256 expirationTime = block.timestamp + 1 days;
 
         vm.prank(owner);
-        pool.createMarket(marketId, "Test Market", "TEST", expirationTime, address(mockPriceFeed), 5000 * 10 ** 8);
+        pool.createMarket("Test Market", "TEST", expirationTime, address(mockPriceFeed), 5000 * 10 ** 8, testPoolKey); // New: marketId is returned, PoolKey added
 
         vm.warp(expirationTime - 1 hours);
 
@@ -179,12 +196,11 @@ contract LogAutomationTest is Test {
 
     /// @notice Tests that checkLog would return true for an expired market, but only event emission is verified here.
     function test_check_log_returns_true_for_expired_market() public {
-        uint256 localMarketId = 1;
+        // uint256 localMarketId = 1; // Old: localMarketId was an input parameter
         uint256 marketExpirationTime = block.timestamp + 1 days;
         vm.prank(address(this));
-        pool.createMarket(
-            localMarketId, "Test Market", "TEST", marketExpirationTime, address(mockPriceFeed), 500_000_000_000
-        );
+        uint256 localMarketId = pool.createMarket( // New: localMarketId is returned, PoolKey added
+        "Test Market", "TEST", marketExpirationTime, address(mockPriceFeed), 500_000_000_000, testPoolKey);
 
         uint256 expectedEmitTimestamp = marketExpirationTime + 1;
         vm.warp(expectedEmitTimestamp);
@@ -199,16 +215,15 @@ contract LogAutomationTest is Test {
 
     /// @notice Tests the full two-stage process: event emission and then market resolution via performUpkeep.
     function test_perform_upkeep_resolves_market_and_logs() public {
-        uint256 localMarketId = 1;
+        // uint256 localMarketId = 1; // Old: localMarketId was an input parameter
         uint256 marketExpirationTime = block.timestamp + 1 days;
         uint256 priceThreshold = 500_000_000_000;
         int256 finalPrice = 500_000_000_100; // Bullish outcome
 
         // Prank as owner to create market
         vm.prank(address(this));
-        pool.createMarket(
-            localMarketId, "Test Market", "TEST", marketExpirationTime, address(mockPriceFeed), priceThreshold
-        );
+        uint256 localMarketId = pool.createMarket( // New: localMarketId is returned, PoolKey added
+        "Test Market", "TEST", marketExpirationTime, address(mockPriceFeed), priceThreshold, testPoolKey);
 
         mockPriceFeed.setLatestAnswer(finalPrice);
         uint256 resolutionAttemptTimestamp = marketExpirationTime + 1;
@@ -236,12 +251,11 @@ contract LogAutomationTest is Test {
 
     /// @notice Tests that performUpkeep reverts with PriceOracleStale if the oracle price is stale during resolution.
     function test_perform_upkeep_price_oracle_stale() public {
-        uint256 localMarketId = 1;
+        // uint256 localMarketId = 1; // Old: localMarketId was an input parameter
         uint256 marketExpirationTime = block.timestamp + 1 days;
         vm.prank(address(this));
-        pool.createMarket(
-            localMarketId, "Test Market", "TEST", marketExpirationTime, address(mockPriceFeed), 500_000_000_000
-        );
+        uint256 localMarketId = pool.createMarket( // New: localMarketId is returned, PoolKey added
+        "Test Market", "TEST", marketExpirationTime, address(mockPriceFeed), 500_000_000_000, testPoolKey);
 
         // Make oracle stale BEFORE market expires and resolution is attempted
         // The staleness check happens during _triggerMarketResolution, called by performUpkeep(ResolveMarket, ...)

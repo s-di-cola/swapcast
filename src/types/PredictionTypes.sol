@@ -13,7 +13,8 @@ contract PredictionTypes {
      */
     enum Outcome {
         Bearish,
-        Bullish
+        Bullish,
+        Undetermined
     }
 
     error InvalidMarketId();

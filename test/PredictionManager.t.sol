@@ -12,6 +12,9 @@ import {Ownable} from "@openzeppelin/contracts/access/Ownable.sol";
 import {Vm} from "forge-std/Vm.sol";
 import {FullMath} from "@uniswap/v4-core/src/libraries/FullMath.sol";
 import {PredictionTypes} from "src/types/PredictionTypes.sol";
+import {PoolKey} from "v4-core/types/PoolKey.sol";
+import {Currency} from "v4-core/types/Currency.sol";
+import {IHooks} from "v4-core/interfaces/IHooks.sol";
 
 contract MockRevertingReceiver is Test {
     event Received(uint256 amount);
@@ -70,6 +73,7 @@ contract PredictionManagerTest is Test {
     error RewardTransferFailed(uint256 tokenId, address recipient, uint256 payoutAmount);
 
     PredictionManager internal pool;
+    PoolKey internal testPoolKey;
     MockSwapCastNFT internal mockNft;
     MockRevertingReceiver internal revertingReceiver;
     address internal mockOracle;
@@ -123,19 +127,35 @@ contract PredictionManagerTest is Test {
         // but the actual addresses are set in the constructor above using constants.
         oracleResolverAddress = MOCK_ORACLE_RESOLVER_FOR_TEST;
         rewardDistributorAddress = MOCK_REWARD_DISTRIBUTOR_FOR_TEST;
+
+        // Initialize testPoolKey
+        testPoolKey = PoolKey({
+            currency0: Currency.wrap(vm.addr(0xA0)), // Example token address for currency0
+            currency1: Currency.wrap(vm.addr(0xB0)), // Example token address for currency1
+            fee: 3000, // Standard fee, e.g., 0.3%
+            tickSpacing: 60, // Standard tick spacing
+            hooks: IHooks(address(0)) // No hooks needed for these tests
+        });
     }
 
     function testCreateMarket_Successful_And_EmitsEvent_And_SetsInitialState() public {
-        uint256 marketIdToCreate = 1;
         string memory marketName = "Test Market";
         string memory assetSymbol = "ETHUSD";
         uint256 expirationTime = block.timestamp + 1 hours;
         uint256 priceThreshold = 3000 * 10 ** 8;
 
-        vm.expectEmit(true, true, true, true);
-        emit MarketCreated(marketIdToCreate, marketName, assetSymbol, expirationTime, mockOracle, priceThreshold);
         vm.prank(owner);
-        pool.createMarket(marketIdToCreate, marketName, assetSymbol, expirationTime, mockOracle, priceThreshold);
+        vm.expectEmit(true, true, true, true, address(pool));
+        emit MarketCreated(
+            1, // Assuming _nextMarketId starts at 1 and this is the first market created
+            marketName,
+            assetSymbol,
+            expirationTime,
+            mockOracle,
+            priceThreshold
+        );
+        uint256 marketIdToCreate =
+            pool.createMarket(marketName, assetSymbol, expirationTime, mockOracle, priceThreshold, testPoolKey);
 
         (
             uint256 id_,
@@ -166,34 +186,48 @@ contract PredictionManagerTest is Test {
 
     function testCreateMarket_Reverts_ZeroMarketId() public {
         vm.prank(owner);
-        vm.expectRevert(PredictionManager.InvalidMarketId.selector);
-        pool.createMarket(0, "Test Market", "ETHUSD", block.timestamp + 1 hours, mockOracle, 3000 * 10 ** 8);
+        // This test is no longer valid as marketId is not an input.
+        // We could test for reverting on empty name/symbol if those checks are in createMarket.
+        // For now, commenting out the specific revert check for InvalidMarketId as it's auto-generated.
+        // vm.expectRevert(PredictionManager.InvalidMarketId.selector);
+        // pool.createMarket(0, "Test Market", "ETHUSD", block.timestamp + 1 hours, mockOracle, 3000 * 10 ** 8);
+        // Instead, let's test that creating a market with an empty name reverts, assuming such a check exists or will be added.
+        vm.expectRevert(PredictionManager.EmptyMarketName.selector); // Assuming EmptyMarketName error exists
+        pool.createMarket("", "ETHUSD", block.timestamp + 1 hours, mockOracle, 3000 * 10 ** 8, testPoolKey);
     }
 
     function testCreateMarket_Reverts_MarketAlreadyExists() public {
-        uint256 marketIdToCreate = 1;
+        // Create first market
         vm.prank(owner);
-        pool.createMarket(
-            marketIdToCreate, "Test Market", "ETHUSD", block.timestamp + 1 hours, mockOracle, 3000 * 10 ** 8
+        uint256 marketIdToCreate = pool.createMarket(
+            "Test Market", "ETHUSD", block.timestamp + 1 hours, mockOracle, 3000 * 10 ** 8, testPoolKey
         );
 
+        // Create second market with same parameters - should be allowed but with different ID
         vm.prank(owner);
-        vm.expectRevert(abi.encodeWithSelector(PredictionManager.MarketAlreadyExists.selector, marketIdToCreate));
-        pool.createMarket(
-            marketIdToCreate, "Test Market", "ETHUSD", block.timestamp + 1 hours, mockOracle, 3000 * 10 ** 8
+        uint256 secondMarketId = pool.createMarket(
+            "Test Market", "ETHUSD", block.timestamp + 1 hours, mockOracle, 3000 * 10 ** 8, testPoolKey
         );
+
+        // Verify they have different IDs
+        assertNotEq(marketIdToCreate, secondMarketId, "Creating market with same params should result in a new ID");
+
+        // Verify both markets exist and have the expected properties
+        (uint256 id1,,,,,,,,,,) = pool.getMarketDetails(marketIdToCreate);
+        (uint256 id2,,,,,,,,,,) = pool.getMarketDetails(secondMarketId);
+        assertEq(id1, marketIdToCreate, "First market ID should match");
+        assertEq(id2, secondMarketId, "Second market ID should match");
     }
 
     function testRecordPrediction() public {
-        uint256 marketIdToTest = 1;
         address predictor = user1;
         PredictionTypes.Outcome outcome = PredictionTypes.Outcome.Bearish;
         uint256 stakeAmount = 0.02 ether;
 
         vm.prank(owner);
-        pool.createMarket(
-            marketIdToTest, "Test Market", "ETHUSD", block.timestamp + 1 hours, mockOracle, 3000 * 10 ** 8
-        );
+        uint256 marketIdToTest = pool.createMarket(
+            "Test Market", "ETHUSD", block.timestamp + 1 hours, mockOracle, 3000 * 10 ** 8, testPoolKey
+        ); // New
 
         uint256 initialPoolBalance = address(pool).balance;
         uint256 initialTreasuryBalance = treasuryAddress.balance;
@@ -227,7 +261,7 @@ contract PredictionManagerTest is Test {
         uint256 nonExistentMarketId = 99;
         uint256 stakeAmount = initialMinStakeAmount;
         address predictor = user1;
-        PredictionTypes.Outcome outcomeToPredict = PredictionTypes.Outcome.Bearish;
+        PredictionTypes.Outcome outcomeToPredict = PredictionTypes.Outcome.Bullish;
 
         uint256 feeBps = pool.protocolFeeBasisPoints();
         uint256 protocolFee = (stakeAmount * feeBps) / 10000;
@@ -241,9 +275,7 @@ contract PredictionManagerTest is Test {
     function testRecordPrediction_Reverts_AmountCannotBeZero_MsgValueZero() public {
         uint256 marketIdToTest = 1;
         vm.prank(owner);
-        pool.createMarket(
-            marketIdToTest, "Test Market", "ETHUSD", block.timestamp + 1 hours, mockOracle, 3000 * 10 ** 8
-        );
+        pool.createMarket("Test Market", "ETHUSD", block.timestamp + 1 hours, mockOracle, 3000 * 10 ** 8, testPoolKey);
 
         address predictor = user1;
         PredictionTypes.Outcome outcomeToPredict = PredictionTypes.Outcome.Bearish;
@@ -256,9 +288,7 @@ contract PredictionManagerTest is Test {
     function testRecordPrediction_Reverts_AmountCannotBeZero_NetStakeZeroDueToFee() public {
         uint256 marketIdToTest = 1;
         vm.prank(owner);
-        pool.createMarket(
-            marketIdToTest, "Test Market", "ETHUSD", block.timestamp + 1 hours, mockOracle, 3000 * 10 ** 8
-        );
+        pool.createMarket("Test Market", "ETHUSD", block.timestamp + 1 hours, mockOracle, 3000 * 10 ** 8, testPoolKey);
 
         address predictor = user1;
         PredictionTypes.Outcome outcomeToPredict = PredictionTypes.Outcome.Bullish;
@@ -284,10 +314,14 @@ contract PredictionManagerTest is Test {
     }
 
     function testCannotRecordAfterMarketResolved() public {
-        uint256 marketIdToTest = 2;
         vm.prank(owner);
-        pool.createMarket(
-            marketIdToTest, "Test Market", "ETHUSD", block.timestamp + 1 hours, mockOracle, 3000 * 10 ** 8
+        uint256 marketIdToTest = pool.createMarket(
+            "Test Market",
+            "ETHUSD",
+            block.timestamp + 1 hours,
+            mockOracle,
+            3000 * 10 ** 8,
+            testPoolKey // New
         );
 
         // Resolve the market
@@ -319,13 +353,22 @@ contract PredictionManagerTest is Test {
         uint256 tokenIdForNonExistentMarket = 88;
 
         vm.prank(owner);
-        pool.createMarket(1, "Test Market", "ETHUSD", block.timestamp + 1 hours, mockOracle, 3000 * 10 ** 8);
+        uint256 marketOneId = pool.createMarket(
+            "Test Market", "ETHUSD", block.timestamp + 1 hours, mockOracle, 3000 * 10 ** 8, testPoolKey
+        ); // New, create market 1
         vm.prank(oracleResolverAddress);
-        pool.resolveMarket(1, PredictionTypes.Outcome.Bullish, 0);
+        pool.resolveMarket(marketOneId, PredictionTypes.Outcome.Bullish, 0);
 
         vm.prank(owner);
+        // This will create a new market with a new ID, not necessarily nonExistentMarketIdForNFT
+        /* uint256 actualMarketId = */
         pool.createMarket(
-            nonExistentMarketIdForNFT, "Test Market", "ETHUSD", block.timestamp + 1 hours, mockOracle, 3000 * 10 ** 8
+            "Market For NFT",
+            "NFTMK",
+            block.timestamp + 1 hours,
+            mockOracle,
+            3000 * 10 ** 8,
+            testPoolKey // New
         );
 
         vm.mockCall(
@@ -341,7 +384,9 @@ contract PredictionManagerTest is Test {
         );
 
         vm.prank(rewardDistributorAddress);
-        vm.expectRevert(MarketLogic.MarketNotResolved.selector); // MarketLogic will revert if market does not exist or is not resolved
+        vm.expectRevert(
+            abi.encodeWithSelector(PredictionManager.MarketDoesNotExist.selector, nonExistentMarketIdForNFT)
+        );
         pool.claimReward(tokenIdForNonExistentMarket);
     }
 }
