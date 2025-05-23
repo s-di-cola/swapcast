@@ -1,5 +1,5 @@
 # PredictionManager
-[Git Source](https://github.com/s-di-cola/swapcast/blob/e3a4a8500a708ca47d37ab0d086dccb943c32a39/src/PredictionManager.sol)
+[Git Source](https://github.com/s-di-cola/swapcast/blob/ba2fdc6e1d72f031c7a1c408325851028341c3b0/src/PredictionManager.sol)
 
 **Inherits:**
 Ownable, [IPredictionManager](/src/interfaces/IPredictionManager.sol/interface.IPredictionManager.md), [IPredictionManagerForResolver](/src/interfaces/IPredictionManagerForResolver.sol/interface.IPredictionManagerForResolver.md), [IPredictionManagerForDistributor](/src/interfaces/IPredictionManagerForDistributor.sol/interface.IPredictionManagerForDistributor.md), ILogAutomation, AutomationCompatibleInterface, IERC721Receiver
@@ -131,6 +131,7 @@ modifier onlyRewardDistributorContract();
 
 ```solidity
 constructor(
+    address _initialOwner,
     address _swapCastNFTAddress,
     address _treasuryAddress,
     uint256 _initialFeeBasisPoints,
@@ -138,7 +139,7 @@ constructor(
     uint256 _maxPriceStalenessSeconds,
     address _oracleResolverAddress,
     address _rewardDistributorAddress
-) Ownable();
+) Ownable(_initialOwner);
 ```
 
 ### createMarket

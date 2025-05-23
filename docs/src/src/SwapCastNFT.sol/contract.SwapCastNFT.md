@@ -1,5 +1,5 @@
 # SwapCastNFT
-[Git Source](https://github.com/s-di-cola/swapcast/blob/e3a4a8500a708ca47d37ab0d086dccb943c32a39/src/SwapCastNFT.sol)
+[Git Source](https://github.com/s-di-cola/swapcast/blob/ba2fdc6e1d72f031c7a1c408325851028341c3b0/src/SwapCastNFT.sol)
 
 **Inherits:**
 ERC721, Ownable, [ISwapCastNFT](/src/interfaces/ISwapCastNFT.sol/interface.ISwapCastNFT.md)
@@ -57,7 +57,9 @@ Contract constructor.
 
 
 ```solidity
-constructor(address _initialOwner, string memory _name, string memory _symbol) ERC721(_name, _symbol);
+constructor(address _initialOwner, string memory _name, string memory _symbol)
+    ERC721(_name, _symbol)
+    Ownable(_initialOwner);
 ```
 **Parameters**
 

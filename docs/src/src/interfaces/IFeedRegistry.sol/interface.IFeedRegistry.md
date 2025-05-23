@@ -1,5 +1,5 @@
 # IFeedRegistry
-[Git Source](https://github.com/s-di-cola/swapcast/blob/e3a4a8500a708ca47d37ab0d086dccb943c32a39/src/interfaces/IFeedRegistry.sol)
+[Git Source](https://github.com/s-di-cola/swapcast/blob/ba2fdc6e1d72f031c7a1c408325851028341c3b0/src/interfaces/IFeedRegistry.sol)
 
 Interface for Chainlink's Feed Registry
 
