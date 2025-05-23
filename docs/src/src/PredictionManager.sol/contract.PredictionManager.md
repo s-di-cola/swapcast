@@ -1,5 +1,5 @@
 # PredictionManager
-[Git Source](https://github.com/s-di-cola/swapcast/blob/fad58d146ceec24a381bacc00435a7ccd6d46a34/src/PredictionManager.sol)
+[Git Source](https://github.com/s-di-cola/swapcast/blob/e3a4a8500a708ca47d37ab0d086dccb943c32a39/src/PredictionManager.sol)
 
 **Inherits:**
 Ownable, [IPredictionManager](/src/interfaces/IPredictionManager.sol/interface.IPredictionManager.md), [IPredictionManagerForResolver](/src/interfaces/IPredictionManagerForResolver.sol/interface.IPredictionManagerForResolver.md), [IPredictionManagerForDistributor](/src/interfaces/IPredictionManagerForDistributor.sol/interface.IPredictionManagerForDistributor.md), ILogAutomation, AutomationCompatibleInterface, IERC721Receiver
@@ -9,7 +9,7 @@ SwapCast Team
 
 Manages the creation and registry of prediction markets. Coordinates with OracleResolver,
 RewardDistributor, and SwapCastNFT. Uses MarketLogic library for core market operations.
-Integrates with Chainlink Automation for market expiration and resolution.
+Integrates with Chainlink Automtion for market expiration and resolution.
 
 
 ## State Variables
@@ -97,6 +97,20 @@ address public rewardDistributorAddress;
 ```
 
 
+### marketIdToPoolKey
+
+```solidity
+mapping(uint256 => PoolKey) public marketIdToPoolKey;
+```
+
+
+### _nextMarketId
+
+```solidity
+uint256 private _nextMarketId = 1;
+```
+
+
 ## Functions
 ### onlyOracleResolverContract
 
@@ -132,13 +146,13 @@ constructor(
 
 ```solidity
 function createMarket(
-    uint256 _marketId,
     string memory _name,
     string memory _assetSymbol,
     uint256 _expirationTime,
     address _priceAggregator,
-    uint256 _priceThreshold
-) external onlyOwner;
+    uint256 _priceThreshold,
+    PoolKey calldata _poolKey
+) external onlyOwner returns (uint256 marketId);
 ```
 
 ### setFeeConfiguration
@@ -609,6 +623,12 @@ error InvalidUpkeepData(string reason);
 
 ```solidity
 error StakeMismatch(uint256 actual, uint256 declared);
+```
+
+### EmptyMarketName
+
+```solidity
+error EmptyMarketName();
 ```
 
 ## Structs
