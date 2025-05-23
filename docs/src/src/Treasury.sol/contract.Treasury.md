@@ -1,8 +1,8 @@
 # Treasury
-[Git Source](https://github.com/s-di-cola/swapcast/blob/ba2fdc6e1d72f031c7a1c408325851028341c3b0/src/Treasury.sol)
+[Git Source](https://github.com/s-di-cola/swapcast/blob/2a5fbcf2444e0ac43b208ab177dd275c83817321/src/Treasury.sol)
 
 **Inherits:**
-Ownable
+Ownable, ReentrancyGuard
 
 **Author:**
 Simone Di Cola
@@ -17,6 +17,8 @@ at deployment, can initiate withdrawals. It employs standard OpenZeppelin Ownabl
 ### constructor
 
 Contract constructor.
+
+*Reverts if initialOwner is address(0).*
 
 
 ```solidity
@@ -53,7 +55,7 @@ Emits an {OwnerWithdrawal} event on successful withdrawal.*
 
 
 ```solidity
-function withdraw(uint256 _amount, address payable _to) external onlyOwner;
+function withdraw(uint256 _amount, address payable _to) external onlyOwner nonReentrant;
 ```
 **Parameters**
 
@@ -74,7 +76,7 @@ Emits an {OwnerWithdrawal} event on successful withdrawal.*
 
 
 ```solidity
-function withdrawAll(address payable _to) external onlyOwner;
+function withdrawAll(address payable _to) external onlyOwner nonReentrant;
 ```
 **Parameters**
 

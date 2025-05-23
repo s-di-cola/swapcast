@@ -1,5 +1,5 @@
 # IPredictionManagerForResolver
-[Git Source](https://github.com/s-di-cola/swapcast/blob/ba2fdc6e1d72f031c7a1c408325851028341c3b0/src/interfaces/IPredictionManagerForResolver.sol)
+[Git Source](https://github.com/s-di-cola/swapcast/blob/2a5fbcf2444e0ac43b208ab177dd275c83817321/src/interfaces/IPredictionManagerForResolver.sol)
 
 **Author:**
 SwapCast Developers
