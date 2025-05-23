@@ -35,20 +35,26 @@ contract PredictionManager is
     // --- Constants ---
     bytes32 public constant MARKET_EXPIRED_SIGNATURE = keccak256("MarketExpired(uint256,uint256)");
 
+    // --- Constants ---
+    uint256 public constant MAX_BASIS_POINTS = 10_000; // 100% in basis points
+
     // --- State Variables ---
-    ISwapCastNFT public swapCastNFT;
     address public treasuryAddress;
+    address public oracleResolverAddress;
+    address public rewardDistributorAddress;
+    ISwapCastNFT public swapCastNFT;
+
     uint256 public protocolFeeBasisPoints;
     uint256 public minStakeAmount; // Global minimum stake amount
     uint256 public defaultMarketMinStake; // Default minimum stake for new markets
+    uint256 public maxPriceStalenessSeconds;
+
     mapping(uint256 => Market) internal markets;
     mapping(uint256 => uint256) public marketMinStakes; // Market-specific minimum stakes
-    uint256[] private _marketIdsList;
-    uint256 public maxPriceStalenessSeconds;
-    address public oracleResolverAddress; // For permissioning OracleResolver calls
-    address public rewardDistributorAddress; // For permissioning RewardDistributor calls  uint256 private _nextMarketId = 1; // Start market IDs from 1
     mapping(uint256 => PoolKey) public marketIdToPoolKey;
-    uint256 private _nextMarketId = 1;
+
+    uint256[] private _marketIdsList;
+    uint256 private _nextMarketId = 1; // Start market IDs from 1
 
     // --- Enums ---
     enum LogAction {
@@ -240,7 +246,7 @@ contract PredictionManager is
     // --- Fee and Stake Configuration ---
     function setFeeConfiguration(address _newTreasuryAddress, uint256 _newFeeBasisPoints) external onlyOwner {
         if (_newTreasuryAddress == address(0)) revert ZeroAddressInput();
-        if (_newFeeBasisPoints > 10000) {
+        if (_newFeeBasisPoints > MAX_BASIS_POINTS) {
             revert InvalidFeeBasisPoints(_newFeeBasisPoints);
         }
         treasuryAddress = _newTreasuryAddress;
@@ -327,40 +333,42 @@ contract PredictionManager is
 
     // --- Prediction Logic (IPredictionManager Implementation) ---
     function recordPrediction(
-        address _user, // Actual staker
+        address _user,
         uint256 _marketId,
         PredictionTypes.Outcome _outcome,
-        uint128 _convictionStakeDeclared // Amount user intends to stake, from hook/router
+        uint128 _convictionStakeDeclared
     ) external payable override {
-        if (_user == address(0)) revert ZeroAddressInput();
-        if (_convictionStakeDeclared == 0) revert AmountCannotBeZero();
+        // Cache storage variables in memory
+        uint256 feeBasis = protocolFeeBasisPoints;
+        uint256 stakeAmount = uint256(_convictionStakeDeclared);
 
-        uint256 fee = (uint256(_convictionStakeDeclared) * protocolFeeBasisPoints) / 10000;
-        uint256 expectedValue = uint256(_convictionStakeDeclared) + fee;
+        if (_user == address(0)) revert ZeroAddressInput();
+        if (stakeAmount == 0) revert AmountCannotBeZero();
+
+        // Calculate fee and expected value using cached values
+        uint256 fee = (stakeAmount * feeBasis) / MAX_BASIS_POINTS;
+        uint256 expectedValue = stakeAmount + fee; // No overflow check needed due to previous checks
 
         if (msg.value != expectedValue) {
             revert StakeMismatch(msg.value, expectedValue);
         }
 
+        // Cache market in memory
         Market storage market = markets[_marketId];
         if (!market.exists) revert MarketDoesNotExist(_marketId);
-        // MarketLogic will handle checks for market resolved, already predicted, amounts, expiration, etc.
 
-        // Get the market-specific minimum stake amount, or fall back to global minimum if not set
-        uint256 marketSpecificMinStake = marketMinStakes[_marketId];
+        // Get market-specific min stake, defaulting to global min if not set
+        uint256 minStake = marketMinStakes[_marketId];
+        if (minStake == 0) {
+            minStake = minStakeAmount;
+        }
 
-        // Call the library function which now does most of the work including fee calculation, fee transfer, and NFT minting.
+        // Call library function
         (uint256 stakeAmountNet, uint256 protocolFee) = market.recordPrediction(
-            _user,
-            _outcome,
-            _convictionStakeDeclared, // This is effectively msg.value
-            swapCastNFT, // Pass the ISwapCastNFT instance directly
-            treasuryAddress, // Pass the address for fees
-            protocolFeeBasisPoints, // Pass the fee percentage
-            marketSpecificMinStake // Pass the market-specific minimum stake amount
+            _user, _outcome, _convictionStakeDeclared, swapCastNFT, treasuryAddress, feeBasis, minStake
         );
 
-        // Emit events based on values returned from the library call
+        // Emit events
         if (protocolFee > 0) {
             emit FeePaid(_marketId, _user, protocolFee);
         }
@@ -458,6 +466,47 @@ contract PredictionManager is
     function getMarketIdAtIndex(uint256 _index) external view returns (uint256) {
         if (_index >= _marketIdsList.length) revert InvalidMarketId(); // Or specific out of bounds error
         return _marketIdsList[_index];
+    }
+
+    function getActiveMarkets() external view returns (uint256[] memory) {
+        uint256 count = _marketIdsList.length;
+        uint256[] memory activeMarkets = new uint256[](count);
+        uint256 activeCount = 0;
+
+        // Cache storage variables in memory
+        uint256 currentTime = block.timestamp;
+
+        // Use unchecked for gas savings (i can't overflow due to array bounds)
+        for (uint256 i = 0; i < count;) {
+            uint256 marketId = _marketIdsList[i];
+            Market storage market = markets[marketId];
+
+            if (!market.resolved && market.expirationTime > currentTime) {
+                activeMarkets[activeCount] = marketId;
+                unchecked {
+                    activeCount++;
+                }
+            }
+
+            unchecked {
+                i++;
+            }
+        }
+
+        // Trim the array to remove empty slots
+        if (count == activeCount) {
+            return activeMarkets; // No need to trim if all are active
+        }
+
+        uint256[] memory result = new uint256[](activeCount);
+        for (uint256 i = 0; i < activeCount;) {
+            result[i] = activeMarkets[i];
+            unchecked {
+                i++;
+            }
+        }
+
+        return result;
     }
 
     // --- Log Automation Logic (ILogAutomation) ---
@@ -568,7 +617,6 @@ contract PredictionManager is
                 market.exists && !market.resolved && market.expirationTime > 0
                     && market.expirationTime <= block.timestamp
             ) {
-                // Market is expired and needs the event emitted for log-based automation to pick up.
                 marketIdsToNotify[count] = marketId;
                 count++;
             }
