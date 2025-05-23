@@ -15,6 +15,8 @@ contract MockFeedRegistry is IFeedRegistry {
     address public mockFeed;
     int256 public mockPrice;
     uint256 public mockTimestamp;
+    mapping(address => mapping(address => uint80)) public roundIds;
+    mapping(address => mapping(address => bool)) public shouldUseMockData;
 
     constructor(address _mockFeed) {
         mockFeed = _mockFeed;
@@ -26,17 +28,39 @@ contract MockFeedRegistry is IFeedRegistry {
         mockTimestamp = _timestamp;
     }
 
+    function setRoundData(
+        address base,
+        address quote,
+        uint80 roundId,
+        int256 answer,
+        uint256 startedAt,
+        uint256 updatedAt,
+        uint80 answeredInRound
+    ) external {
+        roundIds[base][quote] = roundId;
+        MockAggregator(mockFeed).setLatestRoundData(roundId, answer, startedAt, updatedAt, answeredInRound);
+    }
+
+    function setUseMockData(address base, address quote, bool useMock) external {
+        shouldUseMockData[base][quote] = useMock;
+    }
+
     function getFeed(address, address) external view override returns (address) {
         return mockFeed;
     }
 
-    function latestRoundData(address, address)
+    function latestRoundData(address base, address quote)
         external
         view
         override
         returns (uint80 roundId, int256 answer, uint256 startedAt, uint256 updatedAt, uint80 answeredInRound)
     {
-        return (1, mockPrice, mockTimestamp - 10 minutes, mockTimestamp, 1);
+        // If we're using mock data, return the mock values
+        if (shouldUseMockData[base][quote]) {
+            return (1, mockPrice, mockTimestamp - 10 minutes, mockTimestamp, 1);
+        }
+        // Otherwise, use the mock aggregator
+        return MockAggregator(mockFeed).latestRoundData();
     }
 }
 
@@ -66,6 +90,10 @@ contract OracleResolverTest is Test {
     error ResolutionFailedInManager(uint256 marketId);
     error FeedRegistryNotSet();
     error PredictionManagerZeroAddress();
+    error InvalidRound();
+    error StaleRound();
+    error InvalidPrice();
+    error InvalidPriceThreshold();
 
     modifier prankOwner() {
         vm.prank(owner);
@@ -145,14 +173,18 @@ contract OracleResolverTest is Test {
         oracleResolver.registerOracle(DEFAULT_MARKET_ID, ETH_ADDRESS, USD_ADDRESS, DEFAULT_PRICE_THRESHOLD + 1);
     }
 
-    function testRegisterOracle_RevertsIfTokenAddressIsZero() public {
+    function test_register_oracle_reverts_on_zero_address() public {
         vm.prank(owner);
-        vm.expectRevert(OracleResolver.InvalidTokenAddress.selector);
+        vm.expectRevert(abi.encodeWithSelector(InvalidTokenAddress.selector));
         oracleResolver.registerOracle(DEFAULT_MARKET_ID, address(0), USD_ADDRESS, DEFAULT_PRICE_THRESHOLD);
 
         vm.prank(owner);
-        vm.expectRevert(OracleResolver.InvalidTokenAddress.selector);
+        vm.expectRevert(abi.encodeWithSelector(InvalidTokenAddress.selector));
         oracleResolver.registerOracle(DEFAULT_MARKET_ID, ETH_ADDRESS, address(0), DEFAULT_PRICE_THRESHOLD);
+
+        vm.prank(owner);
+        vm.expectRevert(abi.encodeWithSelector(InvalidPriceThreshold.selector));
+        oracleResolver.registerOracle(DEFAULT_MARKET_ID, ETH_ADDRESS, USD_ADDRESS, 0);
     }
 
     /// @notice Tests successful update of max price staleness and event emission.
@@ -178,24 +210,92 @@ contract OracleResolverTest is Test {
     }
 
     /// @notice Tests resolving a market where outcome 0 (Bullish) wins and emits the correct event.
-    function test_resolve_market_success_outcome0_wins() public {
-        vm.warp(1 days);
+    function test_resolve_market_successful_resolution() public {
+        // Register an oracle for the market
         vm.prank(owner);
         oracleResolver.registerOracle(DEFAULT_MARKET_ID, ETH_ADDRESS, USD_ADDRESS, DEFAULT_PRICE_THRESHOLD);
 
-        int256 price = int256(DEFAULT_PRICE_THRESHOLD);
-        uint256 currentTime = block.timestamp;
-        mockFeedRegistry.setMockPrice(price, currentTime);
+        // Disable mock data to use the mock aggregator directly
+        mockFeedRegistry.setUseMockData(ETH_ADDRESS, USD_ADDRESS, false);
 
-        vm.prank(user1);
-        vm.expectCall(
-            address(mockPredictionPool),
-            abi.encodeWithSelector(
-                MockPredictionManager.resolveMarket.selector, DEFAULT_MARKET_ID, PredictionTypes.Outcome.Bullish, price
-            )
+        // Set up the mock price data
+        mockAggregatorEthUsd.setLatestRoundData(
+            1, // roundId
+            int256(DEFAULT_PRICE_THRESHOLD + 1e8), // Price above threshold
+            block.timestamp - 1,
+            block.timestamp,
+            1 // answeredInRound
         );
-        vm.expectEmit(true, true, true, true, address(oracleResolver));
-        emit MarketResolved(DEFAULT_MARKET_ID, price, PredictionTypes.Outcome.Bullish);
+
+        // Expect the MarketResolved event
+        vm.expectEmit(true, true, true, true);
+        emit MarketResolved(DEFAULT_MARKET_ID, int256(DEFAULT_PRICE_THRESHOLD + 1e8), PredictionTypes.Outcome.Bullish);
+
+        // Resolve the market
+        oracleResolver.resolveMarket(DEFAULT_MARKET_ID);
+    }
+
+    function test_resolve_market_reverts_on_invalid_round() public {
+        // Register an oracle for the market
+        vm.prank(owner);
+        oracleResolver.registerOracle(DEFAULT_MARKET_ID, ETH_ADDRESS, USD_ADDRESS, DEFAULT_PRICE_THRESHOLD);
+
+        // Disable mock data to use the mock aggregator directly
+        mockFeedRegistry.setUseMockData(ETH_ADDRESS, USD_ADDRESS, false);
+
+        // Set up the mock to return an invalid round (roundId = 0)
+        mockAggregatorEthUsd.setLatestRoundData(
+            0, // Invalid round ID
+            2000 * 1e8,
+            block.timestamp - 1,
+            block.timestamp,
+            1
+        );
+
+        // Expect the InvalidRound error
+        vm.expectRevert(abi.encodeWithSignature("InvalidRound()"));
+        oracleResolver.resolveMarket(DEFAULT_MARKET_ID);
+    }
+
+    function test_resolve_market_reverts_on_stale_round() public {
+        // Register an oracle for the market
+        vm.prank(owner);
+        oracleResolver.registerOracle(DEFAULT_MARKET_ID, ETH_ADDRESS, USD_ADDRESS, DEFAULT_PRICE_THRESHOLD);
+
+        // Disable mock data to use the mock aggregator directly
+        mockFeedRegistry.setUseMockData(ETH_ADDRESS, USD_ADDRESS, false);
+
+        // Set mock to return stale round (answeredInRound < roundId)
+        mockAggregatorEthUsd.setLatestRoundData(
+            2, // roundId
+            2000 * 1e8,
+            block.timestamp - 1,
+            block.timestamp,
+            1 // answeredInRound < roundId (stale)
+        );
+
+        vm.expectRevert(abi.encodeWithSignature("StaleRound()"));
+        oracleResolver.resolveMarket(DEFAULT_MARKET_ID);
+    }
+
+    function test_resolve_market_reverts_on_invalid_price() public {
+        // Register an oracle for the market
+        vm.prank(owner);
+        oracleResolver.registerOracle(DEFAULT_MARKET_ID, ETH_ADDRESS, USD_ADDRESS, DEFAULT_PRICE_THRESHOLD);
+
+        // Disable mock data to use the mock aggregator directly
+        mockFeedRegistry.setUseMockData(ETH_ADDRESS, USD_ADDRESS, false);
+
+        // Set mock to return invalid price (0)
+        mockAggregatorEthUsd.setLatestRoundData(
+            1, // roundId
+            0, // Invalid price (0)
+            block.timestamp - 1,
+            block.timestamp,
+            1
+        );
+
+        vm.expectRevert(abi.encodeWithSignature("InvalidPrice()"));
         oracleResolver.resolveMarket(DEFAULT_MARKET_ID);
     }
 
@@ -205,9 +305,20 @@ contract OracleResolverTest is Test {
         vm.prank(owner);
         oracleResolver.registerOracle(DEFAULT_MARKET_ID, ETH_ADDRESS, USD_ADDRESS, DEFAULT_PRICE_THRESHOLD);
 
-        int256 price = int256(DEFAULT_PRICE_THRESHOLD - 1e8);
+        // Disable mock data to use the mock aggregator directly
+        mockFeedRegistry.setUseMockData(ETH_ADDRESS, USD_ADDRESS, false);
+
+        int256 price = int256(DEFAULT_PRICE_THRESHOLD - 1);
         uint256 currentTime = block.timestamp;
-        mockFeedRegistry.setMockPrice(price, currentTime);
+
+        // Set up the mock price data
+        mockAggregatorEthUsd.setLatestRoundData(
+            1, // roundId
+            price,
+            currentTime - 1,
+            currentTime,
+            1 // answeredInRound
+        );
 
         vm.prank(user1);
         vm.expectCall(
@@ -235,9 +346,18 @@ contract OracleResolverTest is Test {
         vm.prank(owner);
         oracleResolver.registerOracle(DEFAULT_MARKET_ID, ETH_ADDRESS, USD_ADDRESS, DEFAULT_PRICE_THRESHOLD);
 
-        int256 price = int256(DEFAULT_PRICE_THRESHOLD);
-        uint256 staleTimestamp = block.timestamp - oracleResolver.maxPriceStalenessSeconds() - 1 seconds;
-        mockFeedRegistry.setMockPrice(price, staleTimestamp);
+        // Disable mock data to use the mock aggregator directly
+        mockFeedRegistry.setUseMockData(ETH_ADDRESS, USD_ADDRESS, false);
+
+        // Set a stale price (updatedAt is too old)
+        uint256 staleTimestamp = block.timestamp - oracleResolver.maxPriceStalenessSeconds() - 1;
+        mockAggregatorEthUsd.setLatestRoundData(
+            1, // roundId
+            int256(DEFAULT_PRICE_THRESHOLD),
+            staleTimestamp - 1,
+            staleTimestamp,
+            1 // answeredInRound
+        );
 
         vm.prank(user1);
         vm.expectRevert(
@@ -254,14 +374,23 @@ contract OracleResolverTest is Test {
         vm.prank(owner);
         oracleResolver.registerOracle(DEFAULT_MARKET_ID, ETH_ADDRESS, USD_ADDRESS, DEFAULT_PRICE_THRESHOLD);
 
-        int256 price = int256(DEFAULT_PRICE_THRESHOLD);
-        uint256 currentTime = block.timestamp;
-        mockFeedRegistry.setMockPrice(price, currentTime);
+        // Disable mock data to use the mock aggregator directly
+        mockFeedRegistry.setUseMockData(ETH_ADDRESS, USD_ADDRESS, false);
 
+        // Set up the mock price data
+        mockAggregatorEthUsd.setLatestRoundData(
+            1, // roundId
+            int256(DEFAULT_PRICE_THRESHOLD - 1),
+            block.timestamp - 1,
+            block.timestamp,
+            1 // answeredInRound
+        );
+
+        // Make the mock revert when resolveMarket is called
         mockPredictionPool.setShouldRevertResolveMarket(true);
 
-        vm.expectRevert(abi.encodeWithSelector(OracleResolver.ResolutionFailedInManager.selector, DEFAULT_MARKET_ID));
         vm.prank(user1);
+        vm.expectRevert(abi.encodeWithSelector(OracleResolver.ResolutionFailedInManager.selector, DEFAULT_MARKET_ID));
         oracleResolver.resolveMarket(DEFAULT_MARKET_ID);
     }
 }

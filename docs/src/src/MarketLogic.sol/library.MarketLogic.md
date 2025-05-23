@@ -1,5 +1,5 @@
 # MarketLogic
-[Git Source](https://github.com/s-di-cola/swapcast/blob/2a5fbcf2444e0ac43b208ab177dd275c83817321/src/MarketLogic.sol)
+[Git Source](https://github.com/s-di-cola/swapcast/blob/3f00baab77fb25825c8005e3be91e9887574dca5/src/MarketLogic.sol)
 
 **Author:**
 Simone Di Cola
@@ -332,4 +332,18 @@ Thrown when attempting to resolve a market that has not yet expired.
 ```solidity
 error MarketNotYetExpired();
 ```
+
+### ZeroAddress
+Thrown when an operation is attempted with a zero address where it's not allowed (e.g., withdrawing to address(0)).
+
+
+```solidity
+error ZeroAddress(string message);
+```
+
+**Parameters**
+
+|Name|Type|Description|
+|----|----|-----------|
+|`message`|`string`|A descriptive message explaining the context of the zero address error.|
 

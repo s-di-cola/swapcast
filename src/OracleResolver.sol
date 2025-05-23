@@ -14,6 +14,9 @@ import {PredictionTypes} from "./types/PredictionTypes.sol";
  * @dev It allows the owner to register Chainlink price feed aggregators for specific market IDs and price thresholds.
  *      Anyone can then trigger the resolution of a registered market. Upon resolution, it calls the PredictionManager
  *      to update the market's state with the winning outcome. The PredictionManager address is set immutably at deployment.
+ *
+ * @dev Price feeds are expected to return values with 8 decimal places, which is the standard for most Chainlink feeds.
+ *      The contract validates the integrity of the price feed data before using it for market resolution.
  */
 contract OracleResolver is Ownable {
     /**
@@ -106,6 +109,31 @@ contract OracleResolver is Ownable {
     error PriceIsStale(uint256 marketId, uint256 lastUpdatedAt, uint256 currentBlockTimestamp);
 
     /**
+     * @notice Reverts if the price feed returns an invalid round ID.
+     */
+    error InvalidRound();
+
+    /**
+     * @notice Reverts if the price feed returns a stale round.
+     */
+    error StaleRound();
+
+    /**
+     * @notice Reverts if the price feed returns an invalid price (zero or negative).
+     */
+    error InvalidPrice();
+
+    /**
+     * @notice Reverts if the price threshold is set to zero.
+     */
+    error InvalidPriceThreshold();
+
+    /**
+     * @notice Reverts if the feed registry returns a zero address for the feed.
+     */
+    error FeedRegistryNotSet();
+
+    /**
      * @notice Constructs a new OracleResolver instance.
      * @param _predictionManagerAddress The address of the PredictionManager contract this resolver will interact with.
      * @param _feedRegistryAddress The address of the Chainlink Feed Registry contract.
@@ -129,6 +157,11 @@ contract OracleResolver is Ownable {
      * @param _baseToken The base token address (e.g., ETH).
      * @param _quoteToken The quote token address (e.g., USD).
      * @param _priceThreshold The price threshold for determining the winning outcome.
+     *        Must be greater than zero and is assumed to be in the feed's native decimals (typically 8).
+     * @custom:reverts InvalidTokenAddress If either token address is zero
+     * @custom:reverts OracleAlreadyRegistered If an oracle is already registered for this market
+     * @custom:reverts FeedRegistryNotSet If the feed registry returns a zero address for the feed
+     * @custom:reverts InvalidPriceThreshold If the price threshold is set to zero
      */
     function registerOracle(uint256 _marketId, address _baseToken, address _quoteToken, uint256 _priceThreshold)
         external
@@ -136,9 +169,11 @@ contract OracleResolver is Ownable {
     {
         if (marketOracles[_marketId].isRegistered) revert OracleAlreadyRegistered(_marketId);
         if (_baseToken == address(0) || _quoteToken == address(0)) revert InvalidTokenAddress();
+        if (_priceThreshold == 0) revert InvalidPriceThreshold();
 
         // Verify the feed exists by attempting to get the feed address
-        feedRegistry.getFeed(_baseToken, _quoteToken);
+        address feedAddress = feedRegistry.getFeed(_baseToken, _quoteToken);
+        if (feedAddress == address(0)) revert FeedRegistryNotSet();
 
         marketOracles[_marketId] = MarketOracle({
             baseToken: _baseToken,
@@ -168,34 +203,38 @@ contract OracleResolver is Ownable {
      *      Outcome 1 is declared winner if `oracle_price < priceThreshold`.
      *      Calls `PredictionManager.resolveMarket()` to finalize the resolution.
      *      Emits {MarketResolved} on successful resolution via the PredictionManager.
-     *      Reverts with {OracleNotRegistered} if no oracle is set for the market,
-     *      or {ResolutionFailedInManager} if the call to PredictionManager fails.
+     *      Reverts with:
+     *      - {OracleNotRegistered} if no oracle is set for the market
+     *      - {PriceIsStale} if the price data is too old
+     *      - {InvalidRound} if the round ID is invalid
+     *      - {StaleRound} if the round is not the latest
+     *      - {InvalidPrice} if the price is zero or negative
+     *      - {ResolutionFailedInManager} if the call to PredictionManager fails
      * @param _marketId The ID of the market to resolve.
      */
     function resolveMarket(uint256 _marketId) external {
         MarketOracle storage mo = marketOracles[_marketId];
         if (!mo.isRegistered) revert OracleNotRegistered(_marketId);
 
-        // Fetch the latest price from the Chainlink Feed Registry
-        (, int256 price,, uint256 lastUpdatedAt,) = feedRegistry.latestRoundData(mo.baseToken, mo.quoteToken);
+        // Fetch the latest price from the Chainlink Feed Registry with full validation
+        (uint80 roundId, int256 price,, uint256 updatedAt, uint80 answeredInRound) =
+            feedRegistry.latestRoundData(mo.baseToken, mo.quoteToken);
 
-        if (block.timestamp - lastUpdatedAt > maxPriceStalenessSeconds) {
-            revert PriceIsStale(_marketId, lastUpdatedAt, block.timestamp);
+        // Validate price feed data
+        if (roundId == 0) revert InvalidRound();
+        if (answeredInRound < roundId) revert StaleRound();
+        if (price <= 0) revert InvalidPrice();
+        if (block.timestamp - updatedAt > maxPriceStalenessSeconds) {
+            revert PriceIsStale(_marketId, updatedAt, block.timestamp);
         }
 
-        PredictionTypes.Outcome winningOutcome;
-        // Note: Chainlink prices can be negative for certain data types, but for typical asset prices,
-        // they are positive. Casting `price` (int256) to `uint256` is safe if positive prices are expected.
-        // `priceThreshold` is uint256, implying positive comparison values.
-        if (uint256(price) >= mo.priceThreshold) {
-            winningOutcome = PredictionTypes.Outcome.Bullish; // e.g., Price will be AT or ABOVE X
-        } else {
-            winningOutcome = PredictionTypes.Outcome.Bearish; // e.g., Price will be BELOW X
-        }
+        // Determine the winning outcome based on the price threshold
+        // Note: Safe to cast price to uint256 after validating it's positive
+        PredictionTypes.Outcome winningOutcome = uint256(price) >= mo.priceThreshold
+            ? PredictionTypes.Outcome.Bullish // Price is AT or ABOVE threshold
+            : PredictionTypes.Outcome.Bearish; // Price is BELOW threshold
 
         try predictionManager.resolveMarket(_marketId, winningOutcome, price) {
-            // Emitting MarketResolved here indicates this OracleResolver initiated and observed successful pool resolution.
-            // PredictionManager might emit its own event as well (e.g., IPredictionManagerForResolver.MarketResolved).
             emit MarketResolved(_marketId, price, winningOutcome);
         } catch {
             revert ResolutionFailedInManager(_marketId);
