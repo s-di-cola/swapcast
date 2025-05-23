@@ -92,6 +92,12 @@ library MarketLogic {
     error MarketNotYetExpired();
 
     /**
+     * @notice Thrown when an operation is attempted with a zero address where it's not allowed (e.g., withdrawing to address(0)).
+     * @param message A descriptive message explaining the context of the zero address error.
+     */
+    error ZeroAddress(string message);
+
+    /**
      * @notice Records a user's prediction for a given market and mints an NFT representing their position.
      * @dev This function handles the core logic for recording predictions, including:
      *      - Validating market state (not expired, not resolved)
@@ -141,6 +147,7 @@ library MarketLogic {
         if (hasUserPredicted) revert AlreadyPredicted(user);
         // user address zero check should be done by caller (PredictionManager)
         if (convictionStakeDeclared == 0) revert AmountCannotBeZero();
+        if (treasuryAddress == address(0)) revert ZeroAddress("Treasury address cannot be zero");
 
         // Calculate fee and net stake amount
         protocolFee = (convictionStakeDeclared * protocolFeeBasisPoints) / 10000;
@@ -269,17 +276,17 @@ library MarketLogic {
         if (winningOutcome == PredictionTypes.Outcome.Bearish) {
             if (totalStakeOutcome0 == 0) revert ClaimFailedNoStakeForOutcome();
             if (totalStakeOutcome1 > 0) {
-                // Calculate user's share of the losing pool
-                uint256 shareOfLosingPool = (userConvictionStake * totalStakeOutcome1) / totalStakeOutcome0;
-                rewardAmount += shareOfLosingPool;
+                // Calculate user's share of the losing pool with better precision
+                // Multiply before dividing to minimize precision loss
+                rewardAmount += (userConvictionStake * totalStakeOutcome1) / totalStakeOutcome0;
             }
         } else {
             // Winning outcome is Bullish
             if (totalStakeOutcome1 == 0) revert ClaimFailedNoStakeForOutcome();
             if (totalStakeOutcome0 > 0) {
-                // Calculate user's share of the losing pool
-                uint256 shareOfLosingPool = (userConvictionStake * totalStakeOutcome0) / totalStakeOutcome1;
-                rewardAmount += shareOfLosingPool;
+                // Calculate user's share of the losing pool with better precision
+                // Multiply before dividing to minimize precision loss
+                rewardAmount += (userConvictionStake * totalStakeOutcome0) / totalStakeOutcome1;
             }
         }
 
@@ -337,12 +344,22 @@ library MarketLogic {
         if (market.priceAggregator == address(0)) revert PredictionTypes.InvalidPriceAggregator();
 
         // roundId, answer, startedAt, updatedAt, answeredInRound
-        // We only need answer (price) and updatedAt (lastUpdatedAt)
-        (, int256 oraclePrice,, uint256 lastUpdatedAtTimestamp,) =
+        (uint80 roundId, int256 oraclePrice,, uint256 lastUpdatedAtTimestamp, uint80 answeredInRound) =
             AggregatorV3Interface(market.priceAggregator).latestRoundData();
 
+        // Check for stale price data
         if (block.timestamp - lastUpdatedAtTimestamp > maxPriceStaleness) {
             revert PriceOracleStale();
+        }
+
+        // Check if the round is valid (Chainlink recommends this check)
+        if (answeredInRound < roundId) {
+            revert PriceOracleStale();
+        }
+
+        // Additional check for valid price
+        if (oraclePrice <= 0) {
+            revert PredictionTypes.InvalidPriceData();
         }
 
         price = oraclePrice;

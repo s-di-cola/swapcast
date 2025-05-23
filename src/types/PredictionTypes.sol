@@ -23,4 +23,5 @@ contract PredictionTypes {
     error InvalidPriceAggregator(); // Added this line
     error ValueMismatch(); // For when msg.value != declared conviction stake
     error PriceAtThreshold(); // Added this line
+    error InvalidPriceData(); // For when oracle returns invalid price (zero or negative)
 }
