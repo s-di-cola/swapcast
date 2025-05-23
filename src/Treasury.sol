@@ -2,6 +2,7 @@
 pragma solidity ^0.8.26;
 
 import {Ownable} from "@openzeppelin/contracts/access/Ownable.sol";
+import {ReentrancyGuard} from "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
 
 /**
  * @title Treasury
@@ -10,7 +11,7 @@ import {Ownable} from "@openzeppelin/contracts/access/Ownable.sol";
  * @dev This contract uses a `receive()` fallback to accept ETH deposits. Only the owner, designated
  *      at deployment, can initiate withdrawals. It employs standard OpenZeppelin Ownable for access control.
  */
-contract Treasury is Ownable {
+contract Treasury is Ownable, ReentrancyGuard {
     /**
      * @notice Emitted when ETH is successfully received by the Treasury via the `receive()` function.
      * @param from The address that sent the ETH (e.g., PredictionPool).
@@ -43,8 +44,11 @@ contract Treasury is Ownable {
     /**
      * @notice Contract constructor.
      * @param initialOwner The initial owner of this Treasury contract, who will have withdrawal privileges.
+     * @dev Reverts if initialOwner is address(0).
      */
-    constructor(address initialOwner) Ownable(initialOwner) {}
+    constructor(address initialOwner) Ownable(initialOwner) {
+        if (initialOwner == address(0)) revert ZeroAddress("Initial owner cannot be zero address");
+    }
 
     /**
      * @notice Allows the Treasury to receive ETH. This is the primary mechanism for fee deposits.
@@ -67,7 +71,7 @@ contract Treasury is Ownable {
      * @param _amount The amount of ETH to withdraw.
      * @param _to The payable address to which the ETH should be sent.
      */
-    function withdraw(uint256 _amount, address payable _to) external onlyOwner {
+    function withdraw(uint256 _amount, address payable _to) external onlyOwner nonReentrant {
         if (_to == address(0)) revert ZeroAddress("Withdrawal address cannot be zero");
 
         uint256 balance = address(this).balance;
@@ -88,12 +92,9 @@ contract Treasury is Ownable {
      *      Emits an {OwnerWithdrawal} event on successful withdrawal.
      * @param _to The payable address to which the entire balance should be sent.
      */
-    function withdrawAll(address payable _to) external onlyOwner {
+    function withdrawAll(address payable _to) external onlyOwner nonReentrant {
         if (_to == address(0)) revert ZeroAddress("Withdrawal address cannot be zero");
         uint256 balance = address(this).balance;
-        // The NotEnoughBalance(0,0) is a bit unconventional for a zero balance check.
-        // More explicit would be `if (balance == 0) revert NoBalanceToWithdraw();` (custom error)
-        // However, NotEnoughBalance(0,0) will correctly prevent a zero-value transfer from emitting an event if that's the intent.
         if (balance == 0) revert NotEnoughBalance(balance, balance); // Using balance for both params for clarity
 
         (bool success,) = _to.call{value: balance}("");
