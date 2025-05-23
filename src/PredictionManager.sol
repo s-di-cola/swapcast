@@ -121,7 +121,10 @@ contract PredictionManager is
     error MarketNotResolved(uint256 marketId); // Can be emitted by PM or bubbled from MarketLogic
     error AlreadyPredicted(uint256 marketId, address user); // Can be emitted by PM or bubbled from MarketLogic
     error ZeroAddressInput();
-    error InvalidExpirationTime();
+    error InvalidExpirationTime(uint256 expirationTime, uint256 currentTime);
+    error InvalidPriceThreshold();
+    error InvalidPoolKey();
+    error InvalidAssetSymbol();
     error AmountCannotBeZero(); // Can be emitted by PM or bubbled from MarketLogic
     error StakeBelowMinimum(uint256 sentAmount, uint256 minRequiredAmount); // Bubbled from MarketLogic
     error NotWinningNFT(); // Bubbled from MarketLogic
@@ -195,14 +198,21 @@ contract PredictionManager is
         uint256 _priceThreshold,
         PoolKey calldata _poolKey
     ) external onlyOwner returns (uint256 marketId) {
-        marketId = _nextMarketId++; // Assign and increment next market ID
-
-        if (marketId == 0) revert InvalidMarketId(); // Should not happen with _nextMarketId starting at 1
-        if (markets[marketId].exists) revert MarketAlreadyExists(marketId); // Should not happen with auto-incrementing ID
-        if (_expirationTime <= block.timestamp) revert InvalidExpirationTime();
-        if (_priceAggregator == address(0)) revert ZeroAddressInput();
+        // Input validation
         if (bytes(_name).length == 0) revert EmptyMarketName();
+        if (bytes(_assetSymbol).length == 0) revert InvalidAssetSymbol();
+        if (_expirationTime <= block.timestamp) {
+            revert InvalidExpirationTime(_expirationTime, block.timestamp);
+        }
+        if (_priceAggregator == address(0)) revert ZeroAddressInput();
+        if (_priceThreshold == 0) revert InvalidPriceThreshold();
+        if (_poolKey.currency0 == _poolKey.currency1) revert InvalidPoolKey();
 
+        // Assign and increment market ID
+        marketId = _nextMarketId++;
+        if (markets[marketId].exists) revert MarketAlreadyExists(marketId); // Should not happen with auto-incrementing ID
+
+        // Initialize market with all fields
         Market storage newMarket = markets[marketId];
         newMarket.marketId = marketId;
         newMarket.name = _name;
@@ -216,13 +226,11 @@ contract PredictionManager is
         newMarket.priceAggregator = _priceAggregator;
         newMarket.priceThreshold = _priceThreshold;
 
-        marketIdToPoolKey[marketId] = _poolKey; // Store the PoolKey for this market
+        // Store the PoolKey for this market
+        marketIdToPoolKey[marketId] = _poolKey;
 
-        // Set market-specific min stake to the current default if not already set
-        // (This logic might need adjustment based on how you want to handle default vs specific min stakes at creation)
-        if (marketMinStakes[marketId] == 0) {
-            marketMinStakes[marketId] = defaultMarketMinStake;
-        }
+        // Set market-specific min stake to the current default
+        marketMinStakes[marketId] = defaultMarketMinStake;
 
         _marketIdsList.push(marketId);
         emit MarketCreated(marketId, _name, _assetSymbol, _expirationTime, _priceAggregator, _priceThreshold);

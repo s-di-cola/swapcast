@@ -139,11 +139,16 @@ contract PredictionManagerTest is Test {
         });
     }
 
+    // --- Test Cases for Market Creation ---
+
     function testCreateMarket_Successful_And_EmitsEvent_And_SetsInitialState() public {
         string memory marketName = "Test Market";
         string memory assetSymbol = "ETHUSD";
         uint256 expirationTime = block.timestamp + 1 hours;
         uint256 priceThreshold = 3000 * 10 ** 8;
+
+        // Verify initial state
+        assertEq(pool.getMarketCount(), 0, "Initial market count should be zero");
 
         vm.prank(owner);
         vm.expectEmit(true, true, true, true, address(pool));
@@ -185,16 +190,47 @@ contract PredictionManagerTest is Test {
         assertEq(priceThreshold_, priceThreshold, "Price threshold mismatch");
     }
 
-    function testCreateMarket_Reverts_ZeroMarketId() public {
+    function testCreateMarket_Reverts_EmptyName() public {
         vm.prank(owner);
-        // This test is no longer valid as marketId is not an input.
-        // We could test for reverting on empty name/symbol if those checks are in createMarket.
-        // For now, commenting out the specific revert check for InvalidMarketId as it's auto-generated.
-        // vm.expectRevert(PredictionManager.InvalidMarketId.selector);
-        // pool.createMarket(0, "Test Market", "ETHUSD", block.timestamp + 1 hours, mockOracle, 3000 * 10 ** 8);
-        // Instead, let's test that creating a market with an empty name reverts, assuming such a check exists or will be added.
-        vm.expectRevert(PredictionManager.EmptyMarketName.selector); // Assuming EmptyMarketName error exists
+        vm.expectRevert(PredictionManager.EmptyMarketName.selector);
         pool.createMarket("", "ETHUSD", block.timestamp + 1 hours, mockOracle, 3000 * 10 ** 8, testPoolKey);
+    }
+
+    function testCreateMarket_Reverts_EmptySymbol() public {
+        vm.prank(owner);
+        vm.expectRevert("InvalidAssetSymbol()");
+        pool.createMarket("Test Market", "", block.timestamp + 1 hours, mockOracle, 3000 * 10 ** 8, testPoolKey);
+    }
+
+    function testCreateMarket_Reverts_InvalidExpiration() public {
+        vm.prank(owner);
+        vm.expectRevert(
+            abi.encodeWithSelector(
+                PredictionManager.InvalidExpirationTime.selector, block.timestamp - 1, block.timestamp
+            )
+        );
+        pool.createMarket("Test Market", "ETHUSD", block.timestamp - 1, mockOracle, 3000 * 10 ** 8, testPoolKey);
+    }
+
+    function testCreateMarket_Reverts_ZeroPriceThreshold() public {
+        vm.prank(owner);
+        vm.expectRevert("InvalidPriceThreshold()");
+        pool.createMarket("Test Market", "ETHUSD", block.timestamp + 1 hours, mockOracle, 0, testPoolKey);
+    }
+
+    function testCreateMarket_Reverts_InvalidPoolKey() public {
+        vm.prank(owner);
+        PoolKey memory invalidPoolKey = PoolKey({
+            currency0: Currency.wrap(vm.addr(0xA0)),
+            currency1: Currency.wrap(vm.addr(0xA0)), // Same as currency0
+            fee: 3000,
+            tickSpacing: 60,
+            hooks: IHooks(address(0))
+        });
+        vm.expectRevert("InvalidPoolKey()");
+        pool.createMarket(
+            "Test Market", "ETHUSD", block.timestamp + 1 hours, mockOracle, 3000 * 10 ** 8, invalidPoolKey
+        );
     }
 
     function testCreateMarket_Reverts_MarketAlreadyExists() public {
@@ -314,6 +350,8 @@ contract PredictionManagerTest is Test {
         pool.setFeeConfiguration(treasuryAddress, initialFeeBasisPoints); // Reset fee
     }
 
+    // --- Test Cases for Market Resolution ---
+
     function testCannotRecordAfterMarketResolved() public {
         vm.prank(owner);
         uint256 marketIdToTest = pool.createMarket(
@@ -349,6 +387,8 @@ contract PredictionManagerTest is Test {
         // which is already covered by other tests
     }
 
+    // --- Test Cases for Reward Claiming ---
+
     function testClaimReward_Reverts_MarketDoesNotExistForNFTsMarket() public {
         uint256 nonExistentMarketIdForNFT = 888;
         uint256 tokenIdForNonExistentMarket = 88;
@@ -356,21 +396,12 @@ contract PredictionManagerTest is Test {
         vm.prank(owner);
         uint256 marketOneId = pool.createMarket(
             "Test Market", "ETHUSD", block.timestamp + 1 hours, mockOracle, 3000 * 10 ** 8, testPoolKey
-        ); // New, create market 1
+        );
         vm.prank(oracleResolverAddress);
         pool.resolveMarket(marketOneId, PredictionTypes.Outcome.Bullish, 0);
 
         vm.prank(owner);
-        // This will create a new market with a new ID, not necessarily nonExistentMarketIdForNFT
-        /* uint256 actualMarketId = */
-        pool.createMarket(
-            "Market For NFT",
-            "NFTMK",
-            block.timestamp + 1 hours,
-            mockOracle,
-            3000 * 10 ** 8,
-            testPoolKey // New
-        );
+        pool.createMarket("Market For NFT", "NFTMK", block.timestamp + 1 hours, mockOracle, 3000 * 10 ** 8, testPoolKey);
 
         vm.mockCall(
             address(mockNft),
@@ -381,7 +412,7 @@ contract PredictionManagerTest is Test {
         vm.mockCall(
             address(mockNft),
             abi.encodeWithSelector(IERC721.ownerOf.selector, tokenIdForNonExistentMarket),
-            abi.encode(user1) // Mock ownerOf to return the user1
+            abi.encode(user1)
         );
 
         vm.prank(rewardDistributorAddress);
@@ -389,5 +420,76 @@ contract PredictionManagerTest is Test {
             abi.encodeWithSelector(PredictionManager.MarketDoesNotExist.selector, nonExistentMarketIdForNFT)
         );
         pool.claimReward(tokenIdForNonExistentMarket);
+    }
+
+    // --- Test Cases for Admin Functions ---
+
+    function testSetFeeConfiguration() public {
+        address newTreasury = address(0x1234);
+        uint256 newFeeBps = 500; // 5%
+
+        vm.prank(owner);
+        vm.expectEmit(true, true, false, true, address(pool));
+        emit FeeConfigurationChanged(newTreasury, newFeeBps);
+        pool.setFeeConfiguration(newTreasury, newFeeBps);
+
+        assertEq(pool.treasuryAddress(), newTreasury, "Treasury address not updated");
+        assertEq(pool.protocolFeeBasisPoints(), newFeeBps, "Fee basis points not updated");
+    }
+
+    function testSetMinStakeAmount() public {
+        uint256 newMinStake = 0.1 ether;
+
+        vm.prank(owner);
+        vm.expectEmit(true, false, false, true, address(pool));
+        emit MinStakeAmountChanged(newMinStake);
+        pool.setMinStakeAmount(newMinStake);
+
+        assertEq(pool.minStakeAmount(), newMinStake, "Min stake amount not updated");
+    }
+
+    function testSetMaxPriceStaleness() public {
+        uint256 newStaleness = 7200; // 2 hours
+
+        vm.prank(owner);
+        pool.setMaxPriceStaleness(newStaleness);
+
+        // No direct getter, so we'll test this through behavior in other tests
+    }
+
+    // --- Test Cases for Access Control ---
+
+    function testNonOwnerCannotSetFeeConfiguration() public {
+        vm.prank(user1);
+        vm.expectRevert(abi.encodeWithSelector(Ownable.OwnableUnauthorizedAccount.selector, user1));
+        pool.setFeeConfiguration(address(0x1234), 500);
+    }
+
+    function testNonOwnerCannotCreateMarket() public {
+        vm.prank(user1);
+        vm.expectRevert(abi.encodeWithSelector(Ownable.OwnableUnauthorizedAccount.selector, user1));
+        pool.createMarket("Test Market", "ETHUSD", block.timestamp + 1 hours, mockOracle, 3000 * 10 ** 8, testPoolKey);
+    }
+
+    function testNonOracleResolverCannotResolveMarket() public {
+        vm.prank(owner);
+        uint256 marketId = pool.createMarket(
+            "Test Market", "ETHUSD", block.timestamp + 1 hours, mockOracle, 3000 * 10 ** 8, testPoolKey
+        );
+
+        vm.warp(block.timestamp + 2 hours);
+
+        vm.prank(user1);
+        vm.expectRevert("NotOracleResolver()");
+        pool.resolveMarket(marketId, PredictionTypes.Outcome.Bearish, 0);
+    }
+
+    // --- Helper Functions ---
+
+    function createTestMarket() internal returns (uint256) {
+        vm.prank(owner);
+        return pool.createMarket(
+            "Test Market", "ETHUSD", block.timestamp + 1 hours, mockOracle, 3000 * 10 ** 8, testPoolKey
+        );
     }
 }

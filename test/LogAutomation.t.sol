@@ -127,11 +127,15 @@ contract LogAutomationTest is Test {
         // uint256 marketId = 1; // Old: marketId was an input parameter
         uint256 pastExpirationTime = block.timestamp - 1 hours;
 
-        vm.prank(owner);
-        vm.expectRevert(PredictionManager.InvalidExpirationTime.selector);
+        // Expect revert with InvalidExpirationTime error (custom error with parameters)
+        vm.expectRevert(
+            abi.encodeWithSelector(
+                PredictionManager.InvalidExpirationTime.selector, pastExpirationTime, block.timestamp
+            )
+        );
         pool.createMarket(
             "Test Market", "TEST", pastExpirationTime, address(mockPriceFeed), 5000 * 10 ** 8, testPoolKey
-        ); // New: marketId not passed, PoolKey added
+        );
     }
 
     /// @notice Tests that performUpkeep emits MarketExpired when a market expires.
