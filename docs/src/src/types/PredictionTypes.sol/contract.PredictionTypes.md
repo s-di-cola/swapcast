@@ -1,5 +1,5 @@
 # PredictionTypes
-[Git Source](https://github.com/s-di-cola/swapcast/blob/ebb783f801f69f45534f11abb1a8ca6315371d19/src/types/PredictionTypes.sol)
+[Git Source](https://github.com/s-di-cola/swapcast/blob/fd3e92ac000764a2f74374fcba21b9ac2c9b9c35/src/types/PredictionTypes.sol)
 
 **Author:**
 SwapCast Team

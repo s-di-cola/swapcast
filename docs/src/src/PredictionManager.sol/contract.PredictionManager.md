@@ -1,5 +1,5 @@
 # PredictionManager
-[Git Source](https://github.com/s-di-cola/swapcast/blob/ebb783f801f69f45534f11abb1a8ca6315371d19/src/PredictionManager.sol)
+[Git Source](https://github.com/s-di-cola/swapcast/blob/fd3e92ac000764a2f74374fcba21b9ac2c9b9c35/src/PredictionManager.sol)
 
 **Inherits:**
 Ownable, [IPredictionManager](/src/interfaces/IPredictionManager.sol/interface.IPredictionManager.md), [IPredictionManagerForResolver](/src/interfaces/IPredictionManagerForResolver.sol/interface.IPredictionManagerForResolver.md), [IPredictionManagerForDistributor](/src/interfaces/IPredictionManagerForDistributor.sol/interface.IPredictionManagerForDistributor.md), ILogAutomation, AutomationCompatibleInterface, IERC721Receiver
@@ -20,10 +20,10 @@ bytes32 public constant MARKET_EXPIRED_SIGNATURE = keccak256("MarketExpired(uint
 ```
 
 
-### swapCastNFT
+### MAX_BASIS_POINTS
 
 ```solidity
-ISwapCastNFT public swapCastNFT;
+uint256 public constant MAX_BASIS_POINTS = 10_000;
 ```
 
 
@@ -31,6 +31,27 @@ ISwapCastNFT public swapCastNFT;
 
 ```solidity
 address public treasuryAddress;
+```
+
+
+### oracleResolverAddress
+
+```solidity
+address public oracleResolverAddress;
+```
+
+
+### rewardDistributorAddress
+
+```solidity
+address public rewardDistributorAddress;
+```
+
+
+### swapCastNFT
+
+```solidity
+ISwapCastNFT public swapCastNFT;
 ```
 
 
@@ -55,6 +76,13 @@ uint256 public defaultMarketMinStake;
 ```
 
 
+### maxPriceStalenessSeconds
+
+```solidity
+uint256 public maxPriceStalenessSeconds;
+```
+
+
 ### markets
 
 ```solidity
@@ -69,38 +97,17 @@ mapping(uint256 => uint256) public marketMinStakes;
 ```
 
 
-### _marketIdsList
-
-```solidity
-uint256[] private _marketIdsList;
-```
-
-
-### maxPriceStalenessSeconds
-
-```solidity
-uint256 public maxPriceStalenessSeconds;
-```
-
-
-### oracleResolverAddress
-
-```solidity
-address public oracleResolverAddress;
-```
-
-
-### rewardDistributorAddress
-
-```solidity
-address public rewardDistributorAddress;
-```
-
-
 ### marketIdToPoolKey
 
 ```solidity
 mapping(uint256 => PoolKey) public marketIdToPoolKey;
+```
+
+
+### _marketIdsList
+
+```solidity
+uint256[] private _marketIdsList;
 ```
 
 
@@ -348,6 +355,13 @@ function getMarketCount() external view returns (uint256);
 
 ```solidity
 function getMarketIdAtIndex(uint256 _index) external view returns (uint256);
+```
+
+### getActiveMarkets
+
+
+```solidity
+function getActiveMarkets() external view returns (uint256[] memory);
 ```
 
 ### checkLog
