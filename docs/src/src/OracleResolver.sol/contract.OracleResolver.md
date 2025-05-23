@@ -1,5 +1,5 @@
 # OracleResolver
-[Git Source](https://github.com/s-di-cola/swapcast/blob/3f00baab77fb25825c8005e3be91e9887574dca5/src/OracleResolver.sol)
+[Git Source](https://github.com/s-di-cola/swapcast/blob/ebb783f801f69f45534f11abb1a8ca6315371d19/src/OracleResolver.sol)
 
 **Inherits:**
 Ownable
@@ -12,6 +12,9 @@ This contract is responsible for resolving prediction markets by fetching prices
 *It allows the owner to register Chainlink price feed aggregators for specific market IDs and price thresholds.
 Anyone can then trigger the resolution of a registered market. Upon resolution, it calls the PredictionManager
 to update the market's state with the winning outcome. The PredictionManager address is set immutably at deployment.*
+
+*Price feeds are expected to return values with 8 decimal places, which is the standard for most Chainlink feeds.
+The contract validates the integrity of the price feed data before using it for market resolution.*
 
 
 ## State Variables
@@ -87,6 +90,15 @@ Registers an oracle for a market using token pair from the Feed Registry.
 
 *Only callable by the contract owner. Emits [OracleRegistered](/src/OracleResolver.sol/contract.OracleResolver.md#oracleregistered).*
 
+**Notes:**
+- reverts: InvalidTokenAddress If either token address is zero
+
+- reverts: OracleAlreadyRegistered If an oracle is already registered for this market
+
+- reverts: FeedRegistryNotSet If the feed registry returns a zero address for the feed
+
+- reverts: InvalidPriceThreshold If the price threshold is set to zero
+
 
 ```solidity
 function registerOracle(uint256 _marketId, address _baseToken, address _quoteToken, uint256 _priceThreshold)
@@ -100,7 +112,7 @@ function registerOracle(uint256 _marketId, address _baseToken, address _quoteTok
 |`_marketId`|`uint256`|The ID of the market to register the oracle for.|
 |`_baseToken`|`address`|The base token address (e.g., ETH).|
 |`_quoteToken`|`address`|The quote token address (e.g., USD).|
-|`_priceThreshold`|`uint256`|The price threshold for determining the winning outcome.|
+|`_priceThreshold`|`uint256`|The price threshold for determining the winning outcome. Must be greater than zero and is assumed to be in the feed's native decimals (typically 8).|
 
 
 ### setMaxPriceStaleness
@@ -129,8 +141,13 @@ Outcome 0 is declared winner if `oracle_price >= priceThreshold`.
 Outcome 1 is declared winner if `oracle_price < priceThreshold`.
 Calls `PredictionManager.resolveMarket()` to finalize the resolution.
 Emits [MarketResolved](/src/OracleResolver.sol/contract.OracleResolver.md#marketresolved) on successful resolution via the PredictionManager.
-Reverts with {OracleNotRegistered} if no oracle is set for the market,
-or {ResolutionFailedInManager} if the call to PredictionManager fails.*
+Reverts with:
+- {OracleNotRegistered} if no oracle is set for the market
+- {PriceIsStale} if the price data is too old
+- {InvalidRound} if the round ID is invalid
+- {StaleRound} if the round is not the latest
+- {InvalidPrice} if the price is zero or negative
+- {ResolutionFailedInManager} if the call to PredictionManager fails*
 
 
 ```solidity
@@ -232,6 +249,46 @@ Reverts if the Chainlink price feed data is older than `maxPriceStalenessSeconds
 
 ```solidity
 error PriceIsStale(uint256 marketId, uint256 lastUpdatedAt, uint256 currentBlockTimestamp);
+```
+
+### InvalidRound
+Reverts if the price feed returns an invalid round ID.
+
+
+```solidity
+error InvalidRound();
+```
+
+### StaleRound
+Reverts if the price feed returns a stale round.
+
+
+```solidity
+error StaleRound();
+```
+
+### InvalidPrice
+Reverts if the price feed returns an invalid price (zero or negative).
+
+
+```solidity
+error InvalidPrice();
+```
+
+### InvalidPriceThreshold
+Reverts if the price threshold is set to zero.
+
+
+```solidity
+error InvalidPriceThreshold();
+```
+
+### FeedRegistryNotSet
+Reverts if the feed registry returns a zero address for the feed.
+
+
+```solidity
+error FeedRegistryNotSet();
 ```
 
 ## Structs
