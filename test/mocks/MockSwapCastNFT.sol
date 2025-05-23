@@ -42,7 +42,7 @@ contract MockSwapCastNFT is ISwapCastNFT, Ownable {
     bool public shouldRevertOnGetPredictionDetails;
 
     // --- Constructor ---
-    constructor() Ownable() {
+    constructor() Ownable(msg.sender) {
         nextTokenId = 0; // Initialize token ID counter
     }
 

@@ -44,12 +44,7 @@ contract Treasury is Ownable {
      * @notice Contract constructor.
      * @param initialOwner The initial owner of this Treasury contract, who will have withdrawal privileges.
      */
-    constructor(address initialOwner) {
-        // Transfer ownership to the initialOwner if it's not the deployer
-        if (initialOwner != msg.sender) {
-            transferOwnership(initialOwner);
-        }
-    }
+    constructor(address initialOwner) Ownable(initialOwner) {}
 
     /**
      * @notice Allows the Treasury to receive ETH. This is the primary mechanism for fee deposits.

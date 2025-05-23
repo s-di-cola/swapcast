@@ -49,6 +49,7 @@ contract TestSwapCastHook is Test, Deployers {
 
         nft = new TestableSwapCastNFT(address(this));
         pool = new PredictionManager(
+            address(this), // initialOwner (using test contract as owner)
             address(nft), // _swapCastNFTAddress
             MOCK_TREASURY, // _treasuryAddress
             INITIAL_FEE_BASIS_POINTS, // _initialFeeBasisPoints

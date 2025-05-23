@@ -111,17 +111,15 @@ contract OracleResolver is Ownable {
      * @param _feedRegistryAddress The address of the Chainlink Feed Registry contract.
      * @param initialOwner The address that will be set as the initial owner of this contract.
      */
-    constructor(address _predictionManagerAddress, address _feedRegistryAddress, address initialOwner) {
+    constructor(address _predictionManagerAddress, address _feedRegistryAddress, address initialOwner)
+        Ownable(initialOwner)
+    {
         if (_predictionManagerAddress == address(0)) revert PredictionManagerZeroAddress();
         if (_feedRegistryAddress == address(0)) revert InvalidTokenAddress();
 
         predictionManager = IPredictionManagerForResolver(_predictionManagerAddress);
         feedRegistry = IFeedRegistry(_feedRegistryAddress);
-
-        // Default to 1 hour (3600 seconds) staleness check
-        maxPriceStalenessSeconds = 3600;
-
-        _transferOwnership(initialOwner);
+        maxPriceStalenessSeconds = 3600; // 1 hour default
     }
 
     /**

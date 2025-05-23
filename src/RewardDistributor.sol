@@ -40,15 +40,10 @@ contract RewardDistributor is Ownable {
      * @param initialOwner The initial owner of this RewardDistributor contract.
      * @param _predictionManagerAddress The address of the PredictionManager contract. Must not be the zero address.
      */
-    constructor(address initialOwner, address _predictionManagerAddress) {
+    constructor(address initialOwner, address _predictionManagerAddress) Ownable(initialOwner) {
         if (_predictionManagerAddress == address(0)) revert ZeroAddress();
         predictionManager = IPredictionManagerForDistributor(_predictionManagerAddress);
         emit PredictionManagerAddressSet(address(0), _predictionManagerAddress);
-
-        // Transfer ownership to the initialOwner if it's not the deployer
-        if (initialOwner != msg.sender) {
-            transferOwnership(initialOwner);
-        }
     }
 
     /**

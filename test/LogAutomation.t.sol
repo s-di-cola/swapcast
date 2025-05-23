@@ -59,6 +59,7 @@ contract LogAutomationTest is Test {
         address mockRewardDistributor = vm.addr(5); // Assign a mock address
 
         pool = new PredictionManager(
+            owner, // initialOwner
             address(mockNft),
             treasuryAddress,
             initialFeeBasisPoints,

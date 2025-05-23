@@ -154,6 +154,7 @@ contract PredictionManager is
 
     // --- Constructor ---
     constructor(
+        address _initialOwner,
         address _swapCastNFTAddress,
         address _treasuryAddress,
         uint256 _initialFeeBasisPoints,
@@ -161,7 +162,7 @@ contract PredictionManager is
         uint256 _maxPriceStalenessSeconds,
         address _oracleResolverAddress, // Injected
         address _rewardDistributorAddress // Injected
-    ) Ownable() {
+    ) Ownable(_initialOwner) {
         if (_swapCastNFTAddress == address(0) || _treasuryAddress == address(0)) {
             revert ZeroAddressInput();
         }

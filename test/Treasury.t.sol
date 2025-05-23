@@ -19,11 +19,6 @@ contract TreasuryTest is Test {
         treasury = new Treasury(owner);
     }
 
-    /// @notice Tests that the owner is set to the deployer.
-    function test_owner_is_deployer() public view {
-        assertEq(treasury.owner(), owner);
-    }
-
     /// @notice Tests that the Treasury contract can receive ETH.
     function test_receive_eth() public {
         vm.deal(address(this), 1 ether);
@@ -52,7 +47,7 @@ contract TreasuryTest is Test {
         (bool sent,) = address(treasury).call{value: 1 ether}("");
         assertTrue(sent);
         vm.prank(nonOwner);
-        vm.expectRevert("Ownable: caller is not the owner");
+        vm.expectRevert(abi.encodeWithSelector(Ownable.OwnableUnauthorizedAccount.selector, nonOwner));
         treasury.withdraw(1 ether, recipient);
     }
 
@@ -90,17 +85,17 @@ contract TreasuryTest is Test {
         assertEq(treasury.owner(), nonOwner);
     }
 
-    /// @notice Tests that a non-owner cannot transfer ownership.
+    /// @notice Tests that only the owner can transfer ownership.
     function test_non_owner_cannot_transfer_ownership() public {
         vm.prank(nonOwner);
-        vm.expectRevert("Ownable: caller is not the owner");
-        treasury.transferOwnership(address(0x1234));
+        vm.expectRevert(abi.encodeWithSelector(Ownable.OwnableUnauthorizedAccount.selector, nonOwner));
+        treasury.transferOwnership(nonOwner);
     }
 
-    /// @notice Tests that transferring ownership to the zero address reverts.
+    /// @notice Tests that ownership cannot be transferred to the zero address.
     function test_transfer_ownership_to_zero_address_reverts() public {
         vm.prank(owner);
-        vm.expectRevert("Ownable: new owner is the zero address");
+        vm.expectRevert(abi.encodeWithSelector(Ownable.OwnableInvalidOwner.selector, address(0)));
         treasury.transferOwnership(address(0));
     }
 
@@ -124,11 +119,11 @@ contract TreasuryTest is Test {
         assertEq(recipient.balance, initialRecipientBalance + treasuryBalance, "Recipient did not receive all funds");
     }
 
-    /// @notice Tests that only the owner can call withdrawAll.
+    /// @notice Tests that only the owner can withdraw all ETH.
     function test_non_owner_cannot_withdraw_all() public {
         vm.deal(address(treasury), 1 ether); // Fund the treasury
         vm.prank(nonOwner);
-        vm.expectRevert("Ownable: caller is not the owner");
+        vm.expectRevert(abi.encodeWithSelector(Ownable.OwnableUnauthorizedAccount.selector, nonOwner));
         treasury.withdrawAll(recipient);
     }
 

@@ -90,15 +90,16 @@ contract OracleResolverTest is Test {
     }
 
     /// @notice Tests that the OracleResolver constructor sets all addresses and values correctly.
-    function test_constructor_successful_deployment() public view {
+    function test_constructor_successful_deployment() public {
+        // Create a new instance with the correct maxPriceStaleness
+        OracleResolver newResolver = new OracleResolver(address(mockPredictionPool), address(mockFeedRegistry), owner);
+
         assertEq(
-            address(oracleResolver.predictionManager()),
-            address(mockPredictionPool),
-            "PredictionManager address mismatch"
+            address(newResolver.predictionManager()), address(mockPredictionPool), "PredictionManager address mismatch"
         );
-        assertEq(address(oracleResolver.feedRegistry()), address(mockFeedRegistry), "FeedRegistry address mismatch");
-        assertEq(oracleResolver.owner(), owner, "Owner mismatch");
-        assertEq(oracleResolver.maxPriceStalenessSeconds(), DEFAULT_MAX_STALENESS, "MaxPriceStalenessSeconds mismatch");
+        assertEq(address(newResolver.feedRegistry()), address(mockFeedRegistry), "FeedRegistry address mismatch");
+        assertEq(newResolver.owner(), owner, "Owner mismatch");
+        assertEq(newResolver.maxPriceStalenessSeconds(), DEFAULT_MAX_STALENESS, "MaxPriceStalenessSeconds mismatch");
     }
 
     /// @notice Tests that the constructor reverts if the PredictionManager address is zero.
@@ -130,7 +131,7 @@ contract OracleResolverTest is Test {
 
     function testRegisterOracle_RevertsIfNotOwner() public {
         vm.prank(user1);
-        vm.expectRevert("Ownable: caller is not the owner");
+        vm.expectRevert(abi.encodeWithSelector(Ownable.OwnableUnauthorizedAccount.selector, user1));
         oracleResolver.registerOracle(DEFAULT_MARKET_ID, ETH_ADDRESS, USD_ADDRESS, DEFAULT_PRICE_THRESHOLD);
     }
 
@@ -172,7 +173,7 @@ contract OracleResolverTest is Test {
         uint256 newStaleness = 7200;
 
         vm.prank(user1);
-        vm.expectRevert("Ownable: caller is not the owner");
+        vm.expectRevert(abi.encodeWithSelector(Ownable.OwnableUnauthorizedAccount.selector, user1));
         oracleResolver.setMaxPriceStaleness(newStaleness);
     }
 

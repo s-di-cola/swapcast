@@ -4,6 +4,8 @@ pragma solidity ^0.8.26;
 import {Test} from "forge-std/Test.sol";
 import {SwapCastNFT} from "src/SwapCastNFT.sol";
 import {PredictionTypes} from "src/types/PredictionTypes.sol";
+import {Ownable} from "@openzeppelin/contracts/access/Ownable.sol";
+import {IERC721Errors} from "@openzeppelin/contracts/interfaces/draft-IERC6093.sol";
 
 contract PredictionPoolMock {
     function callMint(
@@ -56,7 +58,7 @@ contract SwapCastNFTTest is Test {
 
     /// @notice Test that minting to zero address reverts
     function test_mint_to_zero_address_reverts() public {
-        vm.expectRevert("ERC721: mint to the zero address");
+        vm.expectRevert(abi.encodeWithSignature("ERC721InvalidReceiver(address)", address(0)));
         pool.callMint(nft, address(0), 1, PredictionTypes.Outcome.Bullish, 100);
     }
 
@@ -70,7 +72,7 @@ contract SwapCastNFTTest is Test {
 
     /// @notice Test that burning a non-existent token reverts
     function test_burn_non_existent_token() public {
-        vm.expectRevert("ERC721: invalid token ID");
+        vm.expectRevert(abi.encodeWithSelector(IERC721Errors.ERC721NonexistentToken.selector, 0));
         pool.callBurn(nft, 0);
     }
 
@@ -78,7 +80,7 @@ contract SwapCastNFTTest is Test {
     function test_burn_by_prediction_pool() public {
         pool.callMint(nft, user, 1, PredictionTypes.Outcome.Bullish, 100);
         pool.callBurn(nft, 0);
-        vm.expectRevert("ERC721: invalid token ID");
+        vm.expectRevert(abi.encodeWithSelector(IERC721Errors.ERC721NonexistentToken.selector, 0));
         nft.ownerOf(0);
     }
 
@@ -104,7 +106,7 @@ contract SwapCastNFTTest is Test {
     function test_non_owner_cannot_set_prediction_pool_address() public {
         address attacker = address(0xDEAD);
         vm.prank(attacker);
-        vm.expectRevert("Ownable: caller is not the owner");
+        vm.expectRevert(abi.encodeWithSelector(Ownable.OwnableUnauthorizedAccount.selector, attacker));
         nft.setPredictionManagerAddress(address(0xABCD));
     }
 

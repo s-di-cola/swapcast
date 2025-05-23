@@ -58,6 +58,7 @@ contract MinimumStakeRefinementTest is Test {
 
         vm.prank(owner);
         pool = new PredictionManager(
+            owner, // initialOwner
             address(mockNft),
             treasuryAddress,
             initialFeeBasisPoints,

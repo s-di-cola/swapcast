@@ -112,6 +112,7 @@ contract PredictionManagerTest is Test {
         vm.startPrank(owner);
         mockNft = new MockSwapCastNFT();
         pool = new PredictionManager(
+            owner, // initialOwner
             address(mockNft),
             treasuryAddress,
             initialFeeBasisPoints,

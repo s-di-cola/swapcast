@@ -84,7 +84,7 @@ contract RewardDistributorTest is Test {
     function test_set_prediction_manager_address_reverts_if_not_owner() public {
         MockPredictionManagerForDistributor newMockPool = new MockPredictionManagerForDistributor();
         vm.prank(nonOwner);
-        vm.expectRevert("Ownable: caller is not the owner");
+        vm.expectRevert(abi.encodeWithSelector(Ownable.OwnableUnauthorizedAccount.selector, nonOwner));
         distributor.setPredictionManagerAddress(address(newMockPool));
     }
 
