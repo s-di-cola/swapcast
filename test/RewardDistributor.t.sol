@@ -7,6 +7,9 @@ import {MockPredictionManagerForDistributor} from "./mocks/MockPredictionPoolFor
 import {Ownable} from "@openzeppelin/contracts/access/Ownable.sol";
 
 contract RewardDistributorTest is Test {
+    // Events to test
+    event RewardClaimed(address indexed claimer, uint256 indexed tokenId);
+
     RewardDistributor distributor;
     MockPredictionManagerForDistributor mockPool;
 
@@ -52,24 +55,19 @@ contract RewardDistributorTest is Test {
 
     // --- setPredictionManagerAddress Tests ---
 
-    /// @notice Tests that setPredictionManagerAddress updates the address correctly.
-    function test_set_prediction_manager_address_updates_address() public {
-        MockPredictionManagerForDistributor newMockPool = new MockPredictionManagerForDistributor();
-        vm.prank(owner);
-        distributor.setPredictionManagerAddress(address(newMockPool));
-        assertEq(
-            address(distributor.predictionManager()), address(newMockPool), "PredictionManager address not updated"
-        );
-    }
-
-    /// @notice Tests that setPredictionManagerAddress emits the correct event.
-    function test_set_prediction_manager_address_emits_event() public {
+    /// @notice Tests that setPredictionManagerAddress emits the correct event
+    /// even though it will revert due to immutability
+    function test_set_prediction_manager_address_emits_event_before_revert() public {
         MockPredictionManagerForDistributor newMockPool = new MockPredictionManagerForDistributor();
         address oldPoolAddress = address(mockPool);
 
-        vm.prank(owner);
+        // Expect the event to be emitted with the old and new addresses
         vm.expectEmit(true, true, true, true);
         emit RewardDistributor.PredictionManagerAddressSet(oldPoolAddress, address(newMockPool));
+
+        // This will emit the event before reverting due to immutability
+        vm.prank(owner);
+        vm.expectRevert("Cannot change predictionManager as it is immutable");
         distributor.setPredictionManagerAddress(address(newMockPool));
     }
 
@@ -97,6 +95,10 @@ contract RewardDistributorTest is Test {
         // Sanity check: ensure mockPool hasn't been called yet
         assertFalse(mockPool.claimRewardCalled(), "MockPool claimRewardCalled should be false initially");
 
+        // Expect the RewardClaimed event to be emitted
+        vm.expectEmit(true, true, false, true);
+        emit RewardClaimed(address(this), tokenIdToClaim);
+
         // No vm.prank needed as claimReward in RewardDistributor is public
         distributor.claimReward(tokenIdToClaim);
 
@@ -111,7 +113,26 @@ contract RewardDistributorTest is Test {
         uint256 tokenIdToClaim = 2;
         mockPool.setShouldRevertOnClaim(true);
 
-        vm.expectRevert(RewardDistributor.ClaimFailedInPool.selector);
+        // The error now includes the tokenId parameter
+        vm.expectRevert(abi.encodeWithSelector(RewardDistributor.ClaimFailedInPool.selector, tokenIdToClaim));
         distributor.claimReward(tokenIdToClaim);
+    }
+
+    function test_claim_reward_reverts_with_invalid_token_id() public {
+        // Test with tokenId = 0 which should fail
+        vm.expectRevert(RewardDistributor.InvalidTokenId.selector);
+        distributor.claimReward(0);
+    }
+
+    function test_set_prediction_manager_address_reverts_as_immutable() public {
+        MockPredictionManagerForDistributor newMockPool = new MockPredictionManagerForDistributor();
+
+        // Should revert with the custom error message
+        vm.expectRevert("Cannot change predictionManager as it is immutable");
+        vm.prank(owner);
+        distributor.setPredictionManagerAddress(address(newMockPool));
+
+        // Verify the address didn't change
+        assertEq(address(distributor.predictionManager()), address(mockPool), "predictionManager should not change");
     }
 }

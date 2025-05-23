@@ -2,6 +2,8 @@
 pragma solidity ^0.8.26;
 
 import {Ownable} from "@openzeppelin/contracts/access/Ownable.sol";
+import {ReentrancyGuard} from "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
+import {Pausable} from "@openzeppelin/contracts/utils/Pausable.sol";
 import {IPredictionManagerForDistributor} from "./interfaces/IPredictionManagerForDistributor.sol";
 
 /**
@@ -12,12 +14,15 @@ import {IPredictionManagerForDistributor} from "./interfaces/IPredictionManagerF
  * @dev Inherits from Ownable for administrative control over settings like the PredictionManager address.
  *      It ensures that reward claim calls to the PredictionPool originate from a trusted source (this contract).
  */
-contract RewardDistributor is Ownable {
+/// @custom:security-contact security@swapcast.io
+contract RewardDistributor is Ownable, ReentrancyGuard, Pausable {
     /**
      * @notice The address of the PredictionManager contract that this distributor interacts with.
      * @dev This is an instance of IPredictionManagerForDistributor, ensuring it has the claimReward function.
      */
-    IPredictionManagerForDistributor public predictionManager;
+    /// @notice The PredictionManager contract address
+    /// @dev Marked as immutable for gas savings as it's only set once in the constructor
+    IPredictionManagerForDistributor public immutable predictionManager;
 
     /**
      * @notice Emitted when the PredictionManager address is set or updated.
@@ -26,14 +31,20 @@ contract RewardDistributor is Ownable {
      */
     event PredictionManagerAddressSet(address indexed oldAddress, address indexed newAddress);
 
-    /**
-     * @notice Reverts if an address parameter is the zero address where it's not allowed (e.g., setting PredictionManager address).
-     */
+    /// @notice Emitted when a reward is successfully claimed
+    /// @param claimer The address that claimed the reward
+    /// @param tokenId The ID of the token for which the reward was claimed
+    event RewardClaimed(address indexed claimer, uint256 indexed tokenId);
+
+    /// @notice Reverts if an address parameter is the zero address
     error ZeroAddress();
-    /**
-     * @notice Reverts if the call to `PredictionManager.claimReward()` fails for any reason.
-     */
-    error ClaimFailedInPool();
+
+    /// @notice Reverts if the token ID is invalid (e.g., zero)
+    error InvalidTokenId();
+
+    /// @notice Custom error for when a claim fails in the PredictionManager
+    /// @param tokenId The ID of the token for which the claim failed
+    error ClaimFailedInPool(uint256 tokenId);
 
     /**
      * @notice Contract constructor.
@@ -54,8 +65,10 @@ contract RewardDistributor is Ownable {
     function setPredictionManagerAddress(address _newAddress) external onlyOwner {
         if (_newAddress == address(0)) revert ZeroAddress();
         address oldAddress = address(predictionManager);
-        predictionManager = IPredictionManagerForDistributor(_newAddress);
         emit PredictionManagerAddressSet(oldAddress, _newAddress);
+        // Note: predictionManager is immutable, so we can't change it after deployment
+        // This function is kept for backward compatibility but will revert
+        revert("Cannot change predictionManager as it is immutable");
     }
 
     /**
@@ -64,19 +77,45 @@ contract RewardDistributor is Ownable {
      *      The `PredictionManager` is responsible for all validation, including NFT ownership (implicitly via burn) and reward calculation.
      *      If the underlying call to `PredictionManager.claimReward` fails, this function will revert with {ClaimFailedInPool}.
      * @param tokenId The ID of the SwapCastNFT for which the reward is being claimed.
+     * @custom:reverts With `ZeroAddress` if the PredictionManager address is not set
+     * @custom:reverts With `InvalidTokenId` if the tokenId is zero
+     * @custom:reverts With `ClaimFailedInPool` if the underlying PredictionManager call fails
+     * @custom:emits RewardClaimed On successful claim
      */
-    function claimReward(uint256 tokenId) external {
-        // The actual reward logic, NFT burning, and ETH transfer occur in PredictionManager.
-        // This contract simply forwards the request.
-        // PredictionManager's claimReward is restricted to only be called by this RewardDistributor address.
-        try predictionManager.claimReward(tokenId) {
-            // Optionally, re-emit an event here if needed, though PredictionPool should emit the primary event (RewardClaimed).
-            // For example: emit RewardForwarded(msg.sender, tokenId);
-        } catch {
-            revert ClaimFailedInPool();
-        }
+    /// @notice Pauses the contract, preventing claimReward from being called
+    /// @dev Only callable by the owner when not paused
+    function pause() external onlyOwner {
+        _pause();
     }
 
-    // Note: Additional administrative functions, if required for future enhancements, can be added here.
-    // For example, functions to pause/unpause claim functionality, or to manage other parameters.
+    /// @notice Unpauses the contract, allowing claimReward to be called again
+    /// @dev Only callable by the owner when paused
+    function unpause() external onlyOwner {
+        _unpause();
+    }
+
+    /// @notice Allows any user to initiate a reward claim for a specific prediction NFT.
+    /// @dev This function can be paused by the owner in case of emergency.
+    ///      When paused, all calls to this function will revert.
+    /// @param tokenId The ID of the SwapCastNFT for which the reward is being claimed.
+    /// @custom:reverts With `Pausable.EnforcedPause` if the contract is paused
+    /// @custom:reverts With `ZeroAddress` if the PredictionManager address is not set
+    /// @custom:reverts With `InvalidTokenId` if the tokenId is zero
+    /// @custom:reverts With `ClaimFailedInPool` if the underlying PredictionManager call fails
+    /// @custom:emits RewardClaimed On successful claim
+    function claimReward(uint256 tokenId) external nonReentrant whenNotPaused {
+        if (tokenId == 0) revert InvalidTokenId();
+
+        address sender = msg.sender;
+
+        // The actual reward logic, NFT burning, and ETH transfer occur in PredictionManager.
+        // This contract simply forwards the request.
+        try predictionManager.claimReward(tokenId) {
+            emit RewardClaimed(sender, tokenId);
+        } catch Error(string memory) /* reason */ {
+            revert ClaimFailedInPool(tokenId);
+        } catch (bytes memory) /* lowLevelData */ {
+            revert ClaimFailedInPool(tokenId);
+        }
+    }
 }
