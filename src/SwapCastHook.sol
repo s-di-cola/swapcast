@@ -10,6 +10,7 @@ import {Hooks} from "v4-core/libraries/Hooks.sol";
 import {IPredictionManager} from "./interfaces/IPredictionManager.sol";
 import {SwapParams} from "v4-core/types/PoolOperation.sol";
 import {PredictionTypes} from "./types/PredictionTypes.sol";
+import {Ownable} from "@openzeppelin/contracts/access/Ownable.sol";
 
 using PoolIdLibrary for PoolKey;
 
@@ -24,7 +25,7 @@ using PoolIdLibrary for PoolKey;
  *      The hook then attempts to record this prediction in the `PredictionManager`.
  *      It inherits from `BaseHook` and primarily utilizes the `afterSwap` permission.
  */
-contract SwapCastHook is BaseHook {
+contract SwapCastHook is BaseHook, Ownable {
     /**
      * @notice The instance of the PredictionManager contract where predictions are recorded.
      * @dev This address is set immutably during deployment via the constructor.
@@ -104,22 +105,54 @@ contract SwapCastHook is BaseHook {
     error PredictionPoolZeroAddress();
     /**
      * @notice Reverts if a user attempts to make a prediction (`hookData` is provided) but the conviction stake declared in `hookData` is zero.
+     * @dev This error is thrown in the _afterSwap function when a prediction attempt is made with zero conviction stake.
+     *      A non-zero conviction stake is required to ensure users have skin in the game when making predictions.
      */
     error NoConvictionStakeDeclaredInHookData();
+
     /**
      * @notice Reverts if the call to `predictionManager.recordPrediction` fails for any reason.
+     * @dev This error is thrown when the try/catch block in _afterSwap catches an exception from the PredictionManager.
+     *      The error includes the reason for the failure to help with debugging and user feedback.
      * @param reason A string describing the reason for the failure, forwarded from the `PredictionPool` or a general message.
      */
     error PredictionRecordingFailed(string reason);
 
     /**
+     * @notice Reverts if an ETH transfer fails during recovery.
+     * @dev This error is thrown by the recoverETH function if the ETH transfer to the specified address fails.
+     */
+    error ETHTransferFailed();
+
+    /**
+     * @notice Reverts if a zero address is provided where a non-zero address is required.
+     * @dev This error is used in functions that require valid addresses, such as recoverETH.
+     */
+    error ZeroAddress();
+
+    /**
+     * @notice Reverts if an attempt is made to recover more ETH than is available in the contract.
+     * @dev This error is thrown by the recoverETH function if the requested amount exceeds the contract's balance.
+     * @param requested The amount of ETH requested to recover.
+     * @param available The actual balance available in the contract.
+     */
+    error InsufficientBalance(uint256 requested, uint256 available);
+
+    /**
      * @notice Contract constructor.
+     * @dev Initializes the contract with the PoolManager and PredictionManager addresses.
+     *      Also initializes the Ownable contract with the deployer as the initial owner.
+     *      This owner will have the ability to recover ETH in emergency situations.
+     *
      * @param _poolManager The address of the Uniswap V4 PoolManager this hook will be registered with.
      *                     Passed to the `BaseHook` constructor.
      * @param _predictionManagerAddress The address of the `PredictionManager` contract where predictions will be recorded.
      *                               Cannot be the zero address.
      */
-    constructor(IPoolManager _poolManager, address _predictionManagerAddress) BaseHook(_poolManager) {
+    constructor(IPoolManager _poolManager, address _predictionManagerAddress)
+        BaseHook(_poolManager)
+        Ownable(msg.sender) // Initialize Ownable with the deployer as the initial owner
+    {
         if (_predictionManagerAddress == address(0)) revert PredictionPoolZeroAddress();
         predictionManager = IPredictionManager(_predictionManagerAddress);
     }
@@ -212,13 +245,25 @@ contract SwapCastHook is BaseHook {
         // Last 16 bytes for convictionStake (bytes 53-68)
         // We need to handle this carefully since we're extracting a uint128
         uint128 extractedStake;
-        assembly {
-            // Load the bytes starting at position 53
-            let word := calldataload(add(hookData.offset, 53))
-            // Extract the upper 128 bits
-            extractedStake := shr(128, word)
+
+        // Double-check that we have enough bytes to safely perform the extraction
+        // This is redundant with the earlier length check but adds an extra safety layer
+        if (hookData.length >= 69) {
+            // Ensure we have enough bytes
+            assembly {
+                // Load the bytes starting at position 53
+                // This loads a full 32-byte word from calldata starting at the specified offset
+                let word := calldataload(add(hookData.offset, 53))
+
+                // Extract the upper 128 bits (16 bytes) from the loaded word
+                // We shift right by 128 bits because we loaded a full 32-byte word but only need the first 16 bytes
+                extractedStake := shr(128, word)
+            }
+            convictionStakeDeclared = extractedStake;
+        } else {
+            // This should never happen due to the earlier length check, but it's a safety measure
+            revert InvalidHookDataLength(hookData.length, PREDICTION_HOOK_DATA_LENGTH);
         }
-        convictionStakeDeclared = extractedStake;
 
         emit PredictionAttempted(actualUser, key.toId(), marketId, outcome, convictionStakeDeclared);
 
@@ -247,29 +292,136 @@ contract SwapCastHook is BaseHook {
 
             // Extract error selector if available
             if (lowLevelData.length >= 4) {
-                // More efficient way to extract the first 4 bytes
+                // Extract the first 4 bytes (error selector)
                 errorSelector = bytes4(lowLevelData);
 
                 // Handle standard Error(string)
                 if (errorSelector == bytes4(keccak256("Error(string)"))) {
-                    // Extract the error message using a more efficient approach
+                    // Extract the error message more efficiently using abi.decode directly
                     if (lowLevelData.length > 4) {
-                        bytes memory encodedString = new bytes(lowLevelData.length - 4);
-                        for (uint256 i = 0; i < encodedString.length; i++) {
-                            encodedString[i] = lowLevelData[i + 4];
-                        }
-                        string memory reason = abi.decode(encodedString, (string));
-                        errorMessage = string(abi.encodePacked("PredictionManager Error: ", reason));
+                        // Skip the first 4 bytes (selector) and decode the rest as a string
+                        // This is more gas efficient than copying bytes one by one
+                        errorMessage = _extractErrorMessage(lowLevelData);
                     }
+                } else if (errorSelector == bytes4(keccak256("Panic(uint256)"))) {
+                    // Handle Panic errors (e.g., division by zero, overflow)
+                    uint256 errorCode;
+                    if (lowLevelData.length >= 36) {
+                        // 4 bytes selector + 32 bytes uint256
+                        assembly {
+                            // Load the panic code from the data (skipping the first 4 bytes)
+                            errorCode := mload(add(add(lowLevelData, 0x20), 4))
+                        }
+                    }
+                    errorMessage =
+                        string(abi.encodePacked("PredictionManager Panic: Code ", _uint256ToString(errorCode)));
                 } else {
-                    // Custom error
-                    errorMessage = "PredictionManager reverted with a custom error.";
+                    // Custom error - provide more specific information if possible
+                    // Map known error selectors to human-readable messages
+                    errorMessage = _getCustomErrorMessage(errorSelector);
                 }
             }
 
             emit PredictionFailed(actualUser, key.toId(), marketId, outcome, convictionStakeDeclared, errorSelector);
             revert PredictionRecordingFailed(errorMessage);
         }
+    }
+
+    /**
+     * @dev Internal helper function to extract an error message from a standard Error(string) revert.
+     * @param data The raw bytes data from the caught exception.
+     * @return The extracted error message with a prefix.
+     */
+    function _extractErrorMessage(bytes memory data) internal pure returns (string memory) {
+        // Skip the first 4 bytes (error selector) and decode the rest as a string
+        if (data.length <= 4) return "PredictionManager Error: <no message>";
+
+        // Create a new bytes array for the encoded string (without the selector)
+        bytes memory encodedString = new bytes(data.length - 4);
+
+        // Copy the encoded string part (skipping the selector)
+        // This is still necessary but we're doing it in a single function rather than inline
+        for (uint256 i = 0; i < encodedString.length; i++) {
+            encodedString[i] = data[i + 4];
+        }
+
+        // Decode the string and return it with a prefix
+        string memory reason = abi.decode(encodedString, (string));
+        return string(abi.encodePacked("PredictionManager Error: ", reason));
+    }
+
+    /**
+     * @dev Internal helper function to convert a uint256 to a string.
+     * @param value The uint256 value to convert.
+     * @return The string representation of the value.
+     */
+    function _uint256ToString(uint256 value) internal pure returns (string memory) {
+        // Handle the special case of 0
+        if (value == 0) return "0";
+
+        // Calculate the length of the resulting string
+        uint256 temp = value;
+        uint256 digits;
+        while (temp != 0) {
+            digits++;
+            temp /= 10;
+        }
+
+        // Create the string
+        bytes memory buffer = new bytes(digits);
+        while (value != 0) {
+            digits -= 1;
+            buffer[digits] = bytes1(uint8(48 + uint256(value % 10)));
+            value /= 10;
+        }
+
+        return string(buffer);
+    }
+
+    /**
+     * @dev Internal helper function to map known error selectors to human-readable messages.
+     * @param errorSelector The 4-byte error selector.
+     * @return A human-readable error message.
+     */
+    function _getCustomErrorMessage(bytes4 errorSelector) internal pure returns (string memory) {
+        // Map known error selectors to human-readable messages
+        // This can be expanded as more custom errors are identified
+        if (errorSelector == bytes4(keccak256("MarketDoesNotExist(uint256)"))) {
+            return "PredictionManager Error: Market does not exist";
+        } else if (errorSelector == bytes4(keccak256("MarketAlreadyResolved(uint256)"))) {
+            return "PredictionManager Error: Market already resolved";
+        } else if (errorSelector == bytes4(keccak256("MarketExpired(uint256)"))) {
+            return "PredictionManager Error: Market has expired";
+        } else if (errorSelector == bytes4(keccak256("InvalidConvictionStake()"))) {
+            return "PredictionManager Error: Invalid conviction stake";
+        } else {
+            // Default message for unknown custom errors
+            return "PredictionManager Error: Custom error";
+        }
+    }
+
+    /**
+     * @notice Allows the owner to recover ETH stuck in the contract in case of emergency.
+     * @dev This function provides a safety mechanism to recover ETH that might get stuck in the contract
+     *      due to failed prediction attempts or other unexpected scenarios. It includes the following
+     *      security controls:
+     *
+     *      1. Only the contract owner can call this function (via the onlyOwner modifier)
+     *      2. The recipient address cannot be the zero address
+     *      3. The function reverts if the ETH transfer fails
+     *
+     *      This function should only be used in emergency situations when ETH is genuinely stuck
+     *      and cannot be processed through normal means.
+     *
+     * @param _to The address to send the recovered ETH to.
+     * @param _amount The amount of ETH to recover.
+     */
+    function recoverETH(address _to, uint256 _amount) external onlyOwner {
+        if (_to == address(0)) revert ZeroAddress();
+        if (_amount > address(this).balance) revert InsufficientBalance(_amount, address(this).balance);
+
+        (bool success,) = _to.call{value: _amount}("");
+        if (!success) revert ETHTransferFailed();
     }
 
     /**
