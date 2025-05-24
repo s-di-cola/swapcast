@@ -33,10 +33,10 @@ contract SwapCastNFT is ERC721, Ownable, ISwapCastNFT {
      * @param mintedAt The Unix timestamp indicating when the NFT was minted.
      */
     struct PredictionMetadata {
-        uint256 marketId;
-        PredictionTypes.Outcome outcome;
-        uint256 convictionStake;
-        uint256 mintedAt;
+        uint128 marketId; // Market ID (128 bits should be enough)
+        uint64 mintedAt; // Timestamp (64 bits, valid until year ~292 billion)
+        uint128 convictionStake; // 128 bits for stake amount (max ~3.4e38 wei)
+        PredictionTypes.Outcome outcome; // 8 bits (only needs 1 bit, but Solidity uses 8)
     }
 
     /**
@@ -91,6 +91,10 @@ contract SwapCastNFT is ERC721, Ownable, ISwapCastNFT {
      * @param tokenId The token ID that does not exist.
      */
     error NonExistentToken(uint256 tokenId);
+    /**
+     * @notice Reverts if a zero conviction stake is provided when minting.
+     */
+    error InvalidConvictionStake();
 
     /**
      * @notice Contract constructor.
@@ -103,7 +107,7 @@ contract SwapCastNFT is ERC721, Ownable, ISwapCastNFT {
         ERC721(_name, _symbol)
         Ownable(_initialOwner)
     {
-        // Ownership transfer is handled by Ownable(_initialOwner)
+        if (_initialOwner == address(0)) revert ZeroAddress();
     }
 
     /**
@@ -145,16 +149,22 @@ contract SwapCastNFT is ERC721, Ownable, ISwapCastNFT {
         onlyPredictionManager
         returns (uint256)
     {
-        uint256 tokenId = _nextTokenId;
-        _nextTokenId++; // Increment for the next mint
+        if (_to == address(0)) revert ZeroAddress();
+        if (_convictionStake == 0) revert InvalidConvictionStake();
 
-        _mint(_to, tokenId); // ERC721 _mint function
+        uint256 tokenId;
+        unchecked {
+            tokenId = _nextTokenId++;
+        }
 
+        _mint(_to, tokenId);
+
+        // Convert types to match storage layout
         tokenPredictionMetadata[tokenId] = PredictionMetadata({
-            marketId: _marketId,
+            marketId: uint128(_marketId),
             outcome: _outcome,
-            convictionStake: _convictionStake,
-            mintedAt: block.timestamp
+            convictionStake: uint128(_convictionStake),
+            mintedAt: uint64(block.timestamp)
         });
 
         emit PositionNFTMinted(_to, tokenId, _marketId, _outcome, _convictionStake);
@@ -169,12 +179,18 @@ contract SwapCastNFT is ERC721, Ownable, ISwapCastNFT {
      * @param _tokenId The ID of the NFT to burn.
      */
     function burn(uint256 _tokenId) external override onlyPredictionManager {
-        // The PredictionPool is responsible for ensuring it has the authority to burn this token.
-        // This typically means the PredictionPool has confirmed the original owner's intent (e.g., during a claim process)
-        // or that the token is effectively controlled/escrowed by the PredictionPool for burning.
-        _burn(_tokenId); // ERC721 _burn function
+        // Get owner before burning to check existence and save gas on the event
+        address owner = _ownerOf(_tokenId);
+        if (owner == address(0)) revert NonExistentToken(_tokenId);
+
+        // Clear storage before external call
         delete tokenPredictionMetadata[_tokenId];
+
+        // Emit event before external call
         emit PositionNFTBurned(_tokenId);
+
+        // External call last (CEI pattern)
+        _burn(_tokenId);
     }
 
     /**
@@ -195,7 +211,8 @@ contract SwapCastNFT is ERC721, Ownable, ISwapCastNFT {
     {
         if (_ownerOf(_tokenId) == address(0)) revert NonExistentToken(_tokenId);
         PredictionMetadata storage meta = tokenPredictionMetadata[_tokenId];
-        return (meta.marketId, meta.outcome, meta.convictionStake, _ownerOf(_tokenId));
+        // Convert storage types to return types (uint128/uint64 to uint256)
+        return (uint256(meta.marketId), meta.outcome, uint256(meta.convictionStake), _ownerOf(_tokenId));
     }
 
     /**

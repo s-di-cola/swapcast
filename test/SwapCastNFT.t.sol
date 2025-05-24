@@ -29,6 +29,17 @@ contract SwapCastNFTTest is Test {
     address user = address(0x123);
     address ownerOfNFTContract; // To store the owner of the NFT contract itself
 
+    // Events to test
+    event PositionNFTMinted(
+        address indexed owner,
+        uint256 indexed tokenId,
+        uint256 marketId,
+        PredictionTypes.Outcome outcome,
+        uint256 convictionStake
+    );
+    event PositionNFTBurned(uint256 indexed tokenId);
+    event PredictionManagerAddressSet(address indexed oldAddress, address indexed newAddress);
+
     function setUp() public {
         pool = new PredictionPoolMock();
         ownerOfNFTContract = address(this); // Test contract owns the NFT contract
@@ -40,13 +51,26 @@ contract SwapCastNFTTest is Test {
 
     /// @notice Test that minting emits event and sets metadata
     function test_mint_and_metadata() public {
+        // Expect the PositionNFTMinted event
+        vm.expectEmit(true, true, true, true);
+        emit PositionNFTMinted(user, 0, 1, PredictionTypes.Outcome.Bullish, 100);
+
         pool.callMint(nft, user, 1, PredictionTypes.Outcome.Bullish, 100);
-        (uint256 marketId, PredictionTypes.Outcome outcome, uint256 convictionStake, uint256 mintedAt) =
+
+        // Check metadata - use the public mapping getter which returns the storage types
+        // The order of return values is based on the struct definition
+        (uint128 marketId, uint64 mintedAt, uint128 convictionStake, PredictionTypes.Outcome outcome) =
             nft.tokenPredictionMetadata(0);
         assertEq(marketId, 1, "Market ID mismatch");
         assertEq(uint8(outcome), uint8(PredictionTypes.Outcome.Bullish), "Outcome mismatch");
         assertEq(convictionStake, 100, "Conviction stake mismatch");
         assertTrue(mintedAt > 0, "MintedAt should be set");
+    }
+
+    /// @notice Test that minting with zero conviction stake reverts
+    function test_mint_zero_conviction_reverts() public {
+        vm.expectRevert(SwapCastNFT.InvalidConvictionStake.selector);
+        pool.callMint(nft, user, 1, PredictionTypes.Outcome.Bullish, 0);
     }
 
     /// @notice Test that only PredictionPool can mint
@@ -58,7 +82,7 @@ contract SwapCastNFTTest is Test {
 
     /// @notice Test that minting to zero address reverts
     function test_mint_to_zero_address_reverts() public {
-        vm.expectRevert(abi.encodeWithSignature("ERC721InvalidReceiver(address)", address(0)));
+        vm.expectRevert(SwapCastNFT.ZeroAddress.selector);
         pool.callMint(nft, address(0), 1, PredictionTypes.Outcome.Bullish, 100);
     }
 
@@ -72,14 +96,20 @@ contract SwapCastNFTTest is Test {
 
     /// @notice Test that burning a non-existent token reverts
     function test_burn_non_existent_token() public {
-        vm.expectRevert(abi.encodeWithSelector(IERC721Errors.ERC721NonexistentToken.selector, 0));
+        vm.expectRevert(abi.encodeWithSelector(SwapCastNFT.NonExistentToken.selector, 0));
         pool.callBurn(nft, 0);
     }
 
     /// @notice Test successful burn by PredictionPool
     function test_burn_by_prediction_pool() public {
         pool.callMint(nft, user, 1, PredictionTypes.Outcome.Bullish, 100);
+
+        // Expect the PositionNFTBurned event
+        vm.expectEmit(true, false, false, false);
+        emit PositionNFTBurned(0);
+
         pool.callBurn(nft, 0);
+
         vm.expectRevert(abi.encodeWithSelector(IERC721Errors.ERC721NonexistentToken.selector, 0));
         nft.ownerOf(0);
     }
