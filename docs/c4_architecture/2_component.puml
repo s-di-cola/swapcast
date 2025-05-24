@@ -1,4 +1,4 @@
-@startuml
+@startuml SwapCast_Component_Diagram
 !include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Context.puml
 !include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Container.puml
 !include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Component.puml
@@ -13,15 +13,15 @@ System_Ext(uniswap, "Uniswap v4", "Decentralized exchange protocol")
 System_Ext(chainlink_price, "Chainlink Price Feeds", "Decentralized oracle network for price data")
 System_Ext(chainlink_automation, "Chainlink Automation", "Decentralized service for checking expired predictions")
 
-' SwapCast Hook Components
-Container_Boundary(swapcast_hook, "SwapCast Hook Contract") {
+' SwapCastHook Components
+Container_Boundary(swapcast_hook, "SwapCastHook") {
     Component(hook_interface, "Hook Interface", "Solidity", "Implements Uniswap v4 hook interface")
     Component(data_parser, "Prediction Parser", "Solidity", "Extracts prediction parameters from transaction data")
     Component(conviction_calculator, "Conviction Calculator", "Solidity", "Calculates conviction weight based on swap amount")
 }
 
-' Prediction Pool Components
-Container_Boundary(prediction_pool, "Prediction Pool Contract") {
+' PredictionManager Components
+Container_Boundary(prediction_manager, "PredictionManager") {
     Component(market_manager, "Market Manager", "Solidity", "Creates and manages prediction markets")
     Component(position_manager, "Position Manager", "Solidity", "Manages prediction positions")
     Component(market_registry, "Market Registry", "Solidity", "Stores active and resolved markets")
@@ -29,24 +29,24 @@ Container_Boundary(prediction_pool, "Prediction Pool Contract") {
     Component(market_resolver, "Market Resolver", "Solidity", "Updates market state when resolved")
 }
 
-' SwapCast NFT Components
-Container_Boundary(swapcast_nft, "SwapCast NFT Contract") {
+' SwapCastNFT Components
+Container_Boundary(swapcast_nft, "SwapCastNFT") {
     Component(erc721, "ERC721 Implementation", "Solidity", "Implements NFT standard interface")
     Component(metadata_manager, "Metadata Manager", "Solidity", "Manages prediction metadata")
     Component(token_minter, "Token Minter", "Solidity", "Handles NFT minting process")
     Component(token_burner, "Token Burner", "Solidity", "Handles NFT burning process")
 }
 
-' Oracle Resolver Components
-Container_Boundary(oracle_resolver, "Oracle Resolver Contract") {
+' OracleResolver Components
+Container_Boundary(oracle_resolver, "OracleResolver") {
     Component(automation_interface, "Automation Interface", "Solidity", "Implements Chainlink Automation interface")
     Component(chainlink_adapter, "Chainlink Adapter", "Solidity", "Interfaces with Chainlink price feeds")
     Component(expired_checker, "Expired Checker", "Solidity", "Identifies expired predictions")
     Component(admin_resolver, "Admin Resolver", "Solidity", "Handles manual resolution by admins")
 }
 
-' Reward Distributor Components
-Container_Boundary(reward_distributor, "Reward Distributor Contract") {
+' RewardDistributor Components
+Container_Boundary(reward_distributor, "RewardDistributor") {
     Component(claim_processor, "Claim Processor", "Solidity", "Processes reward claims")
     Component(reward_calculator, "Reward Calculator", "Solidity", "Calculates rewards based on conviction weights")
     Component(nft_verifier, "NFT Verifier", "Solidity", "Verifies NFT ownership and metadata")
@@ -54,7 +54,7 @@ Container_Boundary(reward_distributor, "Reward Distributor Contract") {
 }
 
 ' Treasury Components
-Container_Boundary(treasury, "Treasury Contract") {
+Container_Boundary(treasury, "Treasury") {
     Component(funds_manager, "Funds Manager", "Solidity", "Receives prediction fees and pays out rewards")
 }
 
@@ -82,7 +82,7 @@ Rel(hook_interface, data_parser, "Extracts prediction data")
 Rel(data_parser, conviction_calculator, "Calculates weight")
 Rel(conviction_calculator, position_manager, "Creates position")
 
-' Prediction Pool Relationships
+' PredictionManager Relationships
 Rel(position_manager, market_manager, "Gets or creates market")
 Rel(market_manager, market_registry, "Stores market")
 Rel(position_manager, token_minter, "Requests NFT mint")

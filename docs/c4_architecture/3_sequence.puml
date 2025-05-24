@@ -1,4 +1,4 @@
-@startuml
+@startuml SwapCast_Sequence_Diagram
 !include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Sequence.puml
 
 title "SwapCast System - Complete Sequence Diagram"
@@ -6,10 +6,10 @@ title "SwapCast System - Complete Sequence Diagram"
 actor "Trader" as trader
 participant "Uniswap v4\nPool" as uniswap
 participant "SwapCast\nHook" as hook
-participant "Prediction\nPool" as pool
+participant "Prediction\nManager" as manager
 participant "SwapCast\nNFT" as nft
 participant "Oracle\nResolver" as resolver
-participant "Chainlink\nPrice Feeds" as price_feeds
+participant "Chainlink\nFeed Registry" as feed_registry
 participant "Chainlink\nAutomation" as automation
 participant "Reward\nDistributor" as distributor
 
@@ -24,23 +24,23 @@ group Prediction Creation
 
     hook -> hook : 4. Parse prediction data
     hook -> hook : 5. Calculate conviction weight
-    hook -> pool : 6. createPosition(...)
-    activate pool
+    hook -> manager : 6. recordPrediction(...)
+    activate manager
 
-    pool -> pool : 7. Get or create market
-    pool -> resolver : 8. Register market for resolution
+    manager -> manager : 7. Get or create market
+    manager -> resolver : 8. Register market for resolution
     activate resolver
-    resolver --> pool : 9. Confirmation
+    resolver --> manager : 9. Confirmation
     deactivate resolver
 
-    pool -> nft : 10. mintPositionNFT(...)
+    manager -> nft : 10. mint(...)
     activate nft
     nft -> nft : 11. Store prediction metadata
-    nft --> pool : 12. Return NFT ID
+    nft --> manager : 12. Return NFT ID
     deactivate nft
 
-    pool --> hook : 13. Return position ID
-    deactivate pool
+    manager --> hook : 13. Return position ID
+    deactivate manager
 
     hook --> uniswap : 14. Return afterSwap selector
     deactivate hook
@@ -61,18 +61,18 @@ group Prediction Resolution (At Expiration)
     automation -> resolver : 19. performUpkeep(performData)
     activate resolver
 
-    resolver -> price_feeds : 20. Get current price
-    activate price_feeds
-    price_feeds --> resolver : 21. Return price data
-    deactivate price_feeds
+    resolver -> feed_registry : 20. latestRoundData(baseToken, quoteToken)
+    activate feed_registry
+    feed_registry --> resolver : 21. Return price data
+    deactivate feed_registry
 
     resolver -> resolver : 22. Determine outcome
-    resolver -> pool : 23. resolveMarket(marketId, outcome)
-    activate pool
+    resolver -> manager : 23. resolveMarket(marketId, outcome)
+    activate manager
 
-    pool -> pool : 24. Update market state
-    pool --> resolver : 25. Resolution completed
-    deactivate pool
+    manager -> manager : 24. Update market state
+    manager --> resolver : 25. Resolution completed
+    deactivate manager
 
     resolver --> automation : 26. Upkeep completed
     deactivate resolver
@@ -83,42 +83,37 @@ group Reward Claiming (Pull-based)
     trader -> distributor : 27. claimReward(nftId)
     activate distributor
 
-    distributor -> distributor : 28. Check if already claimed
-    distributor -> nft : 29. Verify NFT ownership
+    distributor -> manager : 28. claimReward(nftId)
+    activate manager
+    
+    manager -> nft : 29. Verify NFT ownership
     activate nft
-    nft --> distributor : 30. Ownership confirmed
+    nft --> manager : 30. Ownership confirmed
     deactivate nft
 
-    distributor -> nft : 31. Get position metadata
+    manager -> nft : 31. getPredictionDetails(nftId)
     activate nft
-    nft --> distributor : 32. Position details
+    nft --> manager : 32. Position details
     deactivate nft
 
-    distributor -> pool : 33. Get market outcome
-    activate pool
-    pool --> distributor : 34. Market outcome data
-    deactivate pool
-
-    distributor -> distributor : 35. Verify winning position
-    distributor -> distributor : 36. Calculate reward amount
+    manager -> manager : 33. Verify market outcome
+    manager -> manager : 34. Calculate reward
 
     alt Position won
-        distributor -> nft : 37. burnNFT(nftId)
+        manager -> nft : 35. burn(nftId)
         activate nft
-        nft --> distributor : 38. NFT burned
+        nft --> manager : 36. NFT burned
         deactivate nft
 
-        distributor -> distributor : 39. Record claim in registry
-        note right: Funds remain in contract
+        manager -> trader : 37. Transfer reward ETH
+        manager --> distributor : 38. Return success
+        deactivate manager
 
-        distributor --> trader : 40. Return success with amount
-
-        trader -> distributor : 41. withdrawReward()
-        activate distributor
-        distributor -> trader : 42. Transfer reward funds
-        deactivate distributor
+        distributor --> trader : 39. Return success
     else Position lost or invalid
-        distributor --> trader : 43. Return failure (no reward)
+        manager --> distributor : 40. Revert with error
+        deactivate manager
+        distributor --> trader : 41. Return failure (no reward)
     end
 
     deactivate distributor
