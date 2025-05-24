@@ -19,7 +19,8 @@ import {PoolKey} from "v4-core/types/PoolKey.sol";
  * @author SwapCast Team
  * @notice Manages the creation and registry of prediction markets. Coordinates with OracleResolver,
  *         RewardDistributor, and SwapCastNFT. Uses MarketLogic library for core market operations.
- *         Integrates with Chainlink Automtion for market expiration and resolution.
+ *         Integrates with Chainlink Automation for market expiration and resolution.
+ * @custom:security-contact security@swapcast.xyz
  */
 contract PredictionManager is
     Ownable,
@@ -119,31 +120,160 @@ contract PredictionManager is
     event MarketResolutionFailed(uint256 indexed marketId, string reason);
 
     // --- Errors ---
+    /**
+     * @notice Thrown when invalid fee basis points are provided.
+     * @param feeBasisPoints The invalid fee basis points value that was provided.
+     */
     error InvalidFeeBasisPoints(uint256 feeBasisPoints);
+
+    /**
+     * @notice Thrown when an invalid minimum stake amount is provided.
+     * @param minStakeAmount The invalid minimum stake amount that was provided.
+     */
     error InvalidMinStakeAmount(uint256 minStakeAmount);
+
+    /**
+     * @notice Thrown when attempting to create a market with an ID that already exists.
+     * @param marketId The ID of the market that already exists.
+     */
     error MarketAlreadyExists(uint256 marketId);
+    /**
+     * @notice Thrown when attempting to access a market that doesn't exist.
+     * @param marketId The ID of the market that was requested.
+     */
     error MarketDoesNotExist(uint256 marketId);
-    error MarketAlreadyResolved(uint256 marketId); // Can be emitted by PM or bubbled from MarketLogic
-    error MarketNotResolved(uint256 marketId); // Can be emitted by PM or bubbled from MarketLogic
-    error AlreadyPredicted(uint256 marketId, address user); // Can be emitted by PM or bubbled from MarketLogic
+
+    /**
+     * @notice Thrown when attempting to resolve a market that has already been resolved.
+     * @param marketId The ID of the market that was attempted to be resolved.
+     */
+    error MarketAlreadyResolved(uint256 marketId);
+
+    /**
+     * @notice Thrown when attempting to claim rewards for a market that hasn't been resolved yet.
+     * @param marketId The ID of the market that was attempted to claim rewards from.
+     */
+    error MarketNotResolved(uint256 marketId);
+
+    /**
+     * @notice Thrown when a user attempts to make a prediction on a market they've already predicted on.
+     * @param marketId The ID of the market.
+     * @param user The address of the user who has already made a prediction.
+     */
+    error AlreadyPredicted(uint256 marketId, address user);
+
+    /**
+     * @notice Thrown when a zero address is provided for a parameter that requires a non-zero address.
+     */
     error ZeroAddressInput();
+
+    /**
+     * @notice Thrown when an invalid expiration time is provided for a market.
+     * @param expirationTime The provided expiration time.
+     * @param currentTime The current block timestamp.
+     */
     error InvalidExpirationTime(uint256 expirationTime, uint256 currentTime);
+
+    /**
+     * @notice Thrown when an invalid price threshold is provided for a market.
+     */
     error InvalidPriceThreshold();
+
+    /**
+     * @notice Thrown when an invalid pool key is provided for a market.
+     */
     error InvalidPoolKey();
+
+    /**
+     * @notice Thrown when an invalid asset symbol is provided for a market.
+     */
     error InvalidAssetSymbol();
-    error AmountCannotBeZero(); // Can be emitted by PM or bubbled from MarketLogic
-    error StakeBelowMinimum(uint256 sentAmount, uint256 minRequiredAmount); // Bubbled from MarketLogic
-    error NotWinningNFT(); // Bubbled from MarketLogic
-    error ClaimFailedNoStakeForOutcome(); // Bubbled from MarketLogic
-    error RewardTransferFailed(); // Bubbled from MarketLogic
-    error FeeTransferFailed(); // Bubbled from MarketLogic
+
+    /**
+     * @notice Thrown when a zero amount is provided for a prediction stake.
+     */
+    error AmountCannotBeZero();
+
+    /**
+     * @notice Thrown when a stake amount is below the minimum required amount.
+     * @param sentAmount The amount that was sent.
+     * @param minRequiredAmount The minimum required amount.
+     */
+    error StakeBelowMinimum(uint256 sentAmount, uint256 minRequiredAmount);
+
+    /**
+     * @notice Thrown when attempting to claim rewards for an NFT that didn't win.
+     * @param tokenId The ID of the NFT.
+     * @param predictedOutcome The outcome that was predicted.
+     * @param winningOutcome The actual winning outcome.
+     */
+    error NotWinningNFT(uint256 tokenId, uint8 predictedOutcome, uint8 winningOutcome);
+
+    /**
+     * @notice Thrown when attempting to claim rewards for an outcome with no stake.
+     * @param marketId The ID of the market.
+     * @param outcomeIndex The index of the outcome with no stake.
+     */
+    error ClaimFailedNoStakeForOutcome(uint256 marketId, uint8 outcomeIndex);
+
+    /**
+     * @notice Thrown when a reward transfer fails.
+     * @param to The address that was supposed to receive the reward.
+     * @param amount The amount that was supposed to be transferred.
+     */
+    error RewardTransferFailed(address to, uint256 amount);
+
+    /**
+     * @notice Thrown when a fee transfer fails.
+     * @param to The address that was supposed to receive the fee.
+     * @param amount The amount that was supposed to be transferred.
+     */
+    error FeeTransferFailed(address to, uint256 amount);
+
+    /**
+     * @notice Thrown when a function that should only be called by the reward distributor is called by another address.
+     */
     error NotRewardDistributor();
+
+    /**
+     * @notice Thrown when an invalid market ID is provided.
+     */
     error InvalidMarketId();
+
+    /**
+     * @notice Thrown when a function that should only be called by the oracle resolver is called by another address.
+     */
     error NotOracleResolver();
-    error PriceOracleStale(); // Bubbled from MarketLogic
-    error ResolutionFailedOracleError(); // If oracle call fails in PM
+
+    /**
+     * @notice Thrown when a price oracle's data is stale.
+     * @param lastUpdatedAt The timestamp when the price feed was last updated.
+     * @param currentTime The current block timestamp.
+     * @param maxStaleness The maximum allowed staleness in seconds.
+     */
+    error PriceOracleStale(uint256 lastUpdatedAt, uint256 currentTime, uint256 maxStaleness);
+
+    /**
+     * @notice Thrown when market resolution fails due to an oracle error.
+     */
+    error ResolutionFailedOracleError();
+
+    /**
+     * @notice Thrown when invalid upkeep data is provided.
+     * @param reason A description of why the data is invalid.
+     */
     error InvalidUpkeepData(string reason);
+
+    /**
+     * @notice Thrown when there's a mismatch between the declared stake and the actual value sent.
+     * @param actual The actual value sent.
+     * @param declared The declared stake amount.
+     */
     error StakeMismatch(uint256 actual, uint256 declared);
+
+    /**
+     * @notice Thrown when an empty market name is provided.
+     */
     error EmptyMarketName();
 
     // --- Modifiers ---
@@ -332,38 +462,64 @@ contract PredictionManager is
     }
 
     // --- Prediction Logic (IPredictionManager Implementation) ---
+    /**
+     * @notice Records a prediction for a user on a specific market.
+     * @dev This function handles the complete prediction recording process, including:
+     *      1. Validating inputs and market existence
+     *      2. Calculating and transferring protocol fees
+     *      3. Minting an NFT representing the prediction position
+     *      4. Updating market state with the new prediction
+     *
+     *      The function uses the MarketLogic library for core prediction logic.
+     *
+     * @param _user The address of the user making the prediction.
+     * @param _marketId The ID of the market to predict on.
+     * @param _outcome The outcome being predicted (Bullish or Bearish).
+     * @param _convictionStakeDeclared The amount of ETH being staked on this prediction.
+     * @custom:reverts ZeroAddressInput If the user address is zero.
+     * @custom:reverts AmountCannotBeZero If the conviction stake is zero.
+     * @custom:reverts StakeMismatch If the ETH value sent doesn't match the expected amount.
+     * @custom:reverts MarketDoesNotExist If the specified market doesn't exist.
+     * @custom:reverts MarketAlreadyResolved If the market has already been resolved.
+     * @custom:reverts AlreadyPredicted If the user has already predicted on this market.
+     * @custom:reverts StakeBelowMinimum If the stake amount is below the minimum required.
+     */
     function recordPrediction(
         address _user,
         uint256 _marketId,
         PredictionTypes.Outcome _outcome,
         uint128 _convictionStakeDeclared
     ) external payable override {
-        // Cache storage variables in memory
+        // Input validation
+        if (_user == address(0)) revert ZeroAddressInput();
+        if (_convictionStakeDeclared == 0) revert AmountCannotBeZero();
+
+        // Cache storage variables in memory to reduce SLOADs
         uint256 feeBasis = protocolFeeBasisPoints;
         uint256 stakeAmount = uint256(_convictionStakeDeclared);
-
-        if (_user == address(0)) revert ZeroAddressInput();
-        if (stakeAmount == 0) revert AmountCannotBeZero();
 
         // Calculate fee and expected value using cached values
         uint256 fee = (stakeAmount * feeBasis) / MAX_BASIS_POINTS;
         uint256 expectedValue = stakeAmount + fee; // No overflow check needed due to previous checks
 
+        // Validate the sent ETH amount
         if (msg.value != expectedValue) {
             revert StakeMismatch(msg.value, expectedValue);
         }
 
-        // Cache market in memory
+        // Validate market exists
         Market storage market = markets[_marketId];
         if (!market.exists) revert MarketDoesNotExist(_marketId);
 
         // Get market-specific min stake, defaulting to global min if not set
+        // Cache this to avoid multiple SLOADs
         uint256 minStake = marketMinStakes[_marketId];
         if (minStake == 0) {
             minStake = minStakeAmount;
         }
 
-        // Call library function
+        // Call library function to handle core prediction logic
+        // This will revert with appropriate errors if conditions aren't met
         (uint256 stakeAmountNet, uint256 protocolFee) = market.recordPrediction(
             _user, _outcome, _convictionStakeDeclared, swapCastNFT, treasuryAddress, feeBasis, minStake
         );
@@ -378,10 +534,21 @@ contract PredictionManager is
     // --- Market Resolution (IPredictionManagerForResolver Implementation) ---
     /**
      * @notice Called by OracleResolver to submit resolution data for a market.
-     *         This function then calls the internal logic to finalize resolution.
+     * @dev This function finalizes a market by setting the winning outcome and marking it as resolved.
+     *      It can only be called by the authorized OracleResolver contract.
+     *      The actual resolution logic is handled by the MarketLogic library.
+     *
+     *      The function performs the following steps:
+     *      1. Validates that the market exists
+     *      2. Calls the MarketLogic library to handle the resolution logic
+     *      3. Emits a MarketResolved event with the outcome and total prize pool
+     *
      * @param _marketId The ID of the market to resolve.
-     * @param _winningOutcome The winning outcome determined by the oracle.
-     * @param _oraclePrice The price reported by the oracle.
+     * @param _winningOutcome The winning outcome determined by the oracle (Bullish or Bearish).
+     * @param _oraclePrice The price reported by the oracle, used for verification and event emission.
+     * @custom:reverts NotOracleResolver If called by an address other than the authorized oracle resolver.
+     * @custom:reverts MarketDoesNotExist If the specified market doesn't exist.
+     * @custom:reverts MarketAlreadyResolved If the market has already been resolved.
      */
     function resolveMarket(uint256 _marketId, PredictionTypes.Outcome _winningOutcome, int256 _oraclePrice)
         external
@@ -389,34 +556,55 @@ contract PredictionManager is
         override
         onlyOracleResolverContract
     {
+        // Validate market exists
         Market storage market = markets[_marketId];
         if (!market.exists) revert MarketDoesNotExist(_marketId);
-        // MarketLogic.resolve will check if already resolved
 
+        // Call library function to handle resolution logic
+        // This will revert with MarketAlreadyResolved if the market is already resolved
         uint256 totalPrizePool = market.resolve(_winningOutcome, _oraclePrice);
+
+        // Emit event with resolution details
         emit MarketResolved(_marketId, _winningOutcome, _oraclePrice, totalPrizePool);
     }
 
     // --- Reward Claiming (IPredictionManagerForDistributor Implementation) ---
     /**
      * @notice Called by RewardDistributor to process a reward claim for an NFT.
-     * @param _tokenId The ID of the SwapCastNFT.
+     * @dev This function handles the complete reward claim process for a winning NFT position.
+     *      It can only be called by the authorized RewardDistributor contract.
+     *      The actual reward calculation and transfer logic is handled by the MarketLogic library.
+     *
+     *      The function performs the following steps:
+     *      1. Retrieves the prediction details from the NFT
+     *      2. Validates that the market exists
+     *      3. Calls the MarketLogic library to handle the reward claim logic
+     *      4. Emits a RewardClaimed event with the reward amount
+     *
+     * @param _tokenId The ID of the SwapCastNFT representing the winning position.
+     * @custom:reverts NotRewardDistributor If called by an address other than the authorized reward distributor.
+     * @custom:reverts MarketDoesNotExist If the market associated with the NFT doesn't exist.
+     * @custom:reverts MarketNotResolved If the market hasn't been resolved yet.
+     * @custom:reverts NotWinningNFT If the NFT's prediction doesn't match the winning outcome.
+     * @custom:reverts ClaimFailedNoStakeForOutcome If there's no stake for the winning outcome.
+     * @custom:reverts RewardTransferFailed If the reward transfer fails.
      */
     function claimReward(uint256 _tokenId) external virtual override onlyRewardDistributorContract {
-        // RewardDistributor is responsible for calling swapCastNFT.getPredictionDetails first
-        // and passing those details to this contract, or this contract fetches them.
-        // For simplicity with MarketLogic, let's assume RD passes them or we fetch here.
-
+        // Retrieve prediction details from the NFT
         (uint256 marketIdNFT, PredictionTypes.Outcome predictionOutcome, uint256 userConvictionStake, address nftOwner)
         = swapCastNFT.getPredictionDetails(_tokenId);
 
+        // Validate market exists
         Market storage market = markets[marketIdNFT];
         if (!market.exists) revert MarketDoesNotExist(marketIdNFT);
-        // MarketLogic.claimReward will check resolved, winning NFT, etc.
 
+        // Call library function to handle reward claim logic
+        // This will revert with appropriate errors if conditions aren't met
+        // (e.g., market not resolved, not winning NFT, no stake for outcome, etc.)
         uint256 rewardAmount =
             market.claimReward(_tokenId, predictionOutcome, userConvictionStake, nftOwner, swapCastNFT);
 
+        // Emit event with claim details
         emit RewardClaimed(nftOwner, _tokenId, rewardAmount);
     }
 
@@ -569,26 +757,51 @@ contract PredictionManager is
 
     /**
      * @notice Internal function to fetch oracle price and resolve a market.
-     *         Called by performUpkeep (log-based path).
+     * @dev This function is called by performUpkeep when triggered by a MarketExpired log event.
+     *      It handles the automated resolution of markets using their configured price oracles.
+     *
+     *      The function performs the following steps:
+     *      1. Validates that the market exists, is not already resolved, and has a valid price aggregator
+     *      2. Confirms that the market has actually expired
+     *      3. Fetches the current price from the oracle and determines the winning outcome
+     *      4. Calls the MarketLogic library to handle the resolution logic
+     *      5. Emits a MarketResolved event with the outcome and total prize pool
+     *
+     *      If any validation fails, the function returns early without taking action.
+     *      If the oracle call fails (e.g., due to stale price data), the function will revert.
+     *
      * @param _marketId The ID of the market to resolve.
+     * @custom:reverts PriceOracleStale If the oracle price data is stale.
      */
     function _triggerMarketResolution(uint256 _marketId) internal {
+        // Load market into storage once to save gas
         Market storage market = markets[_marketId];
+
+        // Early return conditions - avoid unnecessary processing
         if (!market.exists || market.resolved || market.priceAggregator == address(0)) {
-            return; // Already handled or not resolvable
+            return; // Market doesn't exist, is already resolved, or has no price aggregator
         }
 
+        // Cache the current timestamp to avoid multiple calls to block.timestamp
+        uint256 currentTime = block.timestamp;
+
         // Check if actually expired, though log trigger from MarketExpired implies it
-        if (block.timestamp < market.expirationTime) {
+        if (currentTime < market.expirationTime) {
             return; // Not yet expired, should not happen if MarketExpired was emitted correctly
         }
 
-        // Call the library function. If it reverts (e.g., PriceOracleStale), this function will revert.
-        (PredictionTypes.Outcome outcome, int256 price) = market.getOutcomeFromOracle(maxPriceStalenessSeconds);
+        // Cache the max staleness value to avoid an SLOAD
+        uint256 maxStaleness = maxPriceStalenessSeconds;
 
-        // Assuming direct resolution for now. If OracleResolver is involved, this logic might change.
-        // The call to market.resolve() itself can also revert if conditions are not met (e.g. already resolved).
+        // Call the library function to get the outcome from the oracle
+        // This will revert with PriceOracleStale if the price data is too old
+        (PredictionTypes.Outcome outcome, int256 price) = market.getOutcomeFromOracle(maxStaleness);
+
+        // Call the library function to handle the resolution logic
+        // This will revert with MarketAlreadyResolved if the market is already resolved
         uint256 totalPrizePool = market.resolve(outcome, price);
+
+        // Emit event with resolution details
         emit MarketResolved(_marketId, outcome, price, totalPrizePool);
     }
 
