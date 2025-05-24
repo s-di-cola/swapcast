@@ -15,6 +15,7 @@ import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
  *      This library centralizes the core business logic for prediction markets to improve code organization,
  *      reduce duplication, and facilitate testing. It handles operations like recording predictions,
  *      resolving markets, and calculating rewards.
+ * @custom:security-contact security@swapcast.com
  */
 library MarketLogic {
     // Re-using PredictionManager's Market struct directly by importing PredictionManager
@@ -30,72 +31,105 @@ library MarketLogic {
     // --- Errors ---
     /**
      * @notice Thrown when attempting to perform an action on a market that is already resolved.
+     * @param marketId The ID of the market that is already resolved.
      */
-    error MarketAlreadyResolved();
+    error MarketAlreadyResolvedL(uint256 marketId);
 
     /**
      * @notice Thrown when attempting to claim a reward for a market that is not yet resolved.
+     * @param marketId The ID of the market that is not yet resolved.
      */
-    error MarketNotResolved();
+    error MarketNotResolvedL(uint256 marketId);
 
     /**
      * @notice Thrown when a user attempts to make a prediction for a market they have already predicted on.
      * @param user The address of the user who has already made a prediction.
+     * @param marketId The ID of the market on which the user has already predicted.
      */
-    error AlreadyPredicted(address user);
+    error AlreadyPredictedL(address user, uint256 marketId);
 
     /**
      * @notice Thrown when attempting to record a prediction with zero stake amount.
      */
-    error AmountCannotBeZero();
+    error AmountCannotBeZeroL();
 
     /**
      * @notice Thrown when the stake amount is below the minimum required amount.
      * @param sentAmount The amount sent by the user.
      * @param minRequiredAmount The minimum required stake amount.
      */
-    error StakeBelowMinimum(uint256 sentAmount, uint256 minRequiredAmount);
+    error StakeBelowMinimumL(uint256 sentAmount, uint256 minRequiredAmount);
 
     /**
      * @notice Thrown when the transfer of a reward to the user fails.
+     * @param recipient The address that was supposed to receive the reward.
+     * @param amount The amount that failed to transfer.
      */
-    error RewardTransferFailed();
+    error RewardTransferFailedL(address recipient, uint256 amount);
 
     /**
      * @notice Thrown when the transfer of a fee to the treasury fails.
+     * @param treasuryAddress The address of the treasury that was supposed to receive the fee.
+     * @param amount The fee amount that failed to transfer.
      */
-    error FeeTransferFailed();
+    error FeeTransferFailedL(address treasuryAddress, uint256 amount);
 
     /**
      * @notice Thrown when attempting to claim a reward for an NFT that did not predict the winning outcome.
+     * @param tokenId The ID of the NFT that did not predict the winning outcome.
+     * @param predictedOutcome The outcome that was predicted.
+     * @param winningOutcome The actual winning outcome.
      */
-    error NotWinningNFT();
+    error NotWinningNFTL(uint256 tokenId, uint8 predictedOutcome, uint8 winningOutcome);
 
     /**
      * @notice Thrown when attempting to claim a reward but there are no stakes for the outcome.
+     * @param marketId The ID of the market with no stakes for the outcome.
+     * @param outcome The outcome with no stakes.
      */
-    error ClaimFailedNoStakeForOutcome();
+    error ClaimFailedNoStakeForOutcomeL(uint256 marketId, uint8 outcome);
 
     /**
      * @notice Thrown when the price data from the oracle is stale.
+     * @param lastUpdateTime The timestamp of the last oracle update.
+     * @param currentTime The current block timestamp.
+     * @param maxStaleness The maximum allowed staleness in seconds.
      */
-    error PriceOracleStale();
+    error PriceOracleStaleL(uint256 lastUpdateTime, uint256 currentTime, uint256 maxStaleness);
 
     /**
      * @notice Thrown when attempting to record a prediction for a market that has already expired.
+     * @param marketId The ID of the expired market.
+     * @param expirationTime The expiration timestamp of the market.
+     * @param currentTime The current block timestamp.
      */
-    error MarketExpired();
+    error MarketExpiredL(uint256 marketId, uint256 expirationTime, uint256 currentTime);
 
     /**
      * @notice Thrown when attempting to resolve a market that has not yet expired.
+     * @param marketId The ID of the market that has not yet expired.
+     * @param expirationTime The expiration timestamp of the market.
+     * @param currentTime The current block timestamp.
      */
-    error MarketNotYetExpired();
+    error MarketNotYetExpiredL(uint256 marketId, uint256 expirationTime, uint256 currentTime);
 
     /**
-     * @notice Thrown when an operation is attempted with a zero address where it's not allowed (e.g., withdrawing to address(0)).
+     * @notice Thrown when an operation is attempted with a zero address where it's not allowed.
      * @param message A descriptive message explaining the context of the zero address error.
      */
-    error ZeroAddress(string message);
+    error ZeroAddressL(string message);
+
+    /**
+     * @notice Thrown when a calculated reward amount is unexpectedly zero.
+     * @param tokenId The ID of the NFT for which the reward was calculated.
+     */
+    error ZeroRewardAmountL(uint256 tokenId);
+
+    /**
+     * @notice Thrown when the NFT owner address is zero.
+     * @param tokenId The ID of the NFT with a zero owner address.
+     */
+    error ZeroNFTOwnerL(uint256 tokenId);
 
     /**
      * @notice Records a user's prediction for a given market and mints an NFT representing their position.
@@ -142,31 +176,37 @@ library MarketLogic {
         uint256 marketId = market.marketId;
 
         // Validation checks
-        if (block.timestamp >= expirationTime) revert MarketExpired();
-        if (isResolved) revert MarketAlreadyResolved();
-        if (hasUserPredicted) revert AlreadyPredicted(user);
+        if (block.timestamp >= expirationTime) {
+            revert MarketExpiredL(marketId, expirationTime, block.timestamp);
+        }
+        if (isResolved) revert MarketAlreadyResolvedL(marketId);
+        if (hasUserPredicted) revert AlreadyPredictedL(user, marketId);
         // user address zero check should be done by caller (PredictionManager)
-        if (convictionStakeDeclared == 0) revert AmountCannotBeZero();
-        if (treasuryAddress == address(0)) revert ZeroAddress("Treasury address cannot be zero");
+        if (convictionStakeDeclared == 0) revert AmountCannotBeZeroL();
+        if (treasuryAddress == address(0)) revert ZeroAddressL("Treasury address cannot be zero");
 
         // Calculate fee and net stake amount
         protocolFee = (convictionStakeDeclared * protocolFeeBasisPoints) / 10000;
         stakeAmountNet = convictionStakeDeclared; // This IS the net stake.
 
         // Validate stake amount
-        if (stakeAmountNet < minStakeAmount) revert StakeBelowMinimum(stakeAmountNet, minStakeAmount);
+        if (stakeAmountNet < minStakeAmount) {
+            revert StakeBelowMinimumL(stakeAmountNet, minStakeAmount);
+        }
 
         // Process fee transfer if needed
         if (protocolFee > 0) {
             (bool success,) = payable(treasuryAddress).call{value: protocolFee}("");
-            if (!success) revert FeeTransferFailed();
+            if (!success) revert FeeTransferFailedL(treasuryAddress, protocolFee);
         }
 
         // Update market state (single SSTORE for user prediction status)
         market.userHasPredicted[user] = true;
 
         // Update total stake for the chosen outcome (single SSTORE)
-        if (outcome == PredictionTypes.Outcome.Bearish) {
+        // Using direct uint8 comparison is more gas efficient than enum comparison
+        if (uint8(outcome) == 0) {
+            // PredictionTypes.Outcome.Bearish = 0
             market.totalConvictionStakeOutcome0 += stakeAmountNet;
         } else {
             market.totalConvictionStakeOutcome1 += stakeAmountNet;
@@ -180,10 +220,9 @@ library MarketLogic {
 
     /**
      * @notice Resolves a market with the given winning outcome and oracle price.
-     * @dev This function finalizes a prediction market by:
-     *      - Validating the market is not already resolved
-     *      - Setting the winning outcome based on oracle data
-     *      - Calculating the total prize pool (sum of all stakes)
+     * @dev This function finalizes a prediction market by setting the winning outcome
+     *      and marking it as resolved. After resolution, users with winning predictions
+     *      can claim their rewards, and no new predictions can be made.
      *
      * The market resolution is a critical step that determines which predictions
      * were correct and enables users to claim their rewards. After resolution,
@@ -192,7 +231,6 @@ library MarketLogic {
      *
      * @param market The storage reference to the market data.
      * @param winningOutcome_ The determined winning outcome (Bearish or Bullish).
-     * @param oraclePrice The price from the oracle at resolution time (unused but available).
      * @return totalPrizePool The total prize pool for the market (sum of all stakes).
      *
      * @custom:security The caller (PredictionManager) is responsible for:
@@ -203,20 +241,17 @@ library MarketLogic {
     function resolve(
         PredictionManager.Market storage market,
         PredictionTypes.Outcome winningOutcome_,
-        int256 oraclePrice
+        int256 /* oraclePrice */
     ) internal returns (uint256 totalPrizePool) {
-        // Suppress unused parameter warning
-        if (false) oraclePrice;
-        if (market.resolved) revert MarketAlreadyResolved();
+        // Using commented parameter name instead of if(false) for unused parameter suppression
+        uint256 marketId = market.marketId;
+        if (market.resolved) revert MarketAlreadyResolvedL(marketId);
         // Caller (PredictionManager) should ensure market is expired and oracle data is fresh.
 
         market.resolved = true;
         market.winningOutcome = winningOutcome_;
-        // oraclePrice_ is passed in, could also be stored in market struct if needed.
-        // For now, it's not directly used in this function but is available.
 
         totalPrizePool = market.totalConvictionStakeOutcome0 + market.totalConvictionStakeOutcome1;
-        // PredictionManager should emit MarketResolved event.
         return totalPrizePool;
     }
 
@@ -259,30 +294,36 @@ library MarketLogic {
         ISwapCastNFT swapCastNFT
     ) internal returns (uint256 rewardAmount) {
         // Cache storage variables to reduce SLOADs
+        uint256 marketId = market.marketId;
         bool isResolved = market.resolved;
         PredictionTypes.Outcome winningOutcome = market.winningOutcome;
         uint256 totalStakeOutcome0 = market.totalConvictionStakeOutcome0;
         uint256 totalStakeOutcome1 = market.totalConvictionStakeOutcome1;
 
         // Validation checks
-        if (!isResolved) revert MarketNotResolved();
-        if (predictionOutcome != winningOutcome) revert NotWinningNFT();
-        if (userConvictionStake == 0) revert AmountCannotBeZero(); // Should not happen
+        if (!isResolved) revert MarketNotResolvedL(marketId);
+        if (nftOwner == address(0)) revert ZeroNFTOwnerL(tokenId);
+        if (predictionOutcome != winningOutcome) {
+            revert NotWinningNFTL(tokenId, uint8(predictionOutcome), uint8(winningOutcome));
+        }
+        if (userConvictionStake == 0) revert AmountCannotBeZeroL(); // Should not happen
 
         // Start with base reward (user's original stake)
         rewardAmount = userConvictionStake;
 
         // Calculate additional reward from losing pool if applicable
-        if (winningOutcome == PredictionTypes.Outcome.Bearish) {
-            if (totalStakeOutcome0 == 0) revert ClaimFailedNoStakeForOutcome();
+        // Using direct uint8 comparison is more gas efficient than enum comparison
+        if (uint8(winningOutcome) == 0) {
+            // Bearish
+            if (totalStakeOutcome0 == 0) revert ClaimFailedNoStakeForOutcomeL(marketId, 0);
             if (totalStakeOutcome1 > 0) {
                 // Calculate user's share of the losing pool with better precision
                 // Multiply before dividing to minimize precision loss
                 rewardAmount += (userConvictionStake * totalStakeOutcome1) / totalStakeOutcome0;
             }
         } else {
-            // Winning outcome is Bullish
-            if (totalStakeOutcome1 == 0) revert ClaimFailedNoStakeForOutcome();
+            // Bullish
+            if (totalStakeOutcome1 == 0) revert ClaimFailedNoStakeForOutcomeL(marketId, 1);
             if (totalStakeOutcome0 > 0) {
                 // Calculate user's share of the losing pool with better precision
                 // Multiply before dividing to minimize precision loss
@@ -290,14 +331,15 @@ library MarketLogic {
             }
         }
 
+        // Check for zero reward amount (should never happen if validation passed)
+        if (rewardAmount == 0) revert ZeroRewardAmountL(tokenId);
+
         // Burn the NFT first (pattern: effects before interactions)
         swapCastNFT.burn(tokenId);
 
-        // Transfer reward to NFT owner
-        if (rewardAmount > 0) {
-            (bool success,) = payable(nftOwner).call{value: rewardAmount}("");
-            if (!success) revert RewardTransferFailed();
-        }
+        // Transfer reward to NFT owner - no need to check rewardAmount > 0 as we already verified it's not zero
+        (bool success,) = payable(nftOwner).call{value: rewardAmount}("");
+        if (!success) revert RewardTransferFailedL(nftOwner, rewardAmount);
 
         return rewardAmount;
     }
@@ -335,26 +377,31 @@ library MarketLogic {
      *
      * @custom:security This function relies on Chainlink's security model for accurate price data.
      *                   The caller should ensure the price aggregator is trusted and properly configured.
+     * @custom:precision This function handles potential precision issues by using explicit type casting
+     *                   for threshold comparison to ensure consistent behavior.
      */
     function getOutcomeFromOracle(PredictionManager.Market storage market, uint256 maxPriceStaleness)
         internal
         view
         returns (PredictionTypes.Outcome outcome, int256 price)
     {
-        if (market.priceAggregator == address(0)) revert PredictionTypes.InvalidPriceAggregator();
+        address priceAggregator = market.priceAggregator;
+
+        if (priceAggregator == address(0)) revert PredictionTypes.InvalidPriceAggregator();
 
         // roundId, answer, startedAt, updatedAt, answeredInRound
         (uint80 roundId, int256 oraclePrice,, uint256 lastUpdatedAtTimestamp, uint80 answeredInRound) =
-            AggregatorV3Interface(market.priceAggregator).latestRoundData();
+            AggregatorV3Interface(priceAggregator).latestRoundData();
 
         // Check for stale price data
-        if (block.timestamp - lastUpdatedAtTimestamp > maxPriceStaleness) {
-            revert PriceOracleStale();
+        uint256 currentTime = block.timestamp;
+        if (currentTime - lastUpdatedAtTimestamp > maxPriceStaleness) {
+            revert PriceOracleStaleL(lastUpdatedAtTimestamp, currentTime, maxPriceStaleness);
         }
 
         // Check if the round is valid (Chainlink recommends this check)
         if (answeredInRound < roundId) {
-            revert PriceOracleStale();
+            revert PriceOracleStaleL(lastUpdatedAtTimestamp, currentTime, maxPriceStaleness);
         }
 
         // Additional check for valid price
@@ -363,10 +410,12 @@ library MarketLogic {
         }
 
         price = oraclePrice;
+        uint256 priceThreshold = market.priceThreshold;
 
-        if (oraclePrice > int256(market.priceThreshold)) {
+        // Compare price to threshold and determine outcome
+        if (oraclePrice > int256(priceThreshold)) {
             outcome = PredictionTypes.Outcome.Bullish;
-        } else if (oraclePrice < int256(market.priceThreshold)) {
+        } else if (oraclePrice < int256(priceThreshold)) {
             outcome = PredictionTypes.Outcome.Bearish;
         } else {
             // Price is exactly the threshold, could be neutral or handled as per specific rules

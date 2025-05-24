@@ -152,8 +152,8 @@ contract MarketLogicTest is Test {
         assertEq(netStake, stakeAmount, "Net stake amount mismatch");
         assertEq(fee, expectedFee, "Fee amount mismatch");
 
-        // Verify user cannot predict twice
-        vm.expectRevert(abi.encodeWithSignature("AlreadyPredicted(address)", user1));
+        // Attempt to record prediction again (should revert)
+        vm.expectRevert(abi.encodeWithSignature("AlreadyPredictedL(address,uint256)", user1, 1));
         wrapper.recordPrediction{value: stakeAmount + expectedFee}(user1, PredictionTypes.Outcome.Bullish, stakeAmount);
     }
 
@@ -165,21 +165,32 @@ contract MarketLogicTest is Test {
         uint256 stakeAmount = 1 ether;
         uint256 expectedFee = (stakeAmount * wrapper.PROTOCOL_FEE_BASIS_POINTS()) / 10000;
 
-        vm.expectRevert("MarketExpired()");
+        vm.expectRevert(
+            abi.encodeWithSelector(
+                bytes4(keccak256("MarketExpiredL(uint256,uint256,uint256)")),
+                1, // marketId
+                block.timestamp - 1, // expirationTime
+                block.timestamp // currentTime
+            )
+        );
         wrapper.recordPrediction{value: stakeAmount + expectedFee}(user1, PredictionTypes.Outcome.Bullish, stakeAmount);
     }
 
     function test_recordPrediction_ZeroAmount() public {
-        vm.expectRevert("AmountCannotBeZero()");
+        // Attempt to record prediction with zero amount
+        vm.expectRevert("AmountCannotBeZeroL()");
         wrapper.recordPrediction{value: 0}(user1, PredictionTypes.Outcome.Bullish, 0);
     }
 
     function test_recordPrediction_BelowMinStake() public {
-        uint256 stakeAmount = 0.001 ether; // Below minimum
+        // Attempt to record prediction with amount below min stake
+        uint256 stakeAmount = 0.001 ether; // Below 0.01 ether min
         uint256 expectedFee = (stakeAmount * wrapper.PROTOCOL_FEE_BASIS_POINTS()) / 10000;
 
         vm.expectRevert(
-            abi.encodeWithSignature("StakeBelowMinimum(uint256,uint256)", stakeAmount, wrapper.MIN_STAKE_AMOUNT())
+            abi.encodeWithSelector(
+                bytes4(keccak256("StakeBelowMinimumL(uint256,uint256)")), stakeAmount, wrapper.MIN_STAKE_AMOUNT()
+            )
         );
         wrapper.recordPrediction{value: stakeAmount + expectedFee}(user1, PredictionTypes.Outcome.Bullish, stakeAmount);
     }
@@ -218,7 +229,12 @@ contract MarketLogicTest is Test {
         wrapper.setResolved(true);
 
         // Attempt to resolve again
-        vm.expectRevert("MarketAlreadyResolved()");
+        vm.expectRevert(
+            abi.encodeWithSelector(
+                bytes4(keccak256("MarketAlreadyResolvedL(uint256)")),
+                1 // marketId
+            )
+        );
         wrapper.resolve(PredictionTypes.Outcome.Bullish, 1100e8);
     }
 
@@ -260,7 +276,12 @@ contract MarketLogicTest is Test {
         );
 
         // Attempt to claim before resolution
-        vm.expectRevert("MarketNotResolved()");
+        vm.expectRevert(
+            abi.encodeWithSelector(
+                bytes4(keccak256("MarketNotResolvedL(uint256)")),
+                1 // marketId
+            )
+        );
         wrapper.claimReward(tokenId1, PredictionTypes.Outcome.Bullish, stakeAmount, user1);
     }
 
@@ -283,7 +304,14 @@ contract MarketLogicTest is Test {
         wrapper.resolve(PredictionTypes.Outcome.Bearish, 900e8); // $900 < $1000 threshold
 
         // Attempt to claim with wrong outcome
-        vm.expectRevert("NotWinningNFT()");
+        vm.expectRevert(
+            abi.encodeWithSelector(
+                bytes4(keccak256("NotWinningNFTL(uint256,uint8,uint8)")),
+                tokenId1, // tokenId
+                uint8(PredictionTypes.Outcome.Bullish), // predictedOutcome
+                uint8(PredictionTypes.Outcome.Bearish) // winningOutcome
+            )
+        );
         wrapper.claimReward(
             tokenId1,
             PredictionTypes.Outcome.Bullish, // Wrong outcome (market resolved as Bearish)

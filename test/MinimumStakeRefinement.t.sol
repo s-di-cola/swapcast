@@ -178,7 +178,7 @@ contract MinimumStakeRefinementTest is Test {
         // Attempt prediction with stake below market-specific min
         vm.prank(user1);
         vm.expectRevert(
-            abi.encodeWithSelector(MarketLogic.StakeBelowMinimum.selector, stakeAmount, marketSpecificMinStake)
+            abi.encodeWithSelector(MarketLogic.StakeBelowMinimumL.selector, stakeAmount, marketSpecificMinStake)
         );
         pool.recordPrediction{value: totalValue}(user1, marketId, PredictionTypes.Outcome.Bearish, uint128(stakeAmount));
 

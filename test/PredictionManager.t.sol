@@ -340,7 +340,7 @@ contract PredictionManagerTest is Test {
 
         vm.prank(predictor);
         vm.expectRevert(
-            abi.encodeWithSelector(MarketLogic.StakeBelowMinimum.selector, stakeAmountSent, pool.minStakeAmount())
+            abi.encodeWithSelector(MarketLogic.StakeBelowMinimumL.selector, stakeAmountSent, pool.minStakeAmount())
         );
         pool.recordPrediction{value: totalMsgValue}(
             predictor, marketIdToTest, outcomeToPredict, uint128(stakeAmountSent)
@@ -375,7 +375,12 @@ contract PredictionManagerTest is Test {
 
         vm.deal(user1, totalValue);
         vm.prank(user1);
-        vm.expectRevert(MarketLogic.MarketAlreadyResolved.selector);
+        vm.expectRevert(
+            abi.encodeWithSelector(
+                MarketLogic.MarketAlreadyResolvedL.selector,
+                marketIdToTest // marketId
+            )
+        );
         pool.recordPrediction{value: totalValue}(
             user1, marketIdToTest, PredictionTypes.Outcome.Bullish, uint128(stakeAmount)
         );
