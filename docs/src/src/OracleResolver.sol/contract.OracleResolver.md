@@ -1,5 +1,5 @@
 # OracleResolver
-[Git Source](https://github.com/s-di-cola/swapcast/blob/fd3e92ac000764a2f74374fcba21b9ac2c9b9c35/src/OracleResolver.sol)
+[Git Source](https://github.com/s-di-cola/swapcast/blob/d01f662567db47c1053507e48b5726489c06b0a6/src/OracleResolver.sol)
 
 **Inherits:**
 Ownable
@@ -15,6 +15,9 @@ to update the market's state with the winning outcome. The PredictionManager add
 
 *Price feeds are expected to return values with 8 decimal places, which is the standard for most Chainlink feeds.
 The contract validates the integrity of the price feed data before using it for market resolution.*
+
+**Note:**
+security-contact: security@swapcast.xyz
 
 
 ## State Variables
@@ -70,6 +73,11 @@ uint256 public maxPriceStalenessSeconds;
 
 Constructs a new OracleResolver instance.
 
+**Notes:**
+- reverts: PredictionManagerZeroAddress If the prediction manager address is zero.
+
+- reverts: InvalidTokenAddress If the feed registry address is zero.
+
 
 ```solidity
 constructor(address _predictionManagerAddress, address _feedRegistryAddress, address initialOwner)
@@ -119,7 +127,10 @@ function registerOracle(uint256 _marketId, address _baseToken, address _quoteTok
 
 Sets the maximum allowed staleness period for oracle price feeds.
 
-*Only callable by the contract owner. Emits [MaxPriceStalenessSet](/src/OracleResolver.sol/contract.OracleResolver.md#maxpricestalenessset).*
+*Only callable by the contract owner. Emits [MaxPriceStalenessSet](/src/OracleResolver.sol/contract.OracleResolver.md#maxpricestalenessset).
+This value determines how old a price feed update can be before it's considered stale.
+A lower value provides more up-to-date prices but may cause more failures during high network congestion.
+A higher value allows for more tolerance during network congestion but may use outdated prices.*
 
 
 ```solidity
@@ -137,17 +148,30 @@ function setMaxPriceStaleness(uint256 _newStalenessSeconds) external onlyOwner;
 Resolves a prediction market using its registered Chainlink oracle.
 
 *This function can be called by anyone. It fetches the latest price from the specified Chainlink aggregator.
-Outcome 0 is declared winner if `oracle_price >= priceThreshold`.
-Outcome 1 is declared winner if `oracle_price < priceThreshold`.
-Calls `PredictionManager.resolveMarket()` to finalize the resolution.
-Emits [MarketResolved](/src/OracleResolver.sol/contract.OracleResolver.md#marketresolved) on successful resolution via the PredictionManager.
-Reverts with:
-- {OracleNotRegistered} if no oracle is set for the market
-- {PriceIsStale} if the price data is too old
-- {InvalidRound} if the round ID is invalid
-- {StaleRound} if the round is not the latest
-- {InvalidPrice} if the price is zero or negative
-- {ResolutionFailedInManager} if the call to PredictionManager fails*
+The market outcome is determined as follows:
+- Bullish (Outcome 0) wins if `oracle_price >= priceThreshold`.
+- Bearish (Outcome 1) wins if `oracle_price < priceThreshold`.
+The function performs extensive validation of the price feed data to ensure reliability:
+1. Verifies the oracle is registered for the market
+2. Checks that the round ID is valid (not zero)
+3. Ensures the round is not stale (answeredInRound >= roundId)
+4. Validates the price is positive (> 0)
+5. Confirms the price data is not too old (within maxPriceStalenessSeconds)
+After validation, it calls `PredictionManager.resolveMarket()` to finalize the resolution
+and emits a [MarketResolved](/src/OracleResolver.sol/contract.OracleResolver.md#marketresolved) event on success.*
+
+**Notes:**
+- reverts: OracleNotRegistered If no oracle is set for the market
+
+- reverts: InvalidRound If the round ID is invalid (zero)
+
+- reverts: StaleRound If the round is not the latest (answeredInRound < roundId)
+
+- reverts: InvalidPrice If the price is zero or negative
+
+- reverts: PriceIsStale If the price data is too old (beyond maxPriceStalenessSeconds)
+
+- reverts: ResolutionFailedInManager If the call to PredictionManager fails
 
 
 ```solidity
@@ -211,6 +235,12 @@ Reverts if an attempt is made to register an oracle for a market that already ha
 error OracleAlreadyRegistered(uint256 marketId);
 ```
 
+**Parameters**
+
+|Name|Type|Description|
+|----|----|-----------|
+|`marketId`|`uint256`|The ID of the market for which registration was attempted.|
+
 ### OracleNotRegistered
 Reverts if an attempt is made to resolve a market that doesn't have a registered oracle.
 
@@ -218,6 +248,12 @@ Reverts if an attempt is made to resolve a market that doesn't have a registered
 ```solidity
 error OracleNotRegistered(uint256 marketId);
 ```
+
+**Parameters**
+
+|Name|Type|Description|
+|----|----|-----------|
+|`marketId`|`uint256`|The ID of the market for which resolution was attempted.|
 
 ### InvalidTokenAddress
 Reverts if an attempt is made to register an oracle with a zero address for the token.
@@ -243,6 +279,12 @@ Reverts if the call to `PredictionManager.resolveMarket()` fails during market r
 error ResolutionFailedInManager(uint256 marketId);
 ```
 
+**Parameters**
+
+|Name|Type|Description|
+|----|----|-----------|
+|`marketId`|`uint256`|The ID of the market for which resolution failed.|
+
 ### PriceIsStale
 Reverts if the Chainlink price feed data is older than `maxPriceStalenessSeconds`.
 
@@ -251,8 +293,18 @@ Reverts if the Chainlink price feed data is older than `maxPriceStalenessSeconds
 error PriceIsStale(uint256 marketId, uint256 lastUpdatedAt, uint256 currentBlockTimestamp);
 ```
 
+**Parameters**
+
+|Name|Type|Description|
+|----|----|-----------|
+|`marketId`|`uint256`|The ID of the market being resolved.|
+|`lastUpdatedAt`|`uint256`|The timestamp when the price feed was last updated.|
+|`currentBlockTimestamp`|`uint256`|The current block timestamp.|
+
 ### InvalidRound
 Reverts if the price feed returns an invalid round ID.
+
+*This occurs when the roundId returned by the Chainlink oracle is 0, which indicates an invalid round.*
 
 
 ```solidity
@@ -262,6 +314,8 @@ error InvalidRound();
 ### StaleRound
 Reverts if the price feed returns a stale round.
 
+*This occurs when the answeredInRound value is less than the roundId, indicating the round data is stale.*
+
 
 ```solidity
 error StaleRound();
@@ -269,6 +323,8 @@ error StaleRound();
 
 ### InvalidPrice
 Reverts if the price feed returns an invalid price (zero or negative).
+
+*Chainlink prices should always be positive for asset prices. A zero or negative value indicates an error.*
 
 
 ```solidity
@@ -278,6 +334,8 @@ error InvalidPrice();
 ### InvalidPriceThreshold
 Reverts if the price threshold is set to zero.
 
+*A price threshold of zero is invalid as it cannot be used to determine a winning outcome.*
+
 
 ```solidity
 error InvalidPriceThreshold();
@@ -285,6 +343,8 @@ error InvalidPriceThreshold();
 
 ### FeedRegistryNotSet
 Reverts if the feed registry returns a zero address for the feed.
+
+*This occurs when the requested token pair does not have a registered price feed in the Chainlink Feed Registry.*
 
 
 ```solidity

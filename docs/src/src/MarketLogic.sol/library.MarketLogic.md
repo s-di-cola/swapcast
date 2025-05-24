@@ -1,5 +1,5 @@
 # MarketLogic
-[Git Source](https://github.com/s-di-cola/swapcast/blob/fd3e92ac000764a2f74374fcba21b9ac2c9b9c35/src/MarketLogic.sol)
+[Git Source](https://github.com/s-di-cola/swapcast/blob/d01f662567db47c1053507e48b5726489c06b0a6/src/MarketLogic.sol)
 
 **Author:**
 Simone Di Cola
@@ -10,6 +10,9 @@ Provides the core logic for operating on individual prediction markets.
 This library centralizes the core business logic for prediction markets to improve code organization,
 reduce duplication, and facilitate testing. It handles operations like recording predictions,
 resolving markets, and calculating rewards.*
+
+**Note:**
+security-contact: security@swapcast.com
 
 
 ## Functions
@@ -70,10 +73,9 @@ function recordPrediction(
 
 Resolves a market with the given winning outcome and oracle price.
 
-*This function finalizes a prediction market by:
-- Validating the market is not already resolved
-- Setting the winning outcome based on oracle data
-- Calculating the total prize pool (sum of all stakes)
+*This function finalizes a prediction market by setting the winning outcome
+and marking it as resolved. After resolution, users with winning predictions
+can claim their rewards, and no new predictions can be made.
 The market resolution is a critical step that determines which predictions
 were correct and enables users to claim their rewards. After resolution,
 no new predictions can be made for this market, and users with winning
@@ -87,7 +89,7 @@ security: The caller (PredictionManager) is responsible for:
 
 
 ```solidity
-function resolve(PredictionManager.Market storage market, PredictionTypes.Outcome winningOutcome_, int256 oraclePrice)
+function resolve(PredictionManager.Market storage market, PredictionTypes.Outcome winningOutcome_, int256)
     internal
     returns (uint256 totalPrizePool);
 ```
@@ -97,7 +99,7 @@ function resolve(PredictionManager.Market storage market, PredictionTypes.Outcom
 |----|----|-----------|
 |`market`|`PredictionManager.Market`|The storage reference to the market data.|
 |`winningOutcome_`|`PredictionTypes.Outcome`|The determined winning outcome (Bearish or Bullish).|
-|`oraclePrice`|`int256`|The price from the oracle at resolution time (unused but available).|
+|`<none>`|`int256`||
 
 **Returns**
 
@@ -197,9 +199,12 @@ The function implements important safeguards:
 - Reverts if the price data is stale (older than maxPriceStaleness)
 - Handles the edge case where price exactly matches the threshold*
 
-**Note:**
-security: This function relies on Chainlink's security model for accurate price data.
+**Notes:**
+- security: This function relies on Chainlink's security model for accurate price data.
 The caller should ensure the price aggregator is trusted and properly configured.
+
+- precision: This function handles potential precision issues by using explicit type casting
+for threshold comparison to ensure consistent behavior.
 
 
 ```solidity
@@ -224,28 +229,40 @@ function getOutcomeFromOracle(PredictionManager.Market storage market, uint256 m
 
 
 ## Errors
-### MarketAlreadyResolved
+### MarketAlreadyResolvedL
 Thrown when attempting to perform an action on a market that is already resolved.
 
 
 ```solidity
-error MarketAlreadyResolved();
+error MarketAlreadyResolvedL(uint256 marketId);
 ```
 
-### MarketNotResolved
+**Parameters**
+
+|Name|Type|Description|
+|----|----|-----------|
+|`marketId`|`uint256`|The ID of the market that is already resolved.|
+
+### MarketNotResolvedL
 Thrown when attempting to claim a reward for a market that is not yet resolved.
 
 
 ```solidity
-error MarketNotResolved();
+error MarketNotResolvedL(uint256 marketId);
 ```
 
-### AlreadyPredicted
+**Parameters**
+
+|Name|Type|Description|
+|----|----|-----------|
+|`marketId`|`uint256`|The ID of the market that is not yet resolved.|
+
+### AlreadyPredictedL
 Thrown when a user attempts to make a prediction for a market they have already predicted on.
 
 
 ```solidity
-error AlreadyPredicted(address user);
+error AlreadyPredictedL(address user, uint256 marketId);
 ```
 
 **Parameters**
@@ -253,21 +270,22 @@ error AlreadyPredicted(address user);
 |Name|Type|Description|
 |----|----|-----------|
 |`user`|`address`|The address of the user who has already made a prediction.|
+|`marketId`|`uint256`|The ID of the market on which the user has already predicted.|
 
-### AmountCannotBeZero
+### AmountCannotBeZeroL
 Thrown when attempting to record a prediction with zero stake amount.
 
 
 ```solidity
-error AmountCannotBeZero();
+error AmountCannotBeZeroL();
 ```
 
-### StakeBelowMinimum
+### StakeBelowMinimumL
 Thrown when the stake amount is below the minimum required amount.
 
 
 ```solidity
-error StakeBelowMinimum(uint256 sentAmount, uint256 minRequiredAmount);
+error StakeBelowMinimumL(uint256 sentAmount, uint256 minRequiredAmount);
 ```
 
 **Parameters**
@@ -277,68 +295,121 @@ error StakeBelowMinimum(uint256 sentAmount, uint256 minRequiredAmount);
 |`sentAmount`|`uint256`|The amount sent by the user.|
 |`minRequiredAmount`|`uint256`|The minimum required stake amount.|
 
-### RewardTransferFailed
+### RewardTransferFailedL
 Thrown when the transfer of a reward to the user fails.
 
 
 ```solidity
-error RewardTransferFailed();
+error RewardTransferFailedL(address recipient, uint256 amount);
 ```
 
-### FeeTransferFailed
+**Parameters**
+
+|Name|Type|Description|
+|----|----|-----------|
+|`recipient`|`address`|The address that was supposed to receive the reward.|
+|`amount`|`uint256`|The amount that failed to transfer.|
+
+### FeeTransferFailedL
 Thrown when the transfer of a fee to the treasury fails.
 
 
 ```solidity
-error FeeTransferFailed();
+error FeeTransferFailedL(address treasuryAddress, uint256 amount);
 ```
 
-### NotWinningNFT
+**Parameters**
+
+|Name|Type|Description|
+|----|----|-----------|
+|`treasuryAddress`|`address`|The address of the treasury that was supposed to receive the fee.|
+|`amount`|`uint256`|The fee amount that failed to transfer.|
+
+### NotWinningNFTL
 Thrown when attempting to claim a reward for an NFT that did not predict the winning outcome.
 
 
 ```solidity
-error NotWinningNFT();
+error NotWinningNFTL(uint256 tokenId, uint8 predictedOutcome, uint8 winningOutcome);
 ```
 
-### ClaimFailedNoStakeForOutcome
+**Parameters**
+
+|Name|Type|Description|
+|----|----|-----------|
+|`tokenId`|`uint256`|The ID of the NFT that did not predict the winning outcome.|
+|`predictedOutcome`|`uint8`|The outcome that was predicted.|
+|`winningOutcome`|`uint8`|The actual winning outcome.|
+
+### ClaimFailedNoStakeForOutcomeL
 Thrown when attempting to claim a reward but there are no stakes for the outcome.
 
 
 ```solidity
-error ClaimFailedNoStakeForOutcome();
+error ClaimFailedNoStakeForOutcomeL(uint256 marketId, uint8 outcome);
 ```
 
-### PriceOracleStale
+**Parameters**
+
+|Name|Type|Description|
+|----|----|-----------|
+|`marketId`|`uint256`|The ID of the market with no stakes for the outcome.|
+|`outcome`|`uint8`|The outcome with no stakes.|
+
+### PriceOracleStaleL
 Thrown when the price data from the oracle is stale.
 
 
 ```solidity
-error PriceOracleStale();
+error PriceOracleStaleL(uint256 lastUpdateTime, uint256 currentTime, uint256 maxStaleness);
 ```
 
-### MarketExpired
+**Parameters**
+
+|Name|Type|Description|
+|----|----|-----------|
+|`lastUpdateTime`|`uint256`|The timestamp of the last oracle update.|
+|`currentTime`|`uint256`|The current block timestamp.|
+|`maxStaleness`|`uint256`|The maximum allowed staleness in seconds.|
+
+### MarketExpiredL
 Thrown when attempting to record a prediction for a market that has already expired.
 
 
 ```solidity
-error MarketExpired();
+error MarketExpiredL(uint256 marketId, uint256 expirationTime, uint256 currentTime);
 ```
 
-### MarketNotYetExpired
+**Parameters**
+
+|Name|Type|Description|
+|----|----|-----------|
+|`marketId`|`uint256`|The ID of the expired market.|
+|`expirationTime`|`uint256`|The expiration timestamp of the market.|
+|`currentTime`|`uint256`|The current block timestamp.|
+
+### MarketNotYetExpiredL
 Thrown when attempting to resolve a market that has not yet expired.
 
 
 ```solidity
-error MarketNotYetExpired();
+error MarketNotYetExpiredL(uint256 marketId, uint256 expirationTime, uint256 currentTime);
 ```
 
-### ZeroAddress
-Thrown when an operation is attempted with a zero address where it's not allowed (e.g., withdrawing to address(0)).
+**Parameters**
+
+|Name|Type|Description|
+|----|----|-----------|
+|`marketId`|`uint256`|The ID of the market that has not yet expired.|
+|`expirationTime`|`uint256`|The expiration timestamp of the market.|
+|`currentTime`|`uint256`|The current block timestamp.|
+
+### ZeroAddressL
+Thrown when an operation is attempted with a zero address where it's not allowed.
 
 
 ```solidity
-error ZeroAddress(string message);
+error ZeroAddressL(string message);
 ```
 
 **Parameters**
@@ -346,4 +417,32 @@ error ZeroAddress(string message);
 |Name|Type|Description|
 |----|----|-----------|
 |`message`|`string`|A descriptive message explaining the context of the zero address error.|
+
+### ZeroRewardAmountL
+Thrown when a calculated reward amount is unexpectedly zero.
+
+
+```solidity
+error ZeroRewardAmountL(uint256 tokenId);
+```
+
+**Parameters**
+
+|Name|Type|Description|
+|----|----|-----------|
+|`tokenId`|`uint256`|The ID of the NFT for which the reward was calculated.|
+
+### ZeroNFTOwnerL
+Thrown when the NFT owner address is zero.
+
+
+```solidity
+error ZeroNFTOwnerL(uint256 tokenId);
+```
+
+**Parameters**
+
+|Name|Type|Description|
+|----|----|-----------|
+|`tokenId`|`uint256`|The ID of the NFT with a zero owner address.|
 

@@ -1,8 +1,8 @@
 # SwapCastHook
-[Git Source](https://github.com/s-di-cola/swapcast/blob/fd3e92ac000764a2f74374fcba21b9ac2c9b9c35/src/SwapCastHook.sol)
+[Git Source](https://github.com/s-di-cola/swapcast/blob/d01f662567db47c1053507e48b5726489c06b0a6/src/SwapCastHook.sol)
 
 **Inherits:**
-BaseHook
+BaseHook, Ownable
 
 **Author:**
 Simone Di Cola
@@ -48,9 +48,13 @@ uint256 private constant PREDICTION_HOOK_DATA_LENGTH = 69;
 
 Contract constructor.
 
+*Initializes the contract with the PoolManager and PredictionManager addresses.
+Also initializes the Ownable contract with the deployer as the initial owner.
+This owner will have the ability to recover ETH in emergency situations.*
+
 
 ```solidity
-constructor(IPoolManager _poolManager, address _predictionManagerAddress) BaseHook(_poolManager);
+constructor(IPoolManager _poolManager, address _predictionManagerAddress) BaseHook(_poolManager) Ownable(msg.sender);
 ```
 **Parameters**
 
@@ -98,7 +102,7 @@ This function contains the core logic for processing prediction attempts.*
 
 
 ```solidity
-function _afterSwap(address sender, PoolKey calldata key, SwapParams calldata, BalanceDelta, bytes calldata hookData)
+function _afterSwap(address, PoolKey calldata key, SwapParams calldata, BalanceDelta, bytes calldata hookData)
     internal
     override
     returns (bytes4 hookReturnData, int128 currencyDelta);
@@ -107,18 +111,106 @@ function _afterSwap(address sender, PoolKey calldata key, SwapParams calldata, B
 
 |Name|Type|Description|
 |----|----|-----------|
-|`sender`|`address`|The address of the user who initiated the swap transaction (the `msg.sender` to `PoolManager`).|
-|`key`|`PoolKey`|The `PoolKey` identifying the pool where the swap occurred.|
+|`<none>`|`address`||
+|`key`|`PoolKey`|The PoolKey identifying the pool where the swap occurred.|
 |`<none>`|`SwapParams`||
 |`<none>`|`BalanceDelta`||
-|`hookData`|`bytes`|Arbitrary data passed by the user with the swap. For this hook, it's expected to contain the `actualUser` (address), `marketId` (uint256), `outcome` (uint8), and `convictionStake` (uint128) for the prediction, abi-encoded.|
+|`hookData`|`bytes`|Additional data passed to the hook, containing prediction details: - bytes 0-19: actualUser (address) - The actual user making the prediction (may differ from sender). - bytes 20-51: marketId (uint256) - ID of the prediction market. - bytes 52: outcome (uint8) - The predicted outcome (0 for Bearish, 1 for Bullish). - bytes 53-68: convictionStake (uint128) - Amount of conviction (stake) declared.|
 
 **Returns**
 
 |Name|Type|Description|
 |----|----|-----------|
-|`hookReturnData`|`bytes4`|The selector of the function in `BaseHook` to be called by `PoolManager` upon completion (typically `BaseHook.afterSwap.selector`).|
-|`currencyDelta`|`int128`|A currency delta to be applied by the `PoolManager`. This hook returns 0, as it does not directly modify pool balances; `convictionStake` is handled by forwarding to the `PredictionPool`.|
+|`hookReturnData`|`bytes4`|The selector indicating which hook function was called.|
+|`currencyDelta`|`int128`|Any currency delta to be applied (always 0 for this hook).|
+
+
+### _extractErrorMessage
+
+*Internal helper function to extract an error message from a standard Error(string) revert.*
+
+
+```solidity
+function _extractErrorMessage(bytes memory data) internal pure returns (string memory);
+```
+**Parameters**
+
+|Name|Type|Description|
+|----|----|-----------|
+|`data`|`bytes`|The raw bytes data from the caught exception.|
+
+**Returns**
+
+|Name|Type|Description|
+|----|----|-----------|
+|`<none>`|`string`|The extracted error message with a prefix.|
+
+
+### _uint256ToString
+
+*Internal helper function to convert a uint256 to a string.*
+
+
+```solidity
+function _uint256ToString(uint256 value) internal pure returns (string memory);
+```
+**Parameters**
+
+|Name|Type|Description|
+|----|----|-----------|
+|`value`|`uint256`|The uint256 value to convert.|
+
+**Returns**
+
+|Name|Type|Description|
+|----|----|-----------|
+|`<none>`|`string`|The string representation of the value.|
+
+
+### _getCustomErrorMessage
+
+*Internal helper function to map known error selectors to human-readable messages.*
+
+
+```solidity
+function _getCustomErrorMessage(bytes4 errorSelector) internal pure returns (string memory);
+```
+**Parameters**
+
+|Name|Type|Description|
+|----|----|-----------|
+|`errorSelector`|`bytes4`|The 4-byte error selector.|
+
+**Returns**
+
+|Name|Type|Description|
+|----|----|-----------|
+|`<none>`|`string`|A human-readable error message.|
+
+
+### recoverETH
+
+Allows the owner to recover ETH stuck in the contract in case of emergency.
+
+*This function provides a safety mechanism to recover ETH that might get stuck in the contract
+due to failed prediction attempts or other unexpected scenarios. It includes the following
+security controls:
+1. Only the contract owner can call this function (via the onlyOwner modifier)
+2. The recipient address cannot be the zero address
+3. The function reverts if the ETH transfer fails
+This function should only be used in emergency situations when ETH is genuinely stuck
+and cannot be processed through normal means.*
+
+
+```solidity
+function recoverETH(address _to, uint256 _amount) external onlyOwner;
+```
+**Parameters**
+
+|Name|Type|Description|
+|----|----|-----------|
+|`_to`|`address`|The address to send the recovered ETH to.|
+|`_amount`|`uint256`|The amount of ETH to recover.|
 
 
 ### receive
@@ -239,6 +331,9 @@ error PredictionPoolZeroAddress();
 ### NoConvictionStakeDeclaredInHookData
 Reverts if a user attempts to make a prediction (`hookData` is provided) but the conviction stake declared in `hookData` is zero.
 
+*This error is thrown in the _afterSwap function when a prediction attempt is made with zero conviction stake.
+A non-zero conviction stake is required to ensure users have skin in the game when making predictions.*
+
 
 ```solidity
 error NoConvictionStakeDeclaredInHookData();
@@ -246,6 +341,9 @@ error NoConvictionStakeDeclaredInHookData();
 
 ### PredictionRecordingFailed
 Reverts if the call to `predictionManager.recordPrediction` fails for any reason.
+
+*This error is thrown when the try/catch block in _afterSwap catches an exception from the PredictionManager.
+The error includes the reason for the failure to help with debugging and user feedback.*
 
 
 ```solidity
@@ -257,4 +355,41 @@ error PredictionRecordingFailed(string reason);
 |Name|Type|Description|
 |----|----|-----------|
 |`reason`|`string`|A string describing the reason for the failure, forwarded from the `PredictionPool` or a general message.|
+
+### ETHTransferFailed
+Reverts if an ETH transfer fails during recovery.
+
+*This error is thrown by the recoverETH function if the ETH transfer to the specified address fails.*
+
+
+```solidity
+error ETHTransferFailed();
+```
+
+### ZeroAddress
+Reverts if a zero address is provided where a non-zero address is required.
+
+*This error is used in functions that require valid addresses, such as recoverETH.*
+
+
+```solidity
+error ZeroAddress();
+```
+
+### InsufficientBalance
+Reverts if an attempt is made to recover more ETH than is available in the contract.
+
+*This error is thrown by the recoverETH function if the requested amount exceeds the contract's balance.*
+
+
+```solidity
+error InsufficientBalance(uint256 requested, uint256 available);
+```
+
+**Parameters**
+
+|Name|Type|Description|
+|----|----|-----------|
+|`requested`|`uint256`|The amount of ETH requested to recover.|
+|`available`|`uint256`|The actual balance available in the contract.|
 

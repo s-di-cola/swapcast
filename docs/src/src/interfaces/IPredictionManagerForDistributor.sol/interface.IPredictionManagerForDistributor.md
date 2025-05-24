@@ -1,5 +1,5 @@
 # IPredictionManagerForDistributor
-[Git Source](https://github.com/s-di-cola/swapcast/blob/fd3e92ac000764a2f74374fcba21b9ac2c9b9c35/src/interfaces/IPredictionManagerForDistributor.sol)
+[Git Source](https://github.com/s-di-cola/swapcast/blob/d01f662567db47c1053507e48b5726489c06b0a6/src/interfaces/IPredictionManagerForDistributor.sol)
 
 **Author:**
 SwapCast Developers

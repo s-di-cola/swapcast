@@ -1,5 +1,5 @@
 # RewardDistributor
-[Git Source](https://github.com/s-di-cola/swapcast/blob/fd3e92ac000764a2f74374fcba21b9ac2c9b9c35/src/RewardDistributor.sol)
+[Git Source](https://github.com/s-di-cola/swapcast/blob/d01f662567db47c1053507e48b5726489c06b0a6/src/RewardDistributor.sol)
 
 **Inherits:**
 Ownable, ReentrancyGuard, Pausable
@@ -10,11 +10,17 @@ Simone Di Cola
 This contract allows users to claim their prediction rewards. It acts as an intermediary,
 forwarding claim requests to the main PredictionManager contract.
 
-*Inherits from Ownable for administrative control over settings like the PredictionManager address.
-It ensures that reward claim calls to the PredictionPool originate from a trusted source (this contract).*
+*Inherits from Ownable for administrative control, ReentrancyGuard to prevent reentrancy attacks,
+and Pausable to allow emergency stops. It ensures that reward claim calls to the PredictionManager
+originate from a trusted source (this contract).
+The contract has the following key features:
+1. Secure reward claiming with reentrancy protection
+2. Emergency pause functionality for security incidents
+3. Immutable PredictionManager reference for gas efficiency
+4. Comprehensive error handling with detailed error messages*
 
 **Note:**
-security-contact: security@swapcast.io
+security-contact: security@swapcast.xyz
 
 
 ## State Variables
@@ -36,7 +42,14 @@ IPredictionManagerForDistributor public immutable predictionManager;
 ## Functions
 ### constructor
 
-Contract constructor.
+Contract constructor that initializes the RewardDistributor with owner and PredictionManager addresses.
+
+*Sets up the immutable reference to the PredictionManager contract and emits an event.
+The PredictionManager address is critical and cannot be the zero address.
+This address is set as immutable for gas efficiency and security, meaning it cannot be changed after deployment.*
+
+**Note:**
+reverts: ZeroAddress If the prediction manager address is zero.
 
 
 ```solidity
@@ -46,15 +59,22 @@ constructor(address initialOwner, address _predictionManagerAddress) Ownable(ini
 
 |Name|Type|Description|
 |----|----|-----------|
-|`initialOwner`|`address`|The initial owner of this RewardDistributor contract.|
-|`_predictionManagerAddress`|`address`|The address of the PredictionManager contract. Must not be the zero address.|
+|`initialOwner`|`address`|The initial owner of this RewardDistributor contract who can pause/unpause and perform admin functions.|
+|`_predictionManagerAddress`|`address`|The address of the PredictionManager contract that will handle the actual reward claims.|
 
 
 ### setPredictionManagerAddress
 
 Updates the address of the PredictionManager contract.
 
-*Only callable by the contract owner. Emits {PredictionPoolAddressSet}.*
+*This function is kept for backward compatibility but will always revert since predictionManager is immutable.
+It still performs input validation and emits an event before reverting to maintain consistent behavior.
+In a future version, this function could be removed entirely since it cannot succeed.*
+
+**Notes:**
+- reverts: ZeroAddress If the new address is zero.
+
+- reverts: ImmutablePredictionManager Always, since the predictionManager cannot be changed.
 
 
 ```solidity
@@ -64,29 +84,16 @@ function setPredictionManagerAddress(address _newAddress) external onlyOwner;
 
 |Name|Type|Description|
 |----|----|-----------|
-|`_newAddress`|`address`|The new address of the PredictionManager. Must not be the zero address.|
+|`_newAddress`|`address`|The new address of the PredictionManager (which will never be set).|
 
 
 ### pause
 
-Allows any user to initiate a reward claim for a specific prediction NFT.
+Pauses the contract, preventing claimReward from being called.
 
-Pauses the contract, preventing claimReward from being called
-
-*This function acts as a passthrough to the `PredictionManager.claimReward` function.
-The `PredictionManager` is responsible for all validation, including NFT ownership (implicitly via burn) and reward calculation.
-If the underlying call to `PredictionManager.claimReward` fails, this function will revert with [ClaimFailedInPool](/src/RewardDistributor.sol/contract.RewardDistributor.md#claimfailedinpool).*
-
-*Only callable by the owner when not paused*
-
-**Notes:**
-- reverts: With `ZeroAddress` if the PredictionManager address is not set
-
-- reverts: With `InvalidTokenId` if the tokenId is zero
-
-- reverts: With `ClaimFailedInPool` if the underlying PredictionManager call fails
-
-- emits: RewardClaimed On successful claim
+*Only callable by the owner when the contract is not already paused.
+This is an emergency function that can be used to stop all reward claims
+in case of a security incident or critical bug.*
 
 
 ```solidity
@@ -95,9 +102,10 @@ function pause() external onlyOwner;
 
 ### unpause
 
-Unpauses the contract, allowing claimReward to be called again
+Unpauses the contract, allowing claimReward to be called again.
 
-*Only callable by the owner when paused*
+*Only callable by the owner when the contract is paused.
+This function restores normal operation after an emergency pause.*
 
 
 ```solidity
@@ -108,19 +116,23 @@ function unpause() external onlyOwner;
 
 Allows any user to initiate a reward claim for a specific prediction NFT.
 
-*This function can be paused by the owner in case of emergency.
-When paused, all calls to this function will revert.*
+*This function acts as a secure passthrough to the PredictionManager.claimReward function.
+It includes multiple security features:
+1. Reentrancy protection via the nonReentrant modifier
+2. Pausability for emergency situations
+3. Input validation for the token ID
+4. Try-catch pattern to handle errors from the PredictionManager gracefully
+The actual reward logic, NFT burning, and ETH transfer occur in the PredictionManager.
+This contract simply forwards the request and handles any errors that might occur.*
 
 **Notes:**
-- reverts: With `Pausable.EnforcedPause` if the contract is paused
+- reverts: Pausable.EnforcedPause If the contract is paused
 
-- reverts: With `ZeroAddress` if the PredictionManager address is not set
+- reverts: InvalidTokenId If the tokenId is zero
 
-- reverts: With `InvalidTokenId` if the tokenId is zero
+- reverts: ClaimFailedInPool If the underlying PredictionManager call fails
 
-- reverts: With `ClaimFailedInPool` if the underlying PredictionManager call fails
-
-- emits: RewardClaimed On successful claim
+- emits: RewardClaimed On successful claim with the claimer address and token ID
 
 
 ```solidity
@@ -166,7 +178,9 @@ event RewardClaimed(address indexed claimer, uint256 indexed tokenId);
 
 ## Errors
 ### ZeroAddress
-Reverts if an address parameter is the zero address
+Thrown when a zero address is provided for a parameter that requires a non-zero address.
+
+*This is used to validate that critical address parameters like the PredictionManager are not set to zero.*
 
 
 ```solidity
@@ -174,7 +188,9 @@ error ZeroAddress();
 ```
 
 ### InvalidTokenId
-Reverts if the token ID is invalid (e.g., zero)
+Thrown when an invalid token ID (zero) is provided for a claim.
+
+*Token IDs in this system start from 1, so a zero token ID is always invalid.*
 
 
 ```solidity
@@ -182,7 +198,10 @@ error InvalidTokenId();
 ```
 
 ### ClaimFailedInPool
-Custom error for when a claim fails in the PredictionManager
+Thrown when a claim fails in the PredictionManager contract.
+
+*This error wraps any errors that might occur in the PredictionManager during a claim,
+providing a consistent error interface to users of this contract.*
 
 
 ```solidity
@@ -193,5 +212,16 @@ error ClaimFailedInPool(uint256 tokenId);
 
 |Name|Type|Description|
 |----|----|-----------|
-|`tokenId`|`uint256`|The ID of the token for which the claim failed|
+|`tokenId`|`uint256`|The ID of the token for which the claim failed.|
+
+### ImmutablePredictionManager
+Thrown when attempting to change the immutable PredictionManager address.
+
+*This error is used in the setPredictionManagerAddress function which is kept for
+backward compatibility but will always revert since the address is immutable.*
+
+
+```solidity
+error ImmutablePredictionManager();
+```
 
