@@ -67,7 +67,7 @@ contract RewardDistributorTest is Test {
 
         // This will emit the event before reverting due to immutability
         vm.prank(owner);
-        vm.expectRevert("Cannot change predictionManager as it is immutable");
+        vm.expectRevert(RewardDistributor.ImmutablePredictionManager.selector);
         distributor.setPredictionManagerAddress(address(newMockPool));
     }
 
@@ -127,8 +127,8 @@ contract RewardDistributorTest is Test {
     function test_set_prediction_manager_address_reverts_as_immutable() public {
         MockPredictionManagerForDistributor newMockPool = new MockPredictionManagerForDistributor();
 
-        // Should revert with the custom error message
-        vm.expectRevert("Cannot change predictionManager as it is immutable");
+        // Should revert with the custom error
+        vm.expectRevert(RewardDistributor.ImmutablePredictionManager.selector);
         vm.prank(owner);
         distributor.setPredictionManagerAddress(address(newMockPool));
 

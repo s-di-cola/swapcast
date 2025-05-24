@@ -11,10 +11,18 @@ import {IPredictionManagerForDistributor} from "./interfaces/IPredictionManagerF
  * @author Simone Di Cola
  * @notice This contract allows users to claim their prediction rewards. It acts as an intermediary,
  *         forwarding claim requests to the main PredictionManager contract.
- * @dev Inherits from Ownable for administrative control over settings like the PredictionManager address.
- *      It ensures that reward claim calls to the PredictionPool originate from a trusted source (this contract).
+ * @dev Inherits from Ownable for administrative control, ReentrancyGuard to prevent reentrancy attacks,
+ *      and Pausable to allow emergency stops. It ensures that reward claim calls to the PredictionManager
+ *      originate from a trusted source (this contract).
+ *
+ *      The contract has the following key features:
+ *      1. Secure reward claiming with reentrancy protection
+ *      2. Emergency pause functionality for security incidents
+ *      3. Immutable PredictionManager reference for gas efficiency
+ *      4. Comprehensive error handling with detailed error messages
+ *
+ * @custom:security-contact security@swapcast.xyz
  */
-/// @custom:security-contact security@swapcast.io
 contract RewardDistributor is Ownable, ReentrancyGuard, Pausable {
     /**
      * @notice The address of the PredictionManager contract that this distributor interacts with.
@@ -36,20 +44,42 @@ contract RewardDistributor is Ownable, ReentrancyGuard, Pausable {
     /// @param tokenId The ID of the token for which the reward was claimed
     event RewardClaimed(address indexed claimer, uint256 indexed tokenId);
 
-    /// @notice Reverts if an address parameter is the zero address
+    /**
+     * @notice Thrown when a zero address is provided for a parameter that requires a non-zero address.
+     * @dev This is used to validate that critical address parameters like the PredictionManager are not set to zero.
+     */
     error ZeroAddress();
 
-    /// @notice Reverts if the token ID is invalid (e.g., zero)
+    /**
+     * @notice Thrown when an invalid token ID (zero) is provided for a claim.
+     * @dev Token IDs in this system start from 1, so a zero token ID is always invalid.
+     */
     error InvalidTokenId();
 
-    /// @notice Custom error for when a claim fails in the PredictionManager
-    /// @param tokenId The ID of the token for which the claim failed
+    /**
+     * @notice Thrown when a claim fails in the PredictionManager contract.
+     * @dev This error wraps any errors that might occur in the PredictionManager during a claim,
+     *      providing a consistent error interface to users of this contract.
+     * @param tokenId The ID of the token for which the claim failed.
+     */
     error ClaimFailedInPool(uint256 tokenId);
 
     /**
-     * @notice Contract constructor.
-     * @param initialOwner The initial owner of this RewardDistributor contract.
-     * @param _predictionManagerAddress The address of the PredictionManager contract. Must not be the zero address.
+     * @notice Thrown when attempting to change the immutable PredictionManager address.
+     * @dev This error is used in the setPredictionManagerAddress function which is kept for
+     *      backward compatibility but will always revert since the address is immutable.
+     */
+    error ImmutablePredictionManager();
+
+    /**
+     * @notice Contract constructor that initializes the RewardDistributor with owner and PredictionManager addresses.
+     * @dev Sets up the immutable reference to the PredictionManager contract and emits an event.
+     *      The PredictionManager address is critical and cannot be the zero address.
+     *      This address is set as immutable for gas efficiency and security, meaning it cannot be changed after deployment.
+     *
+     * @param initialOwner The initial owner of this RewardDistributor contract who can pause/unpause and perform admin functions.
+     * @param _predictionManagerAddress The address of the PredictionManager contract that will handle the actual reward claims.
+     * @custom:reverts ZeroAddress If the prediction manager address is zero.
      */
     constructor(address initialOwner, address _predictionManagerAddress) Ownable(initialOwner) {
         if (_predictionManagerAddress == address(0)) revert ZeroAddress();
@@ -59,62 +89,78 @@ contract RewardDistributor is Ownable, ReentrancyGuard, Pausable {
 
     /**
      * @notice Updates the address of the PredictionManager contract.
-     * @dev Only callable by the contract owner. Emits {PredictionPoolAddressSet}.
-     * @param _newAddress The new address of the PredictionManager. Must not be the zero address.
+     * @dev This function is kept for backward compatibility but will always revert since predictionManager is immutable.
+     *      It still performs input validation and emits an event before reverting to maintain consistent behavior.
+     *      In a future version, this function could be removed entirely since it cannot succeed.
+     *
+     * @param _newAddress The new address of the PredictionManager (which will never be set).
+     * @custom:reverts ZeroAddress If the new address is zero.
+     * @custom:reverts ImmutablePredictionManager Always, since the predictionManager cannot be changed.
      */
     function setPredictionManagerAddress(address _newAddress) external onlyOwner {
         if (_newAddress == address(0)) revert ZeroAddress();
+
+        // Emit the event for logging purposes, even though the change won't happen
         address oldAddress = address(predictionManager);
         emit PredictionManagerAddressSet(oldAddress, _newAddress);
-        // Note: predictionManager is immutable, so we can't change it after deployment
-        // This function is kept for backward compatibility but will revert
-        revert("Cannot change predictionManager as it is immutable");
+
+        // Revert with a custom error for better gas efficiency and clarity
+        revert ImmutablePredictionManager();
     }
 
     /**
-     * @notice Allows any user to initiate a reward claim for a specific prediction NFT.
-     * @dev This function acts as a passthrough to the `PredictionManager.claimReward` function.
-     *      The `PredictionManager` is responsible for all validation, including NFT ownership (implicitly via burn) and reward calculation.
-     *      If the underlying call to `PredictionManager.claimReward` fails, this function will revert with {ClaimFailedInPool}.
-     * @param tokenId The ID of the SwapCastNFT for which the reward is being claimed.
-     * @custom:reverts With `ZeroAddress` if the PredictionManager address is not set
-     * @custom:reverts With `InvalidTokenId` if the tokenId is zero
-     * @custom:reverts With `ClaimFailedInPool` if the underlying PredictionManager call fails
-     * @custom:emits RewardClaimed On successful claim
+     * @notice Pauses the contract, preventing claimReward from being called.
+     * @dev Only callable by the owner when the contract is not already paused.
+     *      This is an emergency function that can be used to stop all reward claims
+     *      in case of a security incident or critical bug.
      */
-    /// @notice Pauses the contract, preventing claimReward from being called
-    /// @dev Only callable by the owner when not paused
     function pause() external onlyOwner {
         _pause();
     }
 
-    /// @notice Unpauses the contract, allowing claimReward to be called again
-    /// @dev Only callable by the owner when paused
+    /**
+     * @notice Unpauses the contract, allowing claimReward to be called again.
+     * @dev Only callable by the owner when the contract is paused.
+     *      This function restores normal operation after an emergency pause.
+     */
     function unpause() external onlyOwner {
         _unpause();
     }
 
-    /// @notice Allows any user to initiate a reward claim for a specific prediction NFT.
-    /// @dev This function can be paused by the owner in case of emergency.
-    ///      When paused, all calls to this function will revert.
-    /// @param tokenId The ID of the SwapCastNFT for which the reward is being claimed.
-    /// @custom:reverts With `Pausable.EnforcedPause` if the contract is paused
-    /// @custom:reverts With `ZeroAddress` if the PredictionManager address is not set
-    /// @custom:reverts With `InvalidTokenId` if the tokenId is zero
-    /// @custom:reverts With `ClaimFailedInPool` if the underlying PredictionManager call fails
-    /// @custom:emits RewardClaimed On successful claim
+    /**
+     * @notice Allows any user to initiate a reward claim for a specific prediction NFT.
+     * @dev This function acts as a secure passthrough to the PredictionManager.claimReward function.
+     *      It includes multiple security features:
+     *      1. Reentrancy protection via the nonReentrant modifier
+     *      2. Pausability for emergency situations
+     *      3. Input validation for the token ID
+     *      4. Try-catch pattern to handle errors from the PredictionManager gracefully
+     *
+     *      The actual reward logic, NFT burning, and ETH transfer occur in the PredictionManager.
+     *      This contract simply forwards the request and handles any errors that might occur.
+     *
+     * @param tokenId The ID of the SwapCastNFT for which the reward is being claimed.
+     * @custom:reverts Pausable.EnforcedPause If the contract is paused
+     * @custom:reverts InvalidTokenId If the tokenId is zero
+     * @custom:reverts ClaimFailedInPool If the underlying PredictionManager call fails
+     * @custom:emits RewardClaimed On successful claim with the claimer address and token ID
+     */
     function claimReward(uint256 tokenId) external nonReentrant whenNotPaused {
+        // Validate input - token ID must not be zero
         if (tokenId == 0) revert InvalidTokenId();
 
+        // Cache msg.sender to avoid multiple CALLER opcodes
         address sender = msg.sender;
 
-        // The actual reward logic, NFT burning, and ETH transfer occur in PredictionManager.
-        // This contract simply forwards the request.
+        // Forward the claim to the PredictionManager using try-catch for error handling
         try predictionManager.claimReward(tokenId) {
+            // Emit success event if the claim succeeds
             emit RewardClaimed(sender, tokenId);
         } catch Error(string memory) /* reason */ {
+            // Catch standard errors (revert with reason string)
             revert ClaimFailedInPool(tokenId);
         } catch (bytes memory) /* lowLevelData */ {
+            // Catch panic errors and custom errors
             revert ClaimFailedInPool(tokenId);
         }
     }
