@@ -10,7 +10,6 @@ import {Hooks} from "v4-core/libraries/Hooks.sol";
 import {IPredictionManager} from "./interfaces/IPredictionManager.sol";
 import {SwapParams} from "v4-core/types/PoolOperation.sol";
 import {PredictionTypes} from "./types/PredictionTypes.sol";
-import "forge-std/console.sol"; // Added for debugging
 
 using PoolIdLibrary for PoolKey;
 
@@ -166,23 +165,22 @@ contract SwapCastHook is BaseHook {
     /**
      * @dev Internal callback function executed by the `PoolManager` after a swap on a pool where this hook is registered.
      *      This function contains the core logic for processing prediction attempts.
-     * @param sender The address of the user who initiated the swap transaction (the `msg.sender` to `PoolManager`).
-     * @param key The `PoolKey` identifying the pool where the swap occurred.
-     * @param hookData Arbitrary data passed by the user with the swap. For this hook, it's expected to contain
-     *                 the `actualUser` (address), `marketId` (uint256), `outcome` (uint8), and `convictionStake` (uint128) for the prediction, abi-encoded.
-     * @return hookReturnData The selector of the function in `BaseHook` to be called by `PoolManager` upon completion (typically `BaseHook.afterSwap.selector`).
-     * @return currencyDelta A currency delta to be applied by the `PoolManager`. This hook returns 0, as it does not directly modify pool balances;
-     *                       `convictionStake` is handled by forwarding to the `PredictionPool`.
+     * @param key The PoolKey identifying the pool where the swap occurred.
+     * @param hookData Additional data passed to the hook, containing prediction details:
+     *                 - bytes 0-19: actualUser (address) - The actual user making the prediction (may differ from sender).
+     *                 - bytes 20-51: marketId (uint256) - ID of the prediction market.
+     *                 - bytes 52: outcome (uint8) - The predicted outcome (0 for Bearish, 1 for Bullish).
+     *                 - bytes 53-68: convictionStake (uint128) - Amount of conviction (stake) declared.
+     * @return hookReturnData The selector indicating which hook function was called.
+     * @return currencyDelta Any currency delta to be applied (always 0 for this hook).
      */
     function _afterSwap(
-        address sender,
+        address, /*sender*/
         PoolKey calldata key,
         SwapParams calldata, /*params*/
         BalanceDelta, /*delta*/
         bytes calldata hookData
     ) internal override returns (bytes4 hookReturnData, int128 currencyDelta) {
-        // Suppress unused parameter warning
-        if (false) sender;
         if (hookData.length == 0) {
             return (BaseHook.afterSwap.selector, 0); // Standard return for no-op or successful completion without currency delta.
         }
@@ -201,28 +199,26 @@ contract SwapCastHook is BaseHook {
 
         // PREDICTION_HOOK_DATA_LENGTH is 20 (actualUser) + 32 (marketId) + 1 (outcome) + 16 (convictionStakeDeclared) = 69 bytes.
         // hookData is abi.encodePacked(address actualUser, uint256 marketId, uint8 outcome, uint128 convictionStakeDeclared)
-        // Extract the first 20 bytes for the address using a safer approach than assembly
+        // Extract data from hookData more efficiently
+        // First 20 bytes for the address
         actualUser = address(bytes20(hookData[:20]));
 
+        // Next 32 bytes for marketId (bytes 20-51)
+        marketId = uint256(bytes32(hookData[20:52]));
+
+        // Next 1 byte for outcome (byte 52)
+        outcome = PredictionTypes.Outcome(uint8(bytes1(hookData[52:53])));
+
+        // Last 16 bytes for convictionStake (bytes 53-68)
+        // We need to handle this carefully since we're extracting a uint128
+        uint128 extractedStake;
         assembly {
-            // hookData.offset points to the start of the slice's data within calldata.
-
-            // marketId (uint256 = 32 bytes) starts at hookData.offset + 20
-            marketId := calldataload(add(hookData.offset, 20))
-
-            // outcome (uint8 = 1 byte) starts at hookData.offset + 52
-            // calldataload loads a 32-byte word. outcome is the most significant byte of this word.
-            // byte(0, word) extracts the 0-th byte (most significant) from the word.
-            // Convert the uint8 to PredictionTypes.Outcome
-            outcome := byte(0, calldataload(add(hookData.offset, 52)))
-
-            // convictionStakeDeclared (uint128 = 16 bytes) starts at hookData.offset + 53
-            // Load 32 bytes starting from hookData.offset + 53.
-            let wordForStake := calldataload(add(hookData.offset, 53))
-            // We want the upper 128 bits (16 bytes) of this 256-bit (32-byte) word.
-            // shr(128, word) shifts right by 128 bits, keeping the upper 128 bits.
-            convictionStakeDeclared := shr(128, wordForStake)
+            // Load the bytes starting at position 53
+            let word := calldataload(add(hookData.offset, 53))
+            // Extract the upper 128 bits
+            extractedStake := shr(128, word)
         }
+        convictionStakeDeclared = extractedStake;
 
         emit PredictionAttempted(actualUser, key.toId(), marketId, outcome, convictionStakeDeclared);
 
@@ -246,37 +242,33 @@ contract SwapCastHook is BaseHook {
             emit PredictionRecorded(actualUser, key.toId(), marketId, outcome, convictionStakeDeclared);
             return (BaseHook.afterSwap.selector, 0); // Success
         } catch (bytes memory lowLevelData) {
-            bytes4 actualPoolErrorSelector = bytes4(keccak256(bytes("UnknownPoolError"))); // Default
-            string memory revertMessageForHook = "PredictionManager reverted with an unspecified error.";
+            bytes4 errorSelector = bytes4(0);
+            string memory errorMessage = "PredictionManager reverted with an unspecified error.";
 
+            // Extract error selector if available
             if (lowLevelData.length >= 4) {
-                assembly {
-                    actualPoolErrorSelector := mload(add(lowLevelData, 0x20))
-                }
-                // Check if it's a standard Error(string)
-                if (actualPoolErrorSelector == bytes4(keccak256("Error(string)"))) {
-                    // Manually copy the slice lowLevelData[4:] to a new bytes memory variable
-                    // to satisfy abi.decode's requirement for a `bytes memory` type, not `bytes memory slice`.
-                    uint256 encodedStringLength = lowLevelData.length - 4;
-                    bytes memory encodedStringBytes = new bytes(encodedStringLength);
-                    for (uint256 j = 0; j < encodedStringLength; j++) {
-                        encodedStringBytes[j] = lowLevelData[j + 4];
-                    }
-                    string memory reason = abi.decode(encodedStringBytes, (string));
-                    revertMessageForHook = string(abi.encodePacked("PredictionManager Error: ", reason));
-                } else {
-                    // For custom errors, the selector is now in actualPoolErrorSelector.
-                    // The revert message for PredictionRecordingFailed will be more generic.
-                    revertMessageForHook = "PredictionManager reverted with a custom error.";
-                }
-            } else if (lowLevelData.length > 0) {
-                revertMessageForHook = "PredictionManager reverted with non-standard error data.";
-            } // else lowLevelData.length == 0 (e.g. assert failure), default message & selector are fine.
+                // More efficient way to extract the first 4 bytes
+                errorSelector = bytes4(lowLevelData);
 
-            emit PredictionFailed(
-                actualUser, key.toId(), marketId, outcome, convictionStakeDeclared, actualPoolErrorSelector
-            );
-            revert PredictionRecordingFailed(revertMessageForHook);
+                // Handle standard Error(string)
+                if (errorSelector == bytes4(keccak256("Error(string)"))) {
+                    // Extract the error message using a more efficient approach
+                    if (lowLevelData.length > 4) {
+                        bytes memory encodedString = new bytes(lowLevelData.length - 4);
+                        for (uint256 i = 0; i < encodedString.length; i++) {
+                            encodedString[i] = lowLevelData[i + 4];
+                        }
+                        string memory reason = abi.decode(encodedString, (string));
+                        errorMessage = string(abi.encodePacked("PredictionManager Error: ", reason));
+                    }
+                } else {
+                    // Custom error
+                    errorMessage = "PredictionManager reverted with a custom error.";
+                }
+            }
+
+            emit PredictionFailed(actualUser, key.toId(), marketId, outcome, convictionStakeDeclared, errorSelector);
+            revert PredictionRecordingFailed(errorMessage);
         }
     }
 

@@ -16,6 +16,7 @@ import {SwapCastHook} from "../src/SwapCastHook.sol";
 import {ImmutableState} from "../lib/v4-periphery/src/base/ImmutableState.sol";
 import {SwapCastNFT} from "src/SwapCastNFT.sol";
 import {PredictionManager} from "src/PredictionManager.sol";
+import {PredictionTypes} from "src/types/PredictionTypes.sol";
 
 contract TestableSwapCastNFT is SwapCastNFT {
     constructor(address initialOwner) SwapCastNFT(initialOwner, "TestSwapCastNFT", "TSCNFT") {}
@@ -103,7 +104,8 @@ contract TestSwapCastHook is Test, Deployers {
 
     /// @notice Tests a successful prediction recording via the hook and verifies NFT minting and fee transfer.
     function test_record_prediction_success() public {
-        uint8 predictedOutcome = 1;
+        // Use PredictionTypes.Outcome enum for the outcome
+        PredictionTypes.Outcome predictedOutcome = PredictionTypes.Outcome.Bullish;
         uint128 convictionStake = 100 ether;
 
         // Create a market with the test pool key
@@ -111,22 +113,20 @@ contract TestSwapCastHook is Test, Deployers {
             "Test Market", "ETHUSD", block.timestamp + 1 hours, MOCK_ORACLE_RESOLVER, 3000 * 10 ** 8, testPoolKey
         );
 
-        uint256 protocolFeeBps = pool.protocolFeeBasisPoints();
-        uint256 calculatedFee = (convictionStake * protocolFeeBps) / 10000;
-        uint256 totalValueForPrediction = convictionStake + calculatedFee;
-
-        // Fund the SwapCastHook contract directly with the ETH it needs to make the prediction
-        vm.deal(address(hook), totalValueForPrediction);
-
-        // The test contract itself still needs some ETH for gas.
-        vm.deal(address(this), 1 ether);
-
-        uint256 treasuryBalanceBefore = MOCK_TREASURY.balance;
-
         // Include the actual user address (this test contract) in the hookData
-        bytes memory hookData = abi.encodePacked(address(this), marketId, predictedOutcome, convictionStake);
+        bytes memory hookData = abi.encodePacked(address(this), marketId, uint8(predictedOutcome), convictionStake);
+
+        // Calculate the protocol fee
+        uint256 feeBasisPoints = pool.protocolFeeBasisPoints();
+        uint256 calculatedFee = (convictionStake * feeBasisPoints) / 10000;
+        uint256 msgValue = calculatedFee + convictionStake;
+
+        // Pre-fund the hook with the exact amount needed
+        vm.deal(address(hook), msgValue);
+
         SwapParams memory swapParams =
-            SwapParams({zeroForOne: true, amountSpecified: int256(1 ether), sqrtPriceLimitX96: 4295128739 + 1});
+            SwapParams({zeroForOne: true, amountSpecified: -0.05 ether, sqrtPriceLimitX96: TickMath.MIN_SQRT_PRICE + 1});
+
         PoolSwapTest.TestSettings memory settings =
             PoolSwapTest.TestSettings({takeClaims: false, settleUsingBurn: false});
 
@@ -137,6 +137,7 @@ contract TestSwapCastHook is Test, Deployers {
         swapRouter.swap{value: 0}(poolKey, swapParams, settings, hookData);
 
         address actualOwner = nft.ownerOf(0);
+
         // Verify that the NFT was minted to the correct address (the test contract)
         assertEq(actualOwner, address(this), "NFT not minted to the correct address");
 
@@ -162,7 +163,7 @@ contract TestSwapCastHook is Test, Deployers {
             /*uint256 priceThreshold_*/
         ) = pool.getMarketDetails(marketId);
 
-        if (predictedOutcome == 0) {
+        if (predictedOutcome == PredictionTypes.Outcome.Bearish) {
             assertEq(totalStakeOutcome0, expectedNetStake, "Total stake for outcome 0 mismatch");
         } else {
             assertEq(totalStakeOutcome1, expectedNetStake, "Total stake for outcome 1 mismatch");
@@ -170,11 +171,7 @@ contract TestSwapCastHook is Test, Deployers {
 
         // Verify balances
         assertEq(address(pool).balance, convictionStake, "PredictionManager should have received the conviction stake");
-        assertEq(
-            MOCK_TREASURY.balance,
-            treasuryBalanceBefore + calculatedFee,
-            "Treasury should have received the protocol fee"
-        );
+        assertEq(MOCK_TREASURY.balance, calculatedFee, "Treasury should have received the protocol fee");
         assertEq(address(hook).balance, 0, "SwapCastHook should have forwarded all ETH and have 0 balance left");
     }
 
@@ -183,7 +180,8 @@ contract TestSwapCastHook is Test, Deployers {
         PoolKey memory key;
         SwapParams memory params;
         BalanceDelta delta = BalanceDelta.wrap(0);
-        bytes memory hookData = new bytes(33);
+        bytes memory hookData = "";
+
         vm.expectRevert(ImmutableState.NotPoolManager.selector);
         hook.afterSwap(address(1), key, params, delta, hookData);
     }
@@ -238,8 +236,8 @@ contract TestSwapCastHook is Test, Deployers {
         SwapParams memory swapParams =
             SwapParams({zeroForOne: true, amountSpecified: -0.05 ether, sqrtPriceLimitX96: TickMath.MIN_SQRT_PRICE + 1});
 
-        uint8 predictedOutcome = 1;
-        bytes memory hookData = abi.encodePacked(address(this), marketId, predictedOutcome, uint128(0));
+        PredictionTypes.Outcome predictedOutcome = PredictionTypes.Outcome.Bullish;
+        bytes memory hookData = abi.encodePacked(address(this), marketId, uint8(predictedOutcome), uint128(0));
 
         bytes memory expectedReason = abi.encodePacked(SwapCastHook.NoConvictionStakeDeclaredInHookData.selector);
         bytes4 hookCallFailedSelector = bytes4(keccak256(bytes("HookCallFailed()")));
@@ -263,11 +261,11 @@ contract TestSwapCastHook is Test, Deployers {
     /// @notice Tests that prediction fails and reverts if the pool call fails during swap.
     function test_prediction_failed_if_pool_reverts() public {
         uint256 marketId = 999; // Non-existent market ID
-        uint8 predictedOutcome = 1;
+        PredictionTypes.Outcome predictedOutcome = PredictionTypes.Outcome.Bullish;
         uint128 convictionStake = 100e18;
 
         // Include the actual user address (this test contract) in the hookData
-        bytes memory hookData = abi.encodePacked(address(this), marketId, predictedOutcome, convictionStake);
+        bytes memory hookData = abi.encodePacked(address(this), marketId, uint8(predictedOutcome), convictionStake);
 
         uint256 feeBasisPoints = pool.protocolFeeBasisPoints();
         uint256 calculatedFee = (convictionStake * feeBasisPoints) / 10000;
@@ -280,6 +278,181 @@ contract TestSwapCastHook is Test, Deployers {
             SwapParams({zeroForOne: true, amountSpecified: -1e18, sqrtPriceLimitX96: TickMath.MIN_SQRT_PRICE + 1}),
             PoolSwapTest.TestSettings({takeClaims: false, settleUsingBurn: false}),
             hookData
+        );
+    }
+
+    /// @notice Tests prediction with exactly the minimum stake amount
+    function test_record_prediction_with_minimum_stake() public {
+        PredictionTypes.Outcome predictedOutcome = PredictionTypes.Outcome.Bullish;
+        uint128 convictionStake = uint128(INITIAL_MIN_STAKE_AMOUNT); // Exactly the minimum
+
+        // Create a market with the test pool key
+        uint256 marketId = pool.createMarket(
+            "Test Market Min Stake",
+            "ETHUSD-MinStake",
+            block.timestamp + 1 hours,
+            MOCK_ORACLE_RESOLVER,
+            3000 * 10 ** 8,
+            testPoolKey
+        );
+
+        // Include the actual user address (this test contract) in the hookData
+        bytes memory hookData = abi.encodePacked(address(this), marketId, uint8(predictedOutcome), convictionStake);
+
+        // Calculate the protocol fee
+        uint256 feeBasisPoints = pool.protocolFeeBasisPoints();
+        uint256 calculatedFee = (convictionStake * feeBasisPoints) / 10000;
+        uint256 msgValue = calculatedFee + convictionStake;
+
+        // Pre-fund the hook with the exact amount needed
+        vm.deal(address(hook), msgValue);
+
+        SwapParams memory swapParams =
+            SwapParams({zeroForOne: true, amountSpecified: -0.05 ether, sqrtPriceLimitX96: TickMath.MIN_SQRT_PRICE + 1});
+
+        // Perform the swap, which triggers the hook
+        swapRouter.swap{value: 0}(
+            poolKey, swapParams, PoolSwapTest.TestSettings({takeClaims: false, settleUsingBurn: false}), hookData
+        );
+
+        // Verify the NFT was minted to the user
+        assertEq(nft.ownerOf(0), address(this), "NFT should be minted to the user");
+
+        // Verify prediction details
+        (uint256 tokenMarketId, PredictionTypes.Outcome tokenOutcome, uint256 tokenStake, address tokenOwner) =
+            nft.getPredictionDetails(0);
+        assertEq(tokenMarketId, marketId, "NFT should record the correct market ID");
+        assertEq(uint8(tokenOutcome), uint8(predictedOutcome), "NFT should record the correct outcome");
+        assertEq(tokenStake, convictionStake, "NFT should record the correct stake amount");
+        assertEq(tokenOwner, address(this), "NFT should record the correct owner");
+
+        // Verify balances
+        assertEq(address(pool).balance, convictionStake, "PredictionManager should have received the conviction stake");
+        assertEq(MOCK_TREASURY.balance, calculatedFee, "Treasury should have received the protocol fee");
+        assertEq(address(hook).balance, 0, "SwapCastHook should have forwarded all ETH and have 0 balance left");
+    }
+
+    /// @notice Tests prediction with a very large stake amount
+    function test_record_prediction_with_large_stake() public {
+        PredictionTypes.Outcome predictedOutcome = PredictionTypes.Outcome.Bearish;
+        uint128 convictionStake = 1_000_000 ether; // Very large stake
+
+        // Create a market with the test pool key
+        uint256 marketId = pool.createMarket(
+            "Test Market Large Stake",
+            "ETHUSD-LargeStake",
+            block.timestamp + 1 hours,
+            MOCK_ORACLE_RESOLVER,
+            3000 * 10 ** 8,
+            testPoolKey
+        );
+
+        // Include the actual user address (this test contract) in the hookData
+        bytes memory hookData = abi.encodePacked(address(this), marketId, uint8(predictedOutcome), convictionStake);
+
+        // Calculate the protocol fee
+        uint256 feeBasisPoints = pool.protocolFeeBasisPoints();
+        uint256 calculatedFee = (convictionStake * feeBasisPoints) / 10000;
+        uint256 msgValue = calculatedFee + convictionStake;
+
+        // Pre-fund the hook with the exact amount needed
+        vm.deal(address(hook), msgValue);
+
+        SwapParams memory swapParams =
+            SwapParams({zeroForOne: true, amountSpecified: -0.05 ether, sqrtPriceLimitX96: TickMath.MIN_SQRT_PRICE + 1});
+
+        // Perform the swap, which triggers the hook
+        swapRouter.swap{value: 0}(
+            poolKey, swapParams, PoolSwapTest.TestSettings({takeClaims: false, settleUsingBurn: false}), hookData
+        );
+
+        // Verify the NFT was minted to the user
+        assertEq(nft.ownerOf(0), address(this), "NFT should be minted to the user");
+
+        // Verify prediction details
+        (uint256 tokenMarketId, PredictionTypes.Outcome tokenOutcome, uint256 tokenStake, address tokenOwner) =
+            nft.getPredictionDetails(0);
+        assertEq(tokenMarketId, marketId, "NFT should record the correct market ID");
+        assertEq(uint8(tokenOutcome), uint8(predictedOutcome), "NFT should record the correct outcome");
+        assertEq(tokenStake, convictionStake, "NFT should record the correct stake amount");
+        assertEq(tokenOwner, address(this), "NFT should record the correct owner");
+
+        // Verify balances
+        assertEq(address(pool).balance, convictionStake, "PredictionManager should have received the conviction stake");
+        assertEq(MOCK_TREASURY.balance, calculatedFee, "Treasury should have received the protocol fee");
+        assertEq(address(hook).balance, 0, "SwapCastHook should have forwarded all ETH and have 0 balance left");
+    }
+
+    /// @notice Tests prediction with an expired market (should revert)
+    function test_reverts_with_expired_market() public {
+        PredictionTypes.Outcome predictedOutcome = PredictionTypes.Outcome.Bullish;
+        uint128 convictionStake = 1 ether;
+
+        // Create a market with a valid expiration time
+        uint256 expirationTime = block.timestamp + 1 hours;
+        uint256 marketId = pool.createMarket(
+            "Test Market Expired", "ETHUSD-Expired", expirationTime, MOCK_ORACLE_RESOLVER, 3000 * 10 ** 8, testPoolKey
+        );
+
+        // Now advance time to make the market expired
+        vm.warp(expirationTime + 1);
+
+        // Include the actual user address (this test contract) in the hookData
+        bytes memory hookData = abi.encodePacked(address(this), marketId, uint8(predictedOutcome), convictionStake);
+
+        // Calculate the protocol fee
+        uint256 feeBasisPoints = pool.protocolFeeBasisPoints();
+        uint256 calculatedFee = (convictionStake * feeBasisPoints) / 10000;
+        uint256 msgValue = calculatedFee + convictionStake;
+
+        // Pre-fund the hook with the exact amount needed
+        vm.deal(address(hook), msgValue);
+
+        SwapParams memory swapParams =
+            SwapParams({zeroForOne: true, amountSpecified: -0.05 ether, sqrtPriceLimitX96: TickMath.MIN_SQRT_PRICE + 1});
+
+        // The swap should revert because the market is expired
+        vm.expectRevert();
+        swapRouter.swap{value: 0}(
+            poolKey, swapParams, PoolSwapTest.TestSettings({takeClaims: false, settleUsingBurn: false}), hookData
+        );
+    }
+
+    /// @notice Tests prediction on a market that already has predictions from the same user
+    function test_reverts_with_duplicate_prediction() public {
+        PredictionTypes.Outcome predictedOutcome = PredictionTypes.Outcome.Bullish;
+        uint128 convictionStake = 1 ether;
+
+        // Create a market
+        uint256 marketId = pool.createMarket(
+            "Test Market Duplicate",
+            "ETHUSD-Duplicate",
+            block.timestamp + 1 hours,
+            MOCK_ORACLE_RESOLVER,
+            3000 * 10 ** 8,
+            testPoolKey
+        );
+
+        // First make a prediction directly through the pool
+        uint256 feeBasisPoints = pool.protocolFeeBasisPoints();
+        uint256 calculatedFee = (convictionStake * feeBasisPoints) / 10000;
+        uint256 totalAmount = convictionStake + calculatedFee;
+        vm.deal(address(this), totalAmount);
+        pool.recordPrediction{value: totalAmount}(address(this), marketId, predictedOutcome, convictionStake);
+
+        // Now try to make a prediction through the hook
+        bytes memory hookData = abi.encodePacked(address(this), marketId, uint8(predictedOutcome), convictionStake);
+
+        // Pre-fund the hook with the exact amount needed
+        vm.deal(address(hook), totalAmount);
+
+        SwapParams memory swapParams =
+            SwapParams({zeroForOne: true, amountSpecified: -0.05 ether, sqrtPriceLimitX96: TickMath.MIN_SQRT_PRICE + 1});
+
+        // The swap should revert because the user already has a prediction for this market
+        vm.expectRevert();
+        swapRouter.swap{value: 0}(
+            poolKey, swapParams, PoolSwapTest.TestSettings({takeClaims: false, settleUsingBurn: false}), hookData
         );
     }
 }
