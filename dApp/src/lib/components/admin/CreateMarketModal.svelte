@@ -90,6 +90,7 @@
 
 	async function handleSubmit(event: Event) {
 		event.preventDefault();
+		console.log('Create Market form submitted');
 
 		if (
 			!targetPriceStr ||
@@ -152,6 +153,7 @@
 				feeTier,
 				userAddress
 			);
+			console.log('Pool result:', poolResult);
 			if (!poolResult.poolExists && !poolResult.poolCreated) {
 				showErrorToast = true;
 				toastMessage = poolResult.error || 'Failed to create or find the required pool.';
@@ -160,6 +162,7 @@
 				return;
 			}
 
+			console.log('Proceeding to create market');
 			// 2. Create the market via the service
 			const marketResult = await createMarket(
 				marketName,
@@ -169,6 +172,7 @@
 				'0.01', // minStake
 				userAddress
 			);
+			console.log('Market result:', marketResult);
 
 			if (!marketResult.success) {
 				showErrorToast = true;
@@ -377,16 +381,16 @@
 		</div>
 
 		<div class="mt-6 flex justify-end border-t pt-4 dark:border-gray-700">
-			<Button type="button" color="alternative" onclick={handleCancelClick} disabled={isSubmitting}
-				>Cancel</Button
-			>
-			<Button type="submit" color="green" class="ml-3" disabled={isSubmitting}>
-				{#if isSubmitting}
-					<Spinner class="mr-2" size="4" color="red" /> Creating...
-				{:else}
-					Create Market
-				{/if}
-			</Button>
+			<Button type="button" color="alternative" onclick={handleCancelClick} disabled={isSubmitting}>
+			Cancel
+		</Button>
+		<Button type="submit" color="green" class="ml-3" disabled={isSubmitting}>
+			{#if isSubmitting}
+				<Spinner class="mr-2" size="4" color="red" /> Creating...
+			{:else}
+				Create Market
+			{/if}
+		</Button>
 		</div>
 	</form>
 </Modal>

@@ -1,5 +1,18 @@
 import type { Address, Hash } from 'viem';
-import { publicClient, adminClient } from '$lib/contract/contracts';
+import { createPublicClient, http } from 'viem';
+import { networks } from '$lib/configs/wallet.config';
+// Use the first network from wallet config for public reads
+const network = networks[0];
+const RPC_URL = network.rpcUrls?.default?.http?.[0] || 'http://localhost:8545';
+export const publicClient = createPublicClient({
+  chain: network,
+  transport: http(RPC_URL),
+});
+// Placeholder for getting the connected wallet client for writes
+async function getConnectedWalletClient() {
+  // TODO: Replace with actual AppKit/wagmi logic to get wallet client
+  throw new Error('getConnectedWalletClient not implemented');
+}
 import { Token } from '@uniswap/sdk-core';
 import { Pool } from '@uniswap/v4-sdk';
 import { getTickSpacing } from '$lib/services/market/helpers';
