@@ -1,7 +1,7 @@
 <script lang="ts">
   import { Modal, Button, Spinner } from 'flowbite-svelte';
   import { XSolid, ChartPieSolid, ClockSolid, ExclamationCircleSolid } from 'flowbite-svelte-icons';
-  import { getMarketDetails, type Market } from '$lib/services/marketService';
+  import { getMarketDetails, type Market } from '$lib/services/market/marketService';
   import { onMount } from 'svelte';
 
   export let showModal = false;

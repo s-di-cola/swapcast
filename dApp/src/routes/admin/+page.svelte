@@ -1,8 +1,7 @@
 <script lang="ts">
-  import { goto } from '$app/navigation';
   import { onMount } from 'svelte';
-  import { page } from '$app/stores';
-  import { getAllMarkets, getMarketCount, type Market } from '$lib/services/marketService';
+  import { page } from '$app/state';
+  import { getAllMarkets, getMarketCount, type Market } from '$lib/services/market/marketService';
   import CreateMarketModal from '$lib/components/admin/CreateMarketModal.svelte';
   import MarketDetailsModal from '$lib/components/admin/MarketDetailsModal.svelte';
 
@@ -75,7 +74,7 @@
     fetchMarketData();
     
     // Check if marketId is in URL parameters
-    const marketIdParam = $page.url.searchParams.get('marketId');
+    const marketIdParam = page.url.searchParams.get('marketId');
     if (marketIdParam) {
       selectedMarketId = marketIdParam;
       showMarketDetailsModal = true;
