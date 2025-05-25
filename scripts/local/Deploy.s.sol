@@ -67,6 +67,7 @@ contract DeploySwapCast is Script, StdCheats {
 
         // 3. Deploy PredictionManager first with zero addresses for OracleResolver and RewardDistributor
         predictionManager = new PredictionManager(
+            deployerAddress, // _initialOwner
             address(swapCastNFT), // _swapCastNFTAddress
             address(treasury), // _treasuryAddress
             FEE_PERCENTAGE, // _initialFeeBasisPoints
@@ -178,13 +179,14 @@ contract DeploySwapCast is Script, StdCheats {
             uint256 priceThreshold = 2000 * 10**8;
             
             // First, try to create the market directly without oracle registration
+            // Reuse the existing poolKey that was defined earlier
             try predictionManager.createMarket(
-                marketId,
                 "ETH/USDC Market",
                 "ETH/USDC",
                 expirationTime,
                 ethUsdPriceFeed,
-                priceThreshold
+                priceThreshold,
+                poolKey
             ) {
                 console2.log("Created sample ETH/USD market with ID:", marketId);
                 
