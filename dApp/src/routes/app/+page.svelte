@@ -12,7 +12,7 @@
 		ArrowRightOutline
 	} from 'flowbite-svelte-icons';
 	import type { Token, PredictionSide } from '$lib/types';
-	import { getAllMarkets } from '$lib/services/marketService';
+	import { getAllMarkets } from '$lib/services/market/marketService';
 	import { goto } from '$app/navigation';
 	import { browser } from '$app/environment';
 

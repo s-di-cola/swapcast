@@ -17,8 +17,8 @@ const createWalletStore = () => {
 	const store = derived({ subscribe }, ($state) => ({
 		...$state,
 		isAdmin:
-			$state.isConnected && $state.address && ADMIN_ADDRESS
-				? $state.address.toLowerCase() === ADMIN_ADDRESS
+			$state.isConnected && $state.address && PUBLIC_ADMIN_ADDRESS
+				? $state.address.toLowerCase() === PUBLIC_ADMIN_ADDRESS.toLowerCase()
 				: false
 	}));
 

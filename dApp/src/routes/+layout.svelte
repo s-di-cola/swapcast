@@ -4,9 +4,9 @@
 	import AppHeader from '$lib/components/app/AppHeader.svelte';
 	import LandingHeader from '$lib/components/landing/LandingHeader.svelte';
 	import Footer from '$lib/components/common/Footer.svelte';
-	import { onMount } from 'svelte';
 	import { goto } from '$app/navigation';
 	import { browser } from '$app/environment';
+import { PUBLIC_ADMIN_ADDRESS } from '$env/static/public';
 	import '../app.css';
 
 	let { children } = $props<{ children: any }>();
@@ -21,7 +21,8 @@
 	$effect(() => {
 		if (!browser) return;
 
-		const { isConnected, isAdmin } = $walletStore;
+		const { isConnected, isAdmin, address } = $walletStore;
+
 
 		// If user is not connected and trying to access protected routes
 		if (!isConnected && isProtectedRoute) {
