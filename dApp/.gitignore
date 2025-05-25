@@ -28,7 +28,7 @@ Thumbs.db
 *.pw.zip
 
 # Generated ABIs
-/src/generated-abis/
+/src/generated
 
 # Vite
 vite.config.js.timestamp-*
