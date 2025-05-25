@@ -376,19 +376,35 @@ export async function getOrCreateMarketPool(
 	tokenB: Address,
 	fee: number,
 	account?: Address
-): Promise<{ poolExists: boolean; poolCreated: boolean; hash?: Hash; error?: string }> {
+): Promise<{ poolExists: boolean; poolCreated: boolean; hash?: Hash; error?: string; info?: string }> {
 	try {
-		const exists = await checkPoolExists(tokenA, tokenB, fee);
-		if (exists) {
-			return { poolExists: true, poolCreated: false };
-		}
+		// Hackathon: always attempt to create the pool, even if it might already exist
 		const result = await createPool(tokenA, tokenB, fee, account);
-		return {
-			poolExists: false,
-			poolCreated: result.success,
-			hash: result.hash,
-			error: result.success ? undefined : result.message
-		};
+		if (result.success) {
+			return {
+				poolExists: false,
+				poolCreated: true,
+				hash: result.hash,
+				error: undefined
+			};
+		} else if (result.message && result.message.toLowerCase().includes('already exists')) {
+			// Pool already exists: report info, but allow market creation
+			return {
+				poolExists: true,
+				poolCreated: false,
+				hash: undefined,
+				error: undefined,
+				info: 'Pool already exists for this market. Proceeding to create the market only.'
+			};
+		} else {
+			// Other error
+			return {
+				poolExists: false,
+				poolCreated: false,
+				hash: undefined,
+				error: result.message
+			};
+		}
 	} catch (err: any) {
 		return { poolExists: false, poolCreated: false, error: err.message };
 	}

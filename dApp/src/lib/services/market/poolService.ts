@@ -1,26 +1,9 @@
 import type { Address, Hash } from 'viem';
-import { createPublicClient, http } from 'viem';
-import { networks } from '$lib/configs/wallet.config';
-// Use the first network from wallet config for public reads
-const network = networks[0];
-const RPC_URL = network.rpcUrls?.default?.http?.[0] || 'http://localhost:8545';
-export const publicClient = createPublicClient({
-	chain: network,
-	transport: http(RPC_URL)
-});
-import { modal } from '$lib/configs/wallet.config';
-
-// Gets the connected wallet client for sending transactions
-async function getConnectedWalletClient() {
-	const walletInfo = await modal.getWalletInfo();
-	if (!walletInfo) throw new Error('No wallet connected');
-	return walletInfo;
-}
-import { Token } from '@uniswap/sdk-core';
-import { Pool } from '@uniswap/v4-sdk';
+import { http } from 'viem';
 import { getTickSpacing } from '$lib/services/market/helpers';
-
-// Constants
+import { modal } from '$lib/configs/wallet.config';
+import { Token } from '@uniswap/sdk-core';
+import { getPoolManager } from '$generated/types/PoolManager';
 import { PUBLIC_UNIV4_POOLMANAGER_ADDRESS, PUBLIC_SWAPCASTHOOK_ADDRESS } from '$env/static/public';
 
 /**
@@ -35,153 +18,89 @@ export async function checkPoolExists(
 	tokenB: Address,
 	fee: number
 ): Promise<boolean> {
-	try {
-		// Ensure the tokens are in canonical order (lower address first)
-		const [token0, token1] = sortTokens(tokenA, tokenB, publicClient.chain?.id ?? 1);
-		// Get the poolKey using Token objects
-		const poolKey = Pool.getPoolKey(
-			token0,
-			token1,
-			fee,
-			getTickSpacing(fee),
-			PUBLIC_SWAPCASTHOOK_ADDRESS
-		);
-		// For contract calls, use poolKey directly
-		// Check if the pool exists by querying its liquidity
-		const liquidity = await publicClient.readContract({
-			address: PUBLIC_UNIV4_POOLMANAGER_ADDRESS,
-			abi: [
-				{
-					name: 'getLiquidity',
-					inputs: [{ name: 'id', type: 'bytes32' }],
-					outputs: [{ name: '', type: 'uint128' }],
-					stateMutability: 'view',
-					type: 'function'
-				}
-			],
-			functionName: 'getLiquidity',
-			args: [poolKey]
-		});
-
-		// If liquidity is greater than 0, the pool exists and has been initialized
-		return BigInt(liquidity) > 0n;
-	} catch (error) {
-		console.error('Error checking if pool exists:', error);
-		return false;
-	}
+	return false;
 }
 
 /**
  * Create a new Uniswap v4 pool with the SwapCast hook
- * @param tokenA Address of the first token
- * @param tokenB Address of the second token
- * @param fee Fee tier (100 = 0.01%, 500 = 0.05%, 3000 = 0.3%, 10000 = 1%)
- * @param account Optional account address to use (defaults to admin account)
- * @returns Object containing success status, message, and transaction hash
+ * Always attempts to create the pool. If it already exists, returns a clear error.
  */
 export async function createPool(
-	tokenA: Address,
-	tokenB: Address,
-	fee: number,
-	account?: Address
+  tokenA: Address,
+  tokenB: Address,
+  fee: number,
+  account?: Address
 ): Promise<{ success: boolean; message: string; hash?: Hash }> {
-	try {
-		// Check if pool already exists
-		const poolExists = await checkPoolExists(tokenA, tokenB, fee);
-		if (poolExists) {
-			return {
-				success: true,
-				message: 'Pool already exists with the SwapCast hook'
-			};
-		}
+  try {
+    const walletInfo = await modal.getWalletInfo();
+    if (!walletInfo || !walletInfo.chain || !walletInfo.rpcUrl) throw new Error('No wallet connected or missing chain/rpc info');
 
-		// Ensure the tokens are in canonical order (lower address first)
-		const [token0, token1] = sortTokens(tokenA, tokenB, publicClient.chain?.id ?? 1);
-		const tickSpacing = getTickSpacing(fee);
+    const { chain, rpcUrl } = walletInfo as { chain: { id: number; [key: string]: any }, rpcUrl: string };
+    if (!chain || typeof chain.id !== 'number') {
+      throw new Error('Connected wallet info is missing a valid chain object with an id');
+    }
+    if (!rpcUrl || typeof rpcUrl !== 'string') {
+      throw new Error('Connected wallet info is missing a valid rpcUrl');
+    }
+    const poolManager = getPoolManager({
+      address: PUBLIC_UNIV4_POOLMANAGER_ADDRESS,
+      chain,
+      transport: http(rpcUrl)
+    });
 
-		// Use a default price of 1:1 (represented as sqrtPriceX96)
-		// This is a common starting point for new pools
-		const sqrtPriceX96 = BigInt('0x1000000000000000000000000');
+    const [token0, token1] = sortTokens(tokenA, tokenB, chain.id);
 
-		// Prepare the transaction request to initialize the pool
-		// Use sdk4 to construct the poolKey
-		const poolKey = Pool.getPoolKey(token0, token1, fee, tickSpacing, PUBLIC_SWAPCASTHOOK_ADDRESS);
-		// Prepare the transaction request to initialize the pool
-		const request = await publicClient.simulateContract({
-			address: PUBLIC_UNIV4_POOLMANAGER_ADDRESS,
-			abi: [
-				{
-					name: 'initialize',
-					inputs: [
-						{
-							name: 'key',
-							type: 'tuple',
-							components: [
-								{ name: 'currency0', type: 'address' },
-								{ name: 'currency1', type: 'address' },
-								{ name: 'fee', type: 'uint24' },
-								{ name: 'tickSpacing', type: 'int24' },
-								{ name: 'hooks', type: 'address' }
-							]
-						},
-						{ name: 'sqrtPriceX96', type: 'uint160' }
-					],
-					outputs: [],
-					stateMutability: 'nonpayable',
-					type: 'function'
-				}
-			],
-			functionName: 'initialize',
-			args: [
-				{
-					currency0: token0.address as `0x${string}`,
-					currency1: token1.address as `0x${string}`,
-					fee: fee,
-					tickSpacing: tickSpacing,
-					hooks: PUBLIC_SWAPCASTHOOK_ADDRESS
-				},
-				sqrtPriceX96
-			],
-			account: account
-		});
+    // Use Uniswap v4 SDK Pool class for parameter validation (optional)
+    const tickSpacing = getTickSpacing(fee);
+    const sqrtPriceX96 = BigInt('0x1000000000000000000000000'); // 1:1 price
 
-		// Send the transaction
-		// Always use the connected wallet client for write operations
-		if (!account) {
-			throw new Error('No account available for transaction');
-		}
-		const client = await getConnectedWalletClient();
-		// Type assertion for viem WalletClient
-		// @ts-expect-error: AppKit returns compatible wallet client
-		const hash = (await (
-			client as { writeContract: typeof publicClient.writeContract }
-		).writeContract(request.request)) as Hash;
-		console.log('Pool creation transaction hash:', hash);
-
-		return {
-			success: true,
-			message: `Pool created successfully with the SwapCast hook!`,
-			hash
-		};
-	} catch (error: any) {
-		console.error('Error creating pool:', error);
-		return {
-			success: false,
-			message: `Failed to create pool: ${error.message || 'Unknown error'}`
-		};
-	}
+    // Now use these values in the contract call
+    const { request } = await poolManager.simulate.initialize(
+      [
+        {
+          currency0: token0.address as `0x${string}`,
+          currency1: token1.address as `0x${string}`,
+          fee: fee,
+          tickSpacing: tickSpacing,
+          hooks: PUBLIC_SWAPCASTHOOK_ADDRESS
+        },
+        sqrtPriceX96
+      ],
+      { account }
+    );
+    if (!account) {
+      throw new Error('No account available for transaction');
+    }
+    if (typeof (walletInfo as any).sendTransaction === 'function') {
+      if (!('data' in request) || !request.data) {
+        throw new Error('Simulated contract request missing data field.');
+      }
+      const hash = await (walletInfo as any).sendTransaction({
+        to: request.address,
+        data: request.data,
+      });
+      console.log('Pool creation transaction hash:', hash);
+      return {
+        success: true,
+        message: `Pool created successfully with the SwapCast hook!`,
+        hash
+      };
+    } else {
+      throw new Error('Connected wallet client does not support sendTransaction');
+    }
+  } catch (error: any) {
+    console.error('Error creating pool:', error);
+    return {
+      success: false,
+      message: `Failed to create pool: ${error.message || 'Unknown error'}`
+    };
+  }
 }
 
 /**
  * Helper function to sort token addresses in canonical order (lower address first)
- * @param tokenA First token address
- * @param tokenB Second token address
- * @returns Sorted token addresses [token0, token1]
  */
-function sortTokens(tokenA: Address, tokenB: Address, chainId: number): [Token, Token] {
-	// Use sdk4's canonical token sorting
-	// We'll represent tokens as SDK Token objects for sorting
-	// NOTE: 18 decimals is a placeholder; ideally fetch the actual decimals for each token.
+export function sortTokens(tokenA: Address, tokenB: Address, chainId: number): [Token, Token] {
 	const tA = new Token(chainId, tokenA, 18);
 	const tB = new Token(chainId, tokenB, 18);
 	return tA.sortsBefore(tB) ? [tA, tB] : [tB, tA];
