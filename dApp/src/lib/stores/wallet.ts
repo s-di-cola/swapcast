@@ -1,6 +1,7 @@
 import { writable, derived, get } from 'svelte/store';
 
-const ADMIN_ADDRESS = import.meta.env.VITE_ADMIN_ADDRESS?.toLowerCase();
+import { PUBLIC_ADMIN_ADDRESS } from '$env/static/public';
+// Use PUBLIC_ADMIN_ADDRESS directly throughout this file.
 
 interface WalletBaseState {
   isConnected: boolean;

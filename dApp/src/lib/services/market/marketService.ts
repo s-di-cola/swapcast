@@ -8,17 +8,21 @@ export const publicClient = createPublicClient({
   chain: network,
   transport: http(RPC_URL),
 });
-// Placeholder for getting the connected wallet client for writes
-async function getConnectedWalletClient() {
-  // TODO: Replace with actual AppKit/wagmi logic to get wallet client
-  throw new Error('getConnectedWalletClient not implemented');
+import { modal } from '$lib/configs/wallet.config';
+
+// Gets the connected wallet client for sending transactions
+export async function getConnectedWalletClient() {
+  const walletInfo = await modal.getWalletInfo();
+  if (!walletInfo) throw new Error('No wallet connected');
+  return walletInfo;
 }
 import { checkPoolExists, createPool } from './poolService';
-import { createWalletClient, custom, parseEther, type Address, type Hash } from 'viem';
+import { createWalletClient, custom, parseEther, toHex, type Address, type Hash } from 'viem';
 import { getPredictionManager } from '$generated/types/PredictionManager';
 
 // Constants
-const PREDICTION_MANAGER_ADDRESS: Address = import.meta.env.VITE_PREDICTION_MANAGER_ADDRESS as Address;
+import { PUBLIC_PREDICTIONMANAGER_ADDRESS } from '$env/static/public';
+// Use PUBLIC_PREDICTIONMANAGER_ADDRESS directly throughout this file.
 
 // Types
 type MarketStatus = 'Open' | 'Expired' | 'Resolved';
@@ -42,7 +46,7 @@ export interface Market {
 
 // Helper Functions
 const getMarketStatus = (
-  resolved: boolean, 
+  resolved: boolean,
   timeRemaining: number
 ): { status: MarketStatus, expirationDisplay: string } => {
   if (resolved) return { status: 'Resolved', expirationDisplay: 'Resolved' };
@@ -51,20 +55,26 @@ const getMarketStatus = (
   const days = Math.floor(timeRemaining / 86400);
   const hours = Math.floor((timeRemaining % 86400) / 3600);
   const minutes = Math.floor((timeRemaining % 3600) / 60);
-  
+
   let expirationDisplay = `${minutes}m`;
   if (days > 0) expirationDisplay = `${days}d ${hours}h`;
   else if (hours > 0) expirationDisplay = `${hours}h ${minutes}m`;
-  
+
   return { status: 'Open', expirationDisplay };
 };
 
 // Public API
 export async function getMarketCount(): Promise<number> {
   try {
+    console.log('[marketService] Using PredictionManager address:', PUBLIC_PREDICTIONMANAGER_ADDRESS);
+    console.log('[marketService] Using network:', networks[0]);
     // Get the typed contract instance
-    const predictionManager = getPredictionManager(PREDICTION_MANAGER_ADDRESS);
-    
+    const predictionManager = getPredictionManager({
+      address: PUBLIC_PREDICTIONMANAGER_ADDRESS,
+      chain: networks[0],
+      transport: http(),
+    });
+
     // Call the read method with type safety
     const count = await publicClient.readContract({
       ...predictionManager,
@@ -85,33 +95,39 @@ export async function getMarketCount(): Promise<number> {
  */
 export async function getAllMarkets(): Promise<Market[]> {
   try {
+    console.log('[marketService] Using PredictionManager address:', PUBLIC_PREDICTIONMANAGER_ADDRESS);
+    console.log('[marketService] Using network:', networks[0]);
     // Get the contract instance
-    const predictionManager = getPredictionManager(PREDICTION_MANAGER_ADDRESS);
-    
+    const predictionManager = getPredictionManager({
+      address: PUBLIC_PREDICTIONMANAGER_ADDRESS,
+      chain: networks[0],
+      transport: http(),
+    });
+
     // Get the total count of markets
     const count = await publicClient.readContract({
       ...predictionManager,
       functionName: 'getMarketCount'
     }) as bigint;
-    
+
     if (count === 0n) {
       return [];
     }
-    
+
     // Create an array of market IDs from 0 to count-1
     const marketIds = Array.from(
-      { length: Number(count) }, 
+      { length: Number(count) },
       (_, i) => BigInt(i)
     );
-    
+
     // Fetch details for all markets in parallel
     const markets = await Promise.all(
       marketIds.map(id => getMarketDetails(id))
     );
-    
+
     // Filter out non-existent markets
     const existingMarkets = markets.filter(market => market.exists);
-    
+
     // Sort markets by status: Open first, then Expired, then Resolved
     return existingMarkets.sort((a, b) => {
       const statusOrder = { 'Open': 0, 'Expired': 1, 'Resolved': 2 };
@@ -140,18 +156,24 @@ interface MarketDetailsResult {
 
 export async function getMarketDetails(marketId: string | bigint): Promise<Market> {
   const id = typeof marketId === 'string' ? BigInt(marketId) : marketId;
-  
+
   try {
+    console.log('[marketService] Using PredictionManager address:', PUBLIC_PREDICTIONMANAGER_ADDRESS);
+    console.log('[marketService] Using network:', networks[0]);
     // Get the typed contract instance
-    const predictionManager = getPredictionManager(PREDICTION_MANAGER_ADDRESS);
-    
+    const predictionManager = getPredictionManager({
+      address: PUBLIC_PREDICTIONMANAGER_ADDRESS,
+      chain: networks[0],
+      transport: http(),
+    });
+
     // Call the read method with type safety
     const result = await publicClient.readContract({
       ...predictionManager,
       functionName: 'getMarketDetails',
-      args: [id]
+      args: [id] // pass as bigint, not hex string
     });
-    
+
     // Convert the array result to a typed object
     const [
       _id,
@@ -166,7 +188,7 @@ export async function getMarketDetails(marketId: string | bigint): Promise<Marke
       priceOracle,
       priceThreshold
     ] = result as readonly [bigint, string, string, boolean, boolean, number, bigint, bigint, bigint, Address, bigint];
-    
+
     // Create a properly typed object
     const details: MarketDetailsResult = {
       marketId: _id,
@@ -181,14 +203,14 @@ export async function getMarketDetails(marketId: string | bigint): Promise<Marke
       priceOracle,
       priceThreshold
     };
-    
+
     console.log(`[marketService] Got market details for ID ${id}:`, details);
-    
+
     const now = Math.floor(Date.now() / 1000);
     const timeRemaining = Number(details.expirationTimestamp) - now;
     const { status, expirationDisplay } = getMarketStatus(details.resolved, timeRemaining);
     const totalStake = (details.totalConvictionBearish + details.totalConvictionBullish).toString();
-    
+
     return {
       id: id.toString(),
       name: details.description || `Market ${id}`,
@@ -200,18 +222,18 @@ export async function getMarketDetails(marketId: string | bigint): Promise<Marke
       totalStake1: details.totalConvictionBullish,
       expirationTime: Number(details.expirationTimestamp),
       priceAggregator: details.priceOracle,
-      priceThreshold: Number(details.priceThreshold) / 10**18,
+      priceThreshold: Number(details.priceThreshold) / 10 ** 18,
       status,
       expirationDisplay,
       totalStake
     };
   } catch (error) {
     console.error(`Error getting market details for ID ${id}:`, error);
-    
+
     // Return a default market object with exists: false
     const timeRemaining = -1;
     const { status, expirationDisplay } = getMarketStatus(false, timeRemaining);
-    
+
     return {
       id: id.toString(),
       name: 'Error loading market',
@@ -250,13 +272,15 @@ export async function createMarket(
   account?: Address
 ): Promise<{ success: boolean; message: string; hash?: Hash }> {
   try {
+    console.log('[marketService] Using PredictionManager address:', PUBLIC_PREDICTIONMANAGER_ADDRESS);
+    console.log('[marketService] Using network:', networks[0]);
     // Convert expiration time to Unix timestamp (seconds)
     const expirationTimestamp = BigInt(Math.floor(expirationTime.getTime() / 1000));
-    
+
     // Use viem's parseEther for price threshold and min stake
     const priceThreshold = parseEther(priceThresholdStr);
     const minStake = parseEther(minStakeStr);
-    
+
     console.log('Creating market with params:', {
       description: marketName,
       assetPair: priceFeedKey,
@@ -266,15 +290,18 @@ export async function createMarket(
     });
 
     // Get the typed contract instance
-    const predictionManager = getPredictionManager(PREDICTION_MANAGER_ADDRESS);
-    
+    const predictionManager = getPredictionManager({
+      address: PUBLIC_PREDICTIONMANAGER_ADDRESS,
+      chain: networks[0],
+      transport: http(),
+    });
+
     // Determine which account to use
-    const userAccount = account || adminClient.account;
-    
+    const userAccount = account;
     if (!userAccount) {
       throw new Error('No account available for transaction');
     }
-    
+
     // Prepare the transaction request
     const request = await publicClient.simulateContract({
       ...predictionManager,
@@ -288,14 +315,14 @@ export async function createMarket(
       ],
       account: userAccount
     });
-    
-    // Determine which client to use based on the account
-    const client = account ? await getWalletClient() : adminClient;
-    
-    // Send the transaction
-    const hash = await client.writeContract(request.request) as Hash;
+
+    // Always use the connected wallet client for write operations
+    const client = await getConnectedWalletClient();
+    // Type assertion for viem WalletClient
+    // @ts-expect-error: AppKit returns compatible wallet client
+    const hash = await (client as { writeContract: typeof publicClient.writeContract }).writeContract(request.request) as Hash;
     console.log('Transaction hash:', hash);
-    
+
     return {
       success: true,
       message: `Market "${marketName}" created successfully!`,
@@ -344,18 +371,4 @@ export async function getOrCreateMarketPool(
   } catch (err: any) {
     return { poolExists: false, poolCreated: false, error: err.message };
   }
-}
-
-async function getWalletClient() {
-  if (!window.ethereum) {
-    throw new Error('No ethereum provider found. Please install a wallet.');
-  }
-  
-  // Use the same chain configuration as the publicClient
-  const walletClient = createWalletClient({
-    chain: publicClient.chain,
-    transport: custom(window.ethereum as any)
-  });
-  
-  return walletClient;
 }

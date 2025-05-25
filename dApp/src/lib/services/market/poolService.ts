@@ -18,8 +18,7 @@ import { Pool } from '@uniswap/v4-sdk';
 import { getTickSpacing } from '$lib/services/market/helpers';
 
 // Constants
-const POOL_MANAGER_ADDRESS: Address = import.meta.env.VITE_POOL_MANAGER_ADDRESS as Address;
-const SWAPCAST_HOOK_ADDRESS: Address = import.meta.env.VITE_SWAPCAST_HOOK_ADDRESS as Address;
+import { PUBLIC_UNIV4_POOLMANAGER_ADDRESS, PUBLIC_SWAPCASTHOOK_ADDRESS } from '$env/static/public';
 
 
 /**
@@ -38,11 +37,11 @@ export async function checkPoolExists(
     // Ensure the tokens are in canonical order (lower address first)
     const [token0, token1] = sortTokens(tokenA, tokenB, publicClient.chain?.id ?? 1);
     // Get the poolKey using Token objects
-    const poolKey = Pool.getPoolKey(token0, token1, fee, getTickSpacing(fee), SWAPCAST_HOOK_ADDRESS);
+    const poolKey = Pool.getPoolKey(token0, token1, fee, getTickSpacing(fee), PUBLIC_SWAPCASTHOOK_ADDRESS);
     // For contract calls, use poolKey directly
     // Check if the pool exists by querying its liquidity
     const liquidity = await publicClient.readContract({
-      address: POOL_MANAGER_ADDRESS,
+      address: PUBLIC_UNIV4_POOLMANAGER_ADDRESS,
       abi: [{
         name: 'getLiquidity',
         inputs: [{ name: 'id', type: 'bytes32' }],
@@ -90,22 +89,17 @@ export async function createPool(
     const [token0, token1] = sortTokens(tokenA, tokenB, publicClient.chain?.id ?? 1);
     const tickSpacing = getTickSpacing(fee);
     
-    // Determine which account to use
-    const userAccount = account || adminClient.account;
-    if (!userAccount) {
-      throw new Error('No account available for transaction');
-    }
-    
+
     // Use a default price of 1:1 (represented as sqrtPriceX96)
     // This is a common starting point for new pools
     const sqrtPriceX96 = BigInt('0x1000000000000000000000000');
     
     // Prepare the transaction request to initialize the pool
     // Use sdk4 to construct the poolKey
-    const poolKey = Pool.getPoolKey(token0, token1, fee, tickSpacing, SWAPCAST_HOOK_ADDRESS);
+    const poolKey = Pool.getPoolKey(token0, token1, fee, tickSpacing, PUBLIC_SWAPCASTHOOK_ADDRESS);
     // Prepare the transaction request to initialize the pool
     const request = await publicClient.simulateContract({
-      address: POOL_MANAGER_ADDRESS,
+      address: PUBLIC_UNIV4_POOLMANAGER_ADDRESS,
       abi: [{
         name: 'initialize',
         inputs: [
@@ -129,11 +123,11 @@ export async function createPool(
           currency1: token1.address as `0x${string}`,
           fee: fee,
           tickSpacing: tickSpacing,
-          hooks: SWAPCAST_HOOK_ADDRESS
+          hooks: PUBLIC_SWAPCASTHOOK_ADDRESS
         },
         sqrtPriceX96
       ],
-      account: userAccount
+      account: account
     });
     
     // Send the transaction

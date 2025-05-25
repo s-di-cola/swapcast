@@ -347,19 +347,21 @@ deploy_contracts() {
   fi
   
   # Save addresses to the .env file
-  [ -n "$SWAP_CAST_NFT" ] && echo "VITE_SwapCastNFT_ADDRESS=$SWAP_CAST_NFT" >> $DAPP_ENV_FILE
-  [ -n "$TREASURY" ] && echo "VITE_Treasury_ADDRESS=$TREASURY" >> $DAPP_ENV_FILE
-  [ -n "$PREDICTION_MANAGER" ] && echo "VITE_PredictionManager_ADDRESS=$PREDICTION_MANAGER" >> $DAPP_ENV_FILE
-  [ -n "$ORACLE_RESOLVER" ] && echo "VITE_OracleResolver_ADDRESS=$ORACLE_RESOLVER" >> $DAPP_ENV_FILE
-  [ -n "$REWARD_DISTRIBUTOR" ] && echo "VITE_RewardDistributor_ADDRESS=$REWARD_DISTRIBUTOR" >> $DAPP_ENV_FILE
-  [ -n "$SWAP_CAST_HOOK" ] && echo "VITE_SwapCastHook_ADDRESS=$SWAP_CAST_HOOK" >> $DAPP_ENV_FILE
+  [ -n "$SWAP_CAST_NFT" ] && echo "PUBLIC_SWAPCASTNFT_ADDRESS=$SWAP_CAST_NFT" >> $DAPP_ENV_FILE
+  [ -n "$TREASURY" ] && echo "PUBLIC_TREASURY_ADDRESS=$TREASURY" >> $DAPP_ENV_FILE
+  [ -n "$PREDICTION_MANAGER" ] && echo "PUBLIC_PREDICTIONMANAGER_ADDRESS=$PREDICTION_MANAGER" >> $DAPP_ENV_FILE
+  [ -n "$ORACLE_RESOLVER" ] && echo "PUBLIC_ORACLERESOLVER_ADDRESS=$ORACLE_RESOLVER" >> $DAPP_ENV_FILE
+  [ -n "$REWARD_DISTRIBUTOR" ] && echo "PUBLIC_REWARDDISTRIBUTOR_ADDRESS=$REWARD_DISTRIBUTOR" >> $DAPP_ENV_FILE
+  [ -n "$SWAP_CAST_HOOK" ] && echo "PUBLIC_SWAPCASTHOOK_ADDRESS=$SWAP_CAST_HOOK" >> $DAPP_ENV_FILE
+  # Add Uniswap v4 PoolManager address (mainnet)
+  echo "PUBLIC_UNIV4_POOLMANAGER_ADDRESS=0x0000000000FFe8B47B3e2130213B802212439497" >> $DAPP_ENV_FILE
   
   # Add the admin private key and address (using first Anvil account)
   # First Anvil account private key: 0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80
-  echo "VITE_ADMIN_PRIVATE_KEY=$PRIVATE_KEY" >> $DAPP_ENV_FILE
+  echo "PUBLIC_ADMIN_PRIVATE_KEY=$PRIVATE_KEY" >> $DAPP_ENV_FILE
   
   # First Anvil account address: 0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266
-  echo "VITE_ADMIN_ADDRESS=0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266" >> $DAPP_ENV_FILE
+  echo "PUBLIC_ADMIN_ADDRESS=0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266" >> $DAPP_ENV_FILE
 
   # Set the PREDICTION_MANAGER_ADDRESS variable for subgraph
   PREDICTION_MANAGER_ADDRESS=$PREDICTION_MANAGER
@@ -376,7 +378,7 @@ deploy_contracts() {
   fi
   
   # Add the deployment block to the file
-  echo "VITE_DEPLOY_BLOCK=$DEPLOY_BLOCK" >> $DAPP_ENV_FILE
+  echo "PUBLIC_DEPLOY_BLOCK=$DEPLOY_BLOCK" >> $DAPP_ENV_FILE
   
   # Store contract data for summary
   CONTRACT_DATA=$(cat $DAPP_ENV_FILE)

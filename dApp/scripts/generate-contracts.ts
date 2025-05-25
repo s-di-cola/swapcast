@@ -38,7 +38,27 @@ if (!existsSync(generatedDir)) {
       }
       const abi = JSON.parse(readFileSync(artifactPath, 'utf-8'));
       // Generate type-safe contract types and hooks
-      const content = `// Auto-generated file - DO NOT EDIT!\nimport { createPublicClient, http, parseAbi, getContract, type Address } from 'viem'\nimport { type GetContractReturnType } from 'viem'\n\n// ABI with type inference when used with 'as const'\nexport const ${contractName}Abi = ${JSON.stringify(abi, null, 2)} as const\n\n// Type for the contract instance\nexport type ${contractName}Contract = GetContractReturnType<typeof ${contractName}Abi>\n\n// Function to get a typed contract instance\nexport function get${contractName}(address: Address, chainId: number = 1) {\n  const client = createPublicClient({\n    chain: { id: chainId },\n    transport: http()\n  })\n  return getContract({\n    address,\n    abi: ${contractName}Abi,\n    client,\n  })\n}\n\n// Types for all events\nexport type ${contractName}Events = ${contractName}Contract['events']\n\n// Types for all methods\nexport type ${contractName}Methods = ${contractName}Contract['methods']\n\n// Types for all read functions\nexport type ${contractName}ReadFunctions = ${contractName}Contract['read']\n\n// Types for all write functions\nexport type ${contractName}WriteFunctions = ${contractName}Contract['write']\n`;
+      const content = `// Auto-generated file - DO NOT EDIT!\nimport { createPublicClient, http, parseAbi, getContract, type Address } from 'viem'\nimport { type GetContractReturnType } from 'viem'\n\n// ABI with type inference when used with 'as const'\nexport const ${contractName}Abi = ${JSON.stringify(abi, null, 2)} as const\n\n// Type for the contract instance\nexport type ${contractName}Contract = GetContractReturnType<typeof ${contractName}Abi>\n\n// Function to get a typed contract instance
+export function get${contractName}({
+  address,
+  chain,
+  transport,
+}: {
+  address: Address,
+  chain: any, // Use viem's Chain type if available
+  transport?: ReturnType<typeof http>
+}) {
+  const client = createPublicClient({
+    chain,
+    transport: transport || http(),
+  });
+  return getContract({
+    address,
+    abi: ${contractName}Abi,
+    client,
+  });
+}
+\n// Types for all events\nexport type ${contractName}Events = ${contractName}Contract['events']\n\n// Types for all methods\nexport type ${contractName}Methods = ${contractName}Contract['methods']\n\n// Types for all read functions\nexport type ${contractName}ReadFunctions = ${contractName}Contract['read']\n\n// Types for all write functions\nexport type ${contractName}WriteFunctions = ${contractName}Contract['write']\n`;
       const formatted = await format(content, {
         singleQuote: true,
         trailingComma: 'es5',
