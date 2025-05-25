@@ -17,7 +17,8 @@ const TARGET_CONTRACTS = [
 	'OracleResolver',
 	'RewardDistributor',
 	'Treasury',
-	'MarketLogic'
+	'MarketLogic',
+	'PoolManager'
 ];
 
 if (!existsSync(generatedDir)) {
