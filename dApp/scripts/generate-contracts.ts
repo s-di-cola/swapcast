@@ -67,7 +67,7 @@ TARGET_CONTRACTS.forEach(contractName => {
   // Generate type-safe contract types and hooks
   const content = `// Auto-generated file - DO NOT EDIT!
 import { createPublicClient, http, parseAbi, getContract, type Address } from 'viem'
-import { type GetContractReturnType } from 'viem/contract'
+import { type GetContractReturnType } from 'viem'
 
 // ABI with type inference when used with 'as const'
 export const ${contractName}Abi = ${JSON.stringify(abi, null, 2)} as const
