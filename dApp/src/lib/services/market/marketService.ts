@@ -5,16 +5,16 @@ import { networks } from '$lib/configs/wallet.config';
 const network = networks[0];
 const RPC_URL = network.rpcUrls?.default?.http?.[0] || 'http://localhost:8545';
 export const publicClient = createPublicClient({
-  chain: network,
-  transport: http(RPC_URL),
+	chain: network,
+	transport: http(RPC_URL)
 });
 import { modal } from '$lib/configs/wallet.config';
 
 // Gets the connected wallet client for sending transactions
 export async function getConnectedWalletClient() {
-  const walletInfo = await modal.getWalletInfo();
-  if (!walletInfo) throw new Error('No wallet connected');
-  return walletInfo;
+	const walletInfo = await modal.getWalletInfo();
+	if (!walletInfo) throw new Error('No wallet connected');
+	return walletInfo;
 }
 import { checkPoolExists, createPool } from './poolService';
 import { createWalletClient, custom, parseEther, toHex, type Address, type Hash } from 'viem';
@@ -28,229 +28,245 @@ import { PUBLIC_PREDICTIONMANAGER_ADDRESS } from '$env/static/public';
 type MarketStatus = 'Open' | 'Expired' | 'Resolved';
 
 export interface Market {
-  id: string;
-  name: string;
-  assetSymbol: string;
-  exists: boolean;
-  resolved: boolean;
-  winningOutcome: number;
-  totalStake0: bigint;
-  totalStake1: bigint;
-  expirationTime: number;
-  priceAggregator: Address;
-  priceThreshold: number;
-  status: MarketStatus;
-  expirationDisplay: string;
-  totalStake: string;
+	id: string;
+	name: string;
+	assetSymbol: string;
+	exists: boolean;
+	resolved: boolean;
+	winningOutcome: number;
+	totalStake0: bigint;
+	totalStake1: bigint;
+	expirationTime: number;
+	priceAggregator: Address;
+	priceThreshold: number;
+	status: MarketStatus;
+	expirationDisplay: string;
+	totalStake: string;
 }
 
 // Helper Functions
 const getMarketStatus = (
-  resolved: boolean,
-  timeRemaining: number
-): { status: MarketStatus, expirationDisplay: string } => {
-  if (resolved) return { status: 'Resolved', expirationDisplay: 'Resolved' };
-  if (timeRemaining <= 0) return { status: 'Expired', expirationDisplay: 'Expired' };
+	resolved: boolean,
+	timeRemaining: number
+): { status: MarketStatus; expirationDisplay: string } => {
+	if (resolved) return { status: 'Resolved', expirationDisplay: 'Resolved' };
+	if (timeRemaining <= 0) return { status: 'Expired', expirationDisplay: 'Expired' };
 
-  const days = Math.floor(timeRemaining / 86400);
-  const hours = Math.floor((timeRemaining % 86400) / 3600);
-  const minutes = Math.floor((timeRemaining % 3600) / 60);
+	const days = Math.floor(timeRemaining / 86400);
+	const hours = Math.floor((timeRemaining % 86400) / 3600);
+	const minutes = Math.floor((timeRemaining % 3600) / 60);
 
-  let expirationDisplay = `${minutes}m`;
-  if (days > 0) expirationDisplay = `${days}d ${hours}h`;
-  else if (hours > 0) expirationDisplay = `${hours}h ${minutes}m`;
+	let expirationDisplay = `${minutes}m`;
+	if (days > 0) expirationDisplay = `${days}d ${hours}h`;
+	else if (hours > 0) expirationDisplay = `${hours}h ${minutes}m`;
 
-  return { status: 'Open', expirationDisplay };
+	return { status: 'Open', expirationDisplay };
 };
 
 // Public API
 export async function getMarketCount(): Promise<number> {
-  try {
-    console.log('[marketService] Using PredictionManager address:', PUBLIC_PREDICTIONMANAGER_ADDRESS);
-    console.log('[marketService] Using network:', networks[0]);
-    // Get the typed contract instance
-    const predictionManager = getPredictionManager({
-      address: PUBLIC_PREDICTIONMANAGER_ADDRESS,
-      chain: networks[0],
-      transport: http(),
-    });
+	try {
+		console.log(
+			'[marketService] Using PredictionManager address:',
+			PUBLIC_PREDICTIONMANAGER_ADDRESS
+		);
+		console.log('[marketService] Using network:', networks[0]);
+		// Get the typed contract instance
+		const predictionManager = getPredictionManager({
+			address: PUBLIC_PREDICTIONMANAGER_ADDRESS,
+			chain: networks[0],
+			transport: http()
+		});
 
-    // Call the read method with type safety
-    const count = await publicClient.readContract({
-      ...predictionManager,
-      functionName: 'getMarketCount'
-    });
-    return Number(count);
-  } catch (error) {
-    console.error('getMarketCount error:', error);
-    return 0;
-  }
+		// Call the read method with type safety
+		const count = await publicClient.readContract({
+			...predictionManager,
+			functionName: 'getMarketCount'
+		});
+		return Number(count);
+	} catch (error) {
+		console.error('getMarketCount error:', error);
+		return 0;
+	}
 }
 
 /**
  * Get all markets
- * 
+ *
  * This function fetches all market IDs and then gets the details for each market in parallel
  * It filters out non-existent markets and sorts them by status (Open first, then Expired, then Resolved)
  */
 export async function getAllMarkets(): Promise<Market[]> {
-  try {
-    console.log('[marketService] Using PredictionManager address:', PUBLIC_PREDICTIONMANAGER_ADDRESS);
-    console.log('[marketService] Using network:', networks[0]);
-    // Get the contract instance
-    const predictionManager = getPredictionManager({
-      address: PUBLIC_PREDICTIONMANAGER_ADDRESS,
-      chain: networks[0],
-      transport: http(),
-    });
+	try {
+		console.log(
+			'[marketService] Using PredictionManager address:',
+			PUBLIC_PREDICTIONMANAGER_ADDRESS
+		);
+		console.log('[marketService] Using network:', networks[0]);
+		// Get the contract instance
+		const predictionManager = getPredictionManager({
+			address: PUBLIC_PREDICTIONMANAGER_ADDRESS,
+			chain: networks[0],
+			transport: http()
+		});
 
-    // Get the total count of markets
-    const count = await publicClient.readContract({
-      ...predictionManager,
-      functionName: 'getMarketCount'
-    }) as bigint;
+		// Get the total count of markets
+		const count = (await publicClient.readContract({
+			...predictionManager,
+			functionName: 'getMarketCount'
+		})) as bigint;
 
-    if (count === 0n) {
-      return [];
-    }
+		if (count === 0n) {
+			return [];
+		}
 
-    // Create an array of market IDs from 0 to count-1
-    const marketIds = Array.from(
-      { length: Number(count) },
-      (_, i) => BigInt(i)
-    );
+		// Create an array of market IDs from 0 to count-1
+		const marketIds = Array.from({ length: Number(count) }, (_, i) => BigInt(i));
 
-    // Fetch details for all markets in parallel
-    const markets = await Promise.all(
-      marketIds.map(id => getMarketDetails(id))
-    );
+		// Fetch details for all markets in parallel
+		const markets = await Promise.all(marketIds.map((id) => getMarketDetails(id)));
 
-    // Filter out non-existent markets
-    const existingMarkets = markets.filter(market => market.exists);
+		// Filter out non-existent markets
+		const existingMarkets = markets.filter((market) => market.exists);
 
-    // Sort markets by status: Open first, then Expired, then Resolved
-    return existingMarkets.sort((a, b) => {
-      const statusOrder = { 'Open': 0, 'Expired': 1, 'Resolved': 2 };
-      return statusOrder[a.status] - statusOrder[b.status];
-    });
-  } catch (error) {
-    console.error('getAllMarkets error:', error);
-    return [];
-  }
+		// Sort markets by status: Open first, then Expired, then Resolved
+		return existingMarkets.sort((a, b) => {
+			const statusOrder = { Open: 0, Expired: 1, Resolved: 2 };
+			return statusOrder[a.status] - statusOrder[b.status];
+		});
+	} catch (error) {
+		console.error('getAllMarkets error:', error);
+		return [];
+	}
 }
 
 // Define a proper interface for the contract return type
 interface MarketDetailsResult {
-  marketId: bigint;
-  description: string;
-  assetPair: string;
-  exists: boolean;
-  resolved: boolean;
-  winningOutcome: number;
-  totalConvictionBearish: bigint;
-  totalConvictionBullish: bigint;
-  expirationTimestamp: bigint;
-  priceOracle: Address;
-  priceThreshold: bigint;
+	marketId: bigint;
+	description: string;
+	assetPair: string;
+	exists: boolean;
+	resolved: boolean;
+	winningOutcome: number;
+	totalConvictionBearish: bigint;
+	totalConvictionBullish: bigint;
+	expirationTimestamp: bigint;
+	priceOracle: Address;
+	priceThreshold: bigint;
 }
 
 export async function getMarketDetails(marketId: string | bigint): Promise<Market> {
-  const id = typeof marketId === 'string' ? BigInt(marketId) : marketId;
+	const id = typeof marketId === 'string' ? BigInt(marketId) : marketId;
 
-  try {
-    console.log('[marketService] Using PredictionManager address:', PUBLIC_PREDICTIONMANAGER_ADDRESS);
-    console.log('[marketService] Using network:', networks[0]);
-    // Get the typed contract instance
-    const predictionManager = getPredictionManager({
-      address: PUBLIC_PREDICTIONMANAGER_ADDRESS,
-      chain: networks[0],
-      transport: http(),
-    });
+	try {
+		console.log(
+			'[marketService] Using PredictionManager address:',
+			PUBLIC_PREDICTIONMANAGER_ADDRESS
+		);
+		console.log('[marketService] Using network:', networks[0]);
+		// Get the typed contract instance
+		const predictionManager = getPredictionManager({
+			address: PUBLIC_PREDICTIONMANAGER_ADDRESS,
+			chain: networks[0],
+			transport: http()
+		});
 
-    // Call the read method with type safety
-    const result = await publicClient.readContract({
-      ...predictionManager,
-      functionName: 'getMarketDetails',
-      args: [id] // pass as bigint, not hex string
-    });
+		// Call the read method with type safety
+		const result = await publicClient.readContract({
+			...predictionManager,
+			functionName: 'getMarketDetails',
+			args: [id] // pass as bigint, not hex string
+		});
 
-    // Convert the array result to a typed object
-    const [
-      _id,
-      description,
-      assetPair,
-      exists,
-      resolved,
-      winningOutcome,
-      totalConvictionBearish,
-      totalConvictionBullish,
-      expirationTimestamp,
-      priceOracle,
-      priceThreshold
-    ] = result as readonly [bigint, string, string, boolean, boolean, number, bigint, bigint, bigint, Address, bigint];
+		// Convert the array result to a typed object
+		const [
+			_id,
+			description,
+			assetPair,
+			exists,
+			resolved,
+			winningOutcome,
+			totalConvictionBearish,
+			totalConvictionBullish,
+			expirationTimestamp,
+			priceOracle,
+			priceThreshold
+		] = result as readonly [
+			bigint,
+			string,
+			string,
+			boolean,
+			boolean,
+			number,
+			bigint,
+			bigint,
+			bigint,
+			Address,
+			bigint
+		];
 
-    // Create a properly typed object
-    const details: MarketDetailsResult = {
-      marketId: _id,
-      description,
-      assetPair,
-      exists,
-      resolved,
-      winningOutcome,
-      totalConvictionBearish,
-      totalConvictionBullish,
-      expirationTimestamp,
-      priceOracle,
-      priceThreshold
-    };
+		// Create a properly typed object
+		const details: MarketDetailsResult = {
+			marketId: _id,
+			description,
+			assetPair,
+			exists,
+			resolved,
+			winningOutcome,
+			totalConvictionBearish,
+			totalConvictionBullish,
+			expirationTimestamp,
+			priceOracle,
+			priceThreshold
+		};
 
-    console.log(`[marketService] Got market details for ID ${id}:`, details);
+		console.log(`[marketService] Got market details for ID ${id}:`, details);
 
-    const now = Math.floor(Date.now() / 1000);
-    const timeRemaining = Number(details.expirationTimestamp) - now;
-    const { status, expirationDisplay } = getMarketStatus(details.resolved, timeRemaining);
-    const totalStake = (details.totalConvictionBearish + details.totalConvictionBullish).toString();
+		const now = Math.floor(Date.now() / 1000);
+		const timeRemaining = Number(details.expirationTimestamp) - now;
+		const { status, expirationDisplay } = getMarketStatus(details.resolved, timeRemaining);
+		const totalStake = (details.totalConvictionBearish + details.totalConvictionBullish).toString();
 
-    return {
-      id: id.toString(),
-      name: details.description || `Market ${id}`,
-      assetSymbol: details.assetPair,
-      exists: details.exists,
-      resolved: details.resolved,
-      winningOutcome: details.winningOutcome,
-      totalStake0: details.totalConvictionBearish,
-      totalStake1: details.totalConvictionBullish,
-      expirationTime: Number(details.expirationTimestamp),
-      priceAggregator: details.priceOracle,
-      priceThreshold: Number(details.priceThreshold) / 10 ** 18,
-      status,
-      expirationDisplay,
-      totalStake
-    };
-  } catch (error) {
-    console.error(`Error getting market details for ID ${id}:`, error);
+		return {
+			id: id.toString(),
+			name: details.description || `Market ${id}`,
+			assetSymbol: details.assetPair,
+			exists: details.exists,
+			resolved: details.resolved,
+			winningOutcome: details.winningOutcome,
+			totalStake0: details.totalConvictionBearish,
+			totalStake1: details.totalConvictionBullish,
+			expirationTime: Number(details.expirationTimestamp),
+			priceAggregator: details.priceOracle,
+			priceThreshold: Number(details.priceThreshold) / 10 ** 18,
+			status,
+			expirationDisplay,
+			totalStake
+		};
+	} catch (error) {
+		console.error(`Error getting market details for ID ${id}:`, error);
 
-    // Return a default market object with exists: false
-    const timeRemaining = -1;
-    const { status, expirationDisplay } = getMarketStatus(false, timeRemaining);
+		// Return a default market object with exists: false
+		const timeRemaining = -1;
+		const { status, expirationDisplay } = getMarketStatus(false, timeRemaining);
 
-    return {
-      id: id.toString(),
-      name: 'Error loading market',
-      assetSymbol: 'N/A',
-      exists: false,
-      resolved: false,
-      winningOutcome: 0,
-      totalStake0: BigInt(0),
-      totalStake1: BigInt(0),
-      expirationTime: 0,
-      priceAggregator: '0x0000000000000000000000000000000000000000' as Address,
-      priceThreshold: 0,
-      status,
-      expirationDisplay,
-      totalStake: '0'
-    };
-  }
+		return {
+			id: id.toString(),
+			name: 'Error loading market',
+			assetSymbol: 'N/A',
+			exists: false,
+			resolved: false,
+			winningOutcome: 0,
+			totalStake0: BigInt(0),
+			totalStake1: BigInt(0),
+			expirationTime: 0,
+			priceAggregator: '0x0000000000000000000000000000000000000000' as Address,
+			priceThreshold: 0,
+			status,
+			expirationDisplay,
+			totalStake: '0'
+		};
+	}
 }
 
 /**
@@ -264,77 +280,82 @@ export async function getMarketDetails(marketId: string | bigint): Promise<Marke
  * @returns Object containing success status, message, and transaction hash
  */
 export async function createMarket(
-  marketName: string,
-  priceFeedKey: string,
-  expirationTime: Date,
-  priceThresholdStr: string,
-  minStakeStr: string = '0.01',
-  account?: Address
+	marketName: string,
+	priceFeedKey: string,
+	expirationTime: Date,
+	priceThresholdStr: string,
+	minStakeStr: string = '0.01',
+	account?: Address
 ): Promise<{ success: boolean; message: string; hash?: Hash }> {
-  try {
-    console.log('[marketService] Using PredictionManager address:', PUBLIC_PREDICTIONMANAGER_ADDRESS);
-    console.log('[marketService] Using network:', networks[0]);
-    // Convert expiration time to Unix timestamp (seconds)
-    const expirationTimestamp = BigInt(Math.floor(expirationTime.getTime() / 1000));
+	try {
+		console.log(
+			'[marketService] Using PredictionManager address:',
+			PUBLIC_PREDICTIONMANAGER_ADDRESS
+		);
+		console.log('[marketService] Using network:', networks[0]);
+		// Convert expiration time to Unix timestamp (seconds)
+		const expirationTimestamp = BigInt(Math.floor(expirationTime.getTime() / 1000));
 
-    // Use viem's parseEther for price threshold and min stake
-    const priceThreshold = parseEther(priceThresholdStr);
-    const minStake = parseEther(minStakeStr);
+		// Use viem's parseEther for price threshold and min stake
+		const priceThreshold = parseEther(priceThresholdStr);
+		const minStake = parseEther(minStakeStr);
 
-    console.log('Creating market with params:', {
-      description: marketName,
-      assetPair: priceFeedKey,
-      expirationTimestamp: expirationTimestamp.toString(),
-      priceThreshold: priceThreshold.toString(),
-      minStake: minStake.toString()
-    });
+		console.log('Creating market with params:', {
+			description: marketName,
+			assetPair: priceFeedKey,
+			expirationTimestamp: expirationTimestamp.toString(),
+			priceThreshold: priceThreshold.toString(),
+			minStake: minStake.toString()
+		});
 
-    // Get the typed contract instance
-    const predictionManager = getPredictionManager({
-      address: PUBLIC_PREDICTIONMANAGER_ADDRESS,
-      chain: networks[0],
-      transport: http(),
-    });
+		// Get the typed contract instance
+		const predictionManager = getPredictionManager({
+			address: PUBLIC_PREDICTIONMANAGER_ADDRESS,
+			chain: networks[0],
+			transport: http()
+		});
 
-    // Determine which account to use
-    const userAccount = account;
-    if (!userAccount) {
-      throw new Error('No account available for transaction');
-    }
+		// Determine which account to use
+		const userAccount = account;
+		if (!userAccount) {
+			throw new Error('No account available for transaction');
+		}
 
-    // Prepare the transaction request
-    const request = await publicClient.simulateContract({
-      ...predictionManager,
-      functionName: 'createMarket',
-      args: [
-        marketName,            // description
-        priceFeedKey,          // assetPair
-        expirationTimestamp,   // expirationTimestamp
-        priceThreshold,        // priceThreshold
-        minStake               // minStake
-      ],
-      account: userAccount
-    });
+		// Prepare the transaction request
+		const request = await publicClient.simulateContract({
+			...predictionManager,
+			functionName: 'createMarket',
+			args: [
+				marketName, // description
+				priceFeedKey, // assetPair
+				expirationTimestamp, // expirationTimestamp
+				priceThreshold, // priceThreshold
+				minStake // minStake
+			],
+			account: userAccount
+		});
 
-    // Always use the connected wallet client for write operations
-    const client = await getConnectedWalletClient();
-    // Type assertion for viem WalletClient
-    // @ts-expect-error: AppKit returns compatible wallet client
-    const hash = await (client as { writeContract: typeof publicClient.writeContract }).writeContract(request.request) as Hash;
-    console.log('Transaction hash:', hash);
+		// Always use the connected wallet client for write operations
+		const client = await getConnectedWalletClient();
+		// Type assertion for viem WalletClient
+		// @ts-expect-error: AppKit returns compatible wallet client
+		const hash = (await (
+			client as { writeContract: typeof publicClient.writeContract }
+		).writeContract(request.request)) as Hash;
+		console.log('Transaction hash:', hash);
 
-    return {
-      success: true,
-      message: `Market "${marketName}" created successfully!`,
-      hash
-    };
-  } catch (error: any) {
-    console.error('Error creating market:', error);
-    return {
-      success: false,
-      message: `Failed to create market: ${error.message || 'Unknown error'}`
-    };
-  }
+		return {
+			success: true,
+			message: `Market "${marketName}" created successfully!`,
+			hash
+		};
+	} catch (error: any) {
+		console.error('Error creating market:', error);
+		return {
+			success: false,
+			message: `Failed to create market: ${error.message || 'Unknown error'}`
+		};
+	}
 }
 
 /**
@@ -351,24 +372,24 @@ export async function createMarket(
  * @returns Object with pool existence, creation status, tx hash, and error if any
  */
 export async function getOrCreateMarketPool(
-  tokenA: Address,
-  tokenB: Address,
-  fee: number,
-  account?: Address
+	tokenA: Address,
+	tokenB: Address,
+	fee: number,
+	account?: Address
 ): Promise<{ poolExists: boolean; poolCreated: boolean; hash?: Hash; error?: string }> {
-  try {
-    const exists = await checkPoolExists(tokenA, tokenB, fee);
-    if (exists) {
-      return { poolExists: true, poolCreated: false };
-    }
-    const result = await createPool(tokenA, tokenB, fee, account);
-    return {
-      poolExists: false,
-      poolCreated: result.success,
-      hash: result.hash,
-      error: result.success ? undefined : result.message
-    };
-  } catch (err: any) {
-    return { poolExists: false, poolCreated: false, error: err.message };
-  }
+	try {
+		const exists = await checkPoolExists(tokenA, tokenB, fee);
+		if (exists) {
+			return { poolExists: true, poolCreated: false };
+		}
+		const result = await createPool(tokenA, tokenB, fee, account);
+		return {
+			poolExists: false,
+			poolCreated: result.success,
+			hash: result.hash,
+			error: result.success ? undefined : result.message
+		};
+	} catch (err: any) {
+		return { poolExists: false, poolCreated: false, error: err.message };
+	}
 }

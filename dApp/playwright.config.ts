@@ -1,7 +1,7 @@
 import { defineConfig, devices } from '@playwright/test';
 
 /**
- * Read environment variables from file. 
+ * Read environment variables from file.
  * https://github.com/motdotla/dotenv
  */
 // require('dotenv').config();
@@ -10,73 +10,76 @@ import { defineConfig, devices } from '@playwright/test';
  * See https://playwright.dev/docs/test-configuration.
  */
 export default defineConfig({
-  testDir: './tests',
-  /* Run tests in files in parallel */
-  fullyParallel: true,
-  /* Fail the build on CI if you accidentally left test.only in the source code. */
-  forbidOnly: !!(typeof process !== 'undefined' && process.env && process.env.CI),
-  /* Retry on CI only */
-  retries: (typeof process !== 'undefined' && process.env && process.env.CI) ? 2 : 0,
-  /* Opt out of parallel tests on CI. */
-  workers: (typeof process !== 'undefined' && process.env && process.env.CI) ? 1 : undefined,
-  /* Reporter to use. See https://playwright.dev/docs/test-reporters */
-  reporter: (typeof process !== 'undefined' && process.env && process.env.CI) ? 'html' : [['list'], ['html', { open: 'never' }]],
-  /* Shared settings for all the projects below. See https://playwright.dev/docs/api/class-testoptions. */
-  use: {
-    /* Base URL to use in actions like `await page.goto('/')`. */
-    baseURL: 'http://localhost:5173', // Default Vite dev server port
+	testDir: './tests',
+	/* Run tests in files in parallel */
+	fullyParallel: true,
+	/* Fail the build on CI if you accidentally left test.only in the source code. */
+	forbidOnly: !!(typeof process !== 'undefined' && process.env && process.env.CI),
+	/* Retry on CI only */
+	retries: typeof process !== 'undefined' && process.env && process.env.CI ? 2 : 0,
+	/* Opt out of parallel tests on CI. */
+	workers: typeof process !== 'undefined' && process.env && process.env.CI ? 1 : undefined,
+	/* Reporter to use. See https://playwright.dev/docs/test-reporters */
+	reporter:
+		typeof process !== 'undefined' && process.env && process.env.CI
+			? 'html'
+			: [['list'], ['html', { open: 'never' }]],
+	/* Shared settings for all the projects below. See https://playwright.dev/docs/api/class-testoptions. */
+	use: {
+		/* Base URL to use in actions like `await page.goto('/')`. */
+		baseURL: 'http://localhost:5173', // Default Vite dev server port
 
-    /* Collect trace when retrying the failed test. See https://playwright.dev/docs/trace-viewer */
-    trace: 'on-first-retry',
-  },
+		/* Collect trace when retrying the failed test. See https://playwright.dev/docs/trace-viewer */
+		trace: 'on-first-retry'
+	},
 
-  /* Configure projects for major browsers */
-  projects: [
-    {
-      name: 'chromium',
-      use: { ...devices['Desktop Chrome'] },
-    },
+	/* Configure projects for major browsers */
+	projects: [
+		{
+			name: 'chromium',
+			use: { ...devices['Desktop Chrome'] }
+		}
 
-    // {
-    //   name: 'firefox',
-    //   use: { ...devices['Desktop Firefox'] },
-    // },
+		// {
+		//   name: 'firefox',
+		//   use: { ...devices['Desktop Firefox'] },
+		// },
 
-    // {
-    //   name: 'webkit',
-    //   use: { ...devices['Desktop Safari'] },
-    // },
+		// {
+		//   name: 'webkit',
+		//   use: { ...devices['Desktop Safari'] },
+		// },
 
-    /* Test against mobile viewports. */
-    // { 
-    //   name: 'Mobile Chrome', 
-    //   use: { ...devices['Pixel 5'] },
-    // },
-    // { 
-    //   name: 'Mobile Safari', 
-    //   use: { ...devices['iPhone 12'] },
-    // },
+		/* Test against mobile viewports. */
+		// {
+		//   name: 'Mobile Chrome',
+		//   use: { ...devices['Pixel 5'] },
+		// },
+		// {
+		//   name: 'Mobile Safari',
+		//   use: { ...devices['iPhone 12'] },
+		// },
 
-    /* Test against branded browsers. */
-    // { 
-    //   name: 'Microsoft Edge', 
-    //   use: { ...devices['Desktop Edge'], channel: 'msedge' },
-    // },
-    // { 
-    //   name: 'Google Chrome', 
-    //   use: { ...devices['Desktop Chrome'], channel: 'chrome' },
-    // },
-  ],
+		/* Test against branded browsers. */
+		// {
+		//   name: 'Microsoft Edge',
+		//   use: { ...devices['Desktop Edge'], channel: 'msedge' },
+		// },
+		// {
+		//   name: 'Google Chrome',
+		//   use: { ...devices['Desktop Chrome'], channel: 'chrome' },
+		// },
+	],
 
-  /* Run your local dev server before starting the tests */
-  webServer: {
-    // Only start the Vite dev server, not the full environment
-    command: 'npm run dev',
-    url: 'http://localhost:5173',
-    reuseExistingServer: !(typeof process !== 'undefined' && process.env && process.env.CI),
-    stdout: 'pipe', // Ensure stdout is captured
-    stderr: 'pipe', // Ensure stderr is captured
-    timeout: 60 * 1000, // 60 seconds is enough for just the dev server
-    ignoreHTTPSErrors: true, // Add this if using HTTPS locally without valid cert
-  },
+	/* Run your local dev server before starting the tests */
+	webServer: {
+		// Only start the Vite dev server, not the full environment
+		command: 'npm run dev',
+		url: 'http://localhost:5173',
+		reuseExistingServer: !(typeof process !== 'undefined' && process.env && process.env.CI),
+		stdout: 'pipe', // Ensure stdout is captured
+		stderr: 'pipe', // Ensure stderr is captured
+		timeout: 60 * 1000, // 60 seconds is enough for just the dev server
+		ignoreHTTPSErrors: true // Add this if using HTTPS locally without valid cert
+	}
 });

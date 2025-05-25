@@ -5,13 +5,16 @@ import { networks } from '$lib/configs/wallet.config';
 const network = networks[0];
 const RPC_URL = network.rpcUrls?.default?.http?.[0] || 'http://localhost:8545';
 export const publicClient = createPublicClient({
-  chain: network,
-  transport: http(RPC_URL),
+	chain: network,
+	transport: http(RPC_URL)
 });
-// Placeholder for getting the connected wallet client for writes
+import { modal } from '$lib/configs/wallet.config';
+
+// Gets the connected wallet client for sending transactions
 async function getConnectedWalletClient() {
-  // TODO: Replace with actual AppKit/wagmi logic to get wallet client
-  throw new Error('getConnectedWalletClient not implemented');
+	const walletInfo = await modal.getWalletInfo();
+	if (!walletInfo) throw new Error('No wallet connected');
+	return walletInfo;
 }
 import { Token } from '@uniswap/sdk-core';
 import { Pool } from '@uniswap/v4-sdk';
@@ -19,7 +22,6 @@ import { getTickSpacing } from '$lib/services/market/helpers';
 
 // Constants
 import { PUBLIC_UNIV4_POOLMANAGER_ADDRESS, PUBLIC_SWAPCASTHOOK_ADDRESS } from '$env/static/public';
-
 
 /**
  * Check if a pool exists for the given token pair and fee
@@ -29,36 +31,44 @@ import { PUBLIC_UNIV4_POOLMANAGER_ADDRESS, PUBLIC_SWAPCASTHOOK_ADDRESS } from '$
  * @returns Boolean indicating if the pool exists with the SwapCast hook
  */
 export async function checkPoolExists(
-  tokenA: Address,
-  tokenB: Address,
-  fee: number
+	tokenA: Address,
+	tokenB: Address,
+	fee: number
 ): Promise<boolean> {
-  try {
-    // Ensure the tokens are in canonical order (lower address first)
-    const [token0, token1] = sortTokens(tokenA, tokenB, publicClient.chain?.id ?? 1);
-    // Get the poolKey using Token objects
-    const poolKey = Pool.getPoolKey(token0, token1, fee, getTickSpacing(fee), PUBLIC_SWAPCASTHOOK_ADDRESS);
-    // For contract calls, use poolKey directly
-    // Check if the pool exists by querying its liquidity
-    const liquidity = await publicClient.readContract({
-      address: PUBLIC_UNIV4_POOLMANAGER_ADDRESS,
-      abi: [{
-        name: 'getLiquidity',
-        inputs: [{ name: 'id', type: 'bytes32' }],
-        outputs: [{ name: '', type: 'uint128' }],
-        stateMutability: 'view',
-        type: 'function'
-      }],
-      functionName: 'getLiquidity',
-      args: [poolKey]
-    });
-    
-    // If liquidity is greater than 0, the pool exists and has been initialized
-    return BigInt(liquidity) > 0n;
-  } catch (error) {
-    console.error('Error checking if pool exists:', error);
-    return false;
-  }
+	try {
+		// Ensure the tokens are in canonical order (lower address first)
+		const [token0, token1] = sortTokens(tokenA, tokenB, publicClient.chain?.id ?? 1);
+		// Get the poolKey using Token objects
+		const poolKey = Pool.getPoolKey(
+			token0,
+			token1,
+			fee,
+			getTickSpacing(fee),
+			PUBLIC_SWAPCASTHOOK_ADDRESS
+		);
+		// For contract calls, use poolKey directly
+		// Check if the pool exists by querying its liquidity
+		const liquidity = await publicClient.readContract({
+			address: PUBLIC_UNIV4_POOLMANAGER_ADDRESS,
+			abi: [
+				{
+					name: 'getLiquidity',
+					inputs: [{ name: 'id', type: 'bytes32' }],
+					outputs: [{ name: '', type: 'uint128' }],
+					stateMutability: 'view',
+					type: 'function'
+				}
+			],
+			functionName: 'getLiquidity',
+			args: [poolKey]
+		});
+
+		// If liquidity is greater than 0, the pool exists and has been initialized
+		return BigInt(liquidity) > 0n;
+	} catch (error) {
+		console.error('Error checking if pool exists:', error);
+		return false;
+	}
 }
 
 /**
@@ -70,85 +80,96 @@ export async function checkPoolExists(
  * @returns Object containing success status, message, and transaction hash
  */
 export async function createPool(
-  tokenA: Address,
-  tokenB: Address,
-  fee: number,
-  account?: Address
+	tokenA: Address,
+	tokenB: Address,
+	fee: number,
+	account?: Address
 ): Promise<{ success: boolean; message: string; hash?: Hash }> {
-  try {
-    // Check if pool already exists
-    const poolExists = await checkPoolExists(tokenA, tokenB, fee);
-    if (poolExists) {
-      return {
-        success: true,
-        message: 'Pool already exists with the SwapCast hook'
-      };
-    }
-    
-    // Ensure the tokens are in canonical order (lower address first)
-    const [token0, token1] = sortTokens(tokenA, tokenB, publicClient.chain?.id ?? 1);
-    const tickSpacing = getTickSpacing(fee);
-    
+	try {
+		// Check if pool already exists
+		const poolExists = await checkPoolExists(tokenA, tokenB, fee);
+		if (poolExists) {
+			return {
+				success: true,
+				message: 'Pool already exists with the SwapCast hook'
+			};
+		}
 
-    // Use a default price of 1:1 (represented as sqrtPriceX96)
-    // This is a common starting point for new pools
-    const sqrtPriceX96 = BigInt('0x1000000000000000000000000');
-    
-    // Prepare the transaction request to initialize the pool
-    // Use sdk4 to construct the poolKey
-    const poolKey = Pool.getPoolKey(token0, token1, fee, tickSpacing, PUBLIC_SWAPCASTHOOK_ADDRESS);
-    // Prepare the transaction request to initialize the pool
-    const request = await publicClient.simulateContract({
-      address: PUBLIC_UNIV4_POOLMANAGER_ADDRESS,
-      abi: [{
-        name: 'initialize',
-        inputs: [
-          { name: 'key', type: 'tuple', components: [
-            { name: 'currency0', type: 'address' },
-            { name: 'currency1', type: 'address' },
-            { name: 'fee', type: 'uint24' },
-            { name: 'tickSpacing', type: 'int24' },
-            { name: 'hooks', type: 'address' }
-          ]},
-          { name: 'sqrtPriceX96', type: 'uint160' }
-        ],
-        outputs: [],
-        stateMutability: 'nonpayable',
-        type: 'function'
-      }],
-      functionName: 'initialize',
-      args: [
-        {
-          currency0: token0.address as `0x${string}`,
-          currency1: token1.address as `0x${string}`,
-          fee: fee,
-          tickSpacing: tickSpacing,
-          hooks: PUBLIC_SWAPCASTHOOK_ADDRESS
-        },
-        sqrtPriceX96
-      ],
-      account: account
-    });
-    
-    // Send the transaction
-    // If account is provided, use publicClient with account; otherwise use adminClient
-    // Only adminClient can send transactions in this context
-    const hash = await adminClient.writeContract(request.request) as Hash;
-    console.log('Pool creation transaction hash:', hash);
-    
-    return {
-      success: true,
-      message: `Pool created successfully with the SwapCast hook!`,
-      hash
-    };
+		// Ensure the tokens are in canonical order (lower address first)
+		const [token0, token1] = sortTokens(tokenA, tokenB, publicClient.chain?.id ?? 1);
+		const tickSpacing = getTickSpacing(fee);
 
-  } catch (error: any) {
-    console.error('Error creating pool:', error);
-    return {
-      success: false,
-      message: `Failed to create pool: ${error.message || 'Unknown error'}`
-    };
-  }
+		// Use a default price of 1:1 (represented as sqrtPriceX96)
+		// This is a common starting point for new pools
+		const sqrtPriceX96 = BigInt('0x1000000000000000000000000');
+
+		// Prepare the transaction request to initialize the pool
+		// Use sdk4 to construct the poolKey
+		const poolKey = Pool.getPoolKey(token0, token1, fee, tickSpacing, PUBLIC_SWAPCASTHOOK_ADDRESS);
+		// Prepare the transaction request to initialize the pool
+		const request = await publicClient.simulateContract({
+			address: PUBLIC_UNIV4_POOLMANAGER_ADDRESS,
+			abi: [
+				{
+					name: 'initialize',
+					inputs: [
+						{
+							name: 'key',
+							type: 'tuple',
+							components: [
+								{ name: 'currency0', type: 'address' },
+								{ name: 'currency1', type: 'address' },
+								{ name: 'fee', type: 'uint24' },
+								{ name: 'tickSpacing', type: 'int24' },
+								{ name: 'hooks', type: 'address' }
+							]
+						},
+						{ name: 'sqrtPriceX96', type: 'uint160' }
+					],
+					outputs: [],
+					stateMutability: 'nonpayable',
+					type: 'function'
+				}
+			],
+			functionName: 'initialize',
+			args: [
+				{
+					currency0: token0.address as `0x${string}`,
+					currency1: token1.address as `0x${string}`,
+					fee: fee,
+					tickSpacing: tickSpacing,
+					hooks: PUBLIC_SWAPCASTHOOK_ADDRESS
+				},
+				sqrtPriceX96
+			],
+			account: account
+		});
+
+		// Send the transaction
+		// Always use the connected wallet client for write operations
+		if (!account) {
+			throw new Error('No account available for transaction');
+		}
+		const client = await getConnectedWalletClient();
+		// Type assertion for viem WalletClient
+		// @ts-expect-error: AppKit returns compatible wallet client
+		const hash = (await (
+			client as { writeContract: typeof publicClient.writeContract }
+		).writeContract(request.request)) as Hash;
+		console.log('Pool creation transaction hash:', hash);
+
+		return {
+			success: true,
+			message: `Pool created successfully with the SwapCast hook!`,
+			hash
+		};
+	} catch (error: any) {
+		console.error('Error creating pool:', error);
+		return {
+			success: false,
+			message: `Failed to create pool: ${error.message || 'Unknown error'}`
+		};
+	}
 }
 
 /**
@@ -158,10 +179,10 @@ export async function createPool(
  * @returns Sorted token addresses [token0, token1]
  */
 function sortTokens(tokenA: Address, tokenB: Address, chainId: number): [Token, Token] {
-  // Use sdk4's canonical token sorting
-  // We'll represent tokens as SDK Token objects for sorting
-  // NOTE: 18 decimals is a placeholder; ideally fetch the actual decimals for each token.
-  const tA = new Token(chainId, tokenA, 18);
-  const tB = new Token(chainId, tokenB, 18);
-  return tA.sortsBefore(tB) ? [tA, tB] : [tB, tA];
+	// Use sdk4's canonical token sorting
+	// We'll represent tokens as SDK Token objects for sorting
+	// NOTE: 18 decimals is a placeholder; ideally fetch the actual decimals for each token.
+	const tA = new Token(chainId, tokenA, 18);
+	const tB = new Token(chainId, tokenB, 18);
+	return tA.sortsBefore(tB) ? [tA, tB] : [tB, tA];
 }

@@ -219,7 +219,7 @@
 </script>
 
 {#if showSuccessToast}
-	<Toast color="green" class="fixed right-5 top-5 z-50" dismissable={false}>
+	<Toast color="green" class="fixed top-5 right-5 z-50" dismissable={false}>
 		<svelte:fragment slot="icon">
 			<div>
 				<CheckCircleSolid class="h-5 w-5" />
@@ -231,7 +231,7 @@
 {/if}
 
 {#if showErrorToast}
-	<Toast color="red" class="fixed right-5 top-5 z-50" dismissable={false}>
+	<Toast color="red" class="fixed top-5 right-5 z-50" dismissable={false}>
 		<svelte:fragment slot="icon">
 			<div>
 				<CloseCircleSolid class="h-5 w-5" />
@@ -382,15 +382,15 @@
 
 		<div class="mt-6 flex justify-end border-t pt-4 dark:border-gray-700">
 			<Button type="button" color="alternative" onclick={handleCancelClick} disabled={isSubmitting}>
-			Cancel
-		</Button>
-		<Button type="submit" color="green" class="ml-3" disabled={isSubmitting}>
-			{#if isSubmitting}
-				<Spinner class="mr-2" size="4" color="red" /> Creating...
-			{:else}
-				Create Market
-			{/if}
-		</Button>
+				Cancel
+			</Button>
+			<Button type="submit" color="green" class="ml-3" disabled={isSubmitting}>
+				{#if isSubmitting}
+					<Spinner class="mr-2" size="4" color="red" /> Creating...
+				{:else}
+					Create Market
+				{/if}
+			</Button>
 		</div>
 	</form>
 </Modal>
