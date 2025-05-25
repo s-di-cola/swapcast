@@ -124,9 +124,18 @@
 			const tokenA = tokenList.find((t) => t.address === tokenA_address);
 			const tokenB = tokenList.find((t) => t.address === tokenB_address);
 
-			if (!tokenA || !tokenB) {
+			if (!tokenA || !tokenB || !tokenA.address || !tokenB.address) {
 				showErrorToast = true;
-				toastMessage = 'Selected token details not found. Please re-select.';
+				toastMessage = 'Please select valid tokens for both Token A and Token B.';
+				setTimeout(() => (showErrorToast = false), 5000);
+				isSubmitting = false;
+				return;
+			}
+
+			// Additional check: addresses must look like 0x... and not be empty
+			if (!/^0x[a-fA-F0-9]{40}$/.test(tokenA.address) || !/^0x[a-fA-F0-9]{40}$/.test(tokenB.address)) {
+				showErrorToast = true;
+				toastMessage = 'Token addresses are invalid.';
 				setTimeout(() => (showErrorToast = false), 5000);
 				isSubmitting = false;
 				return;
@@ -145,6 +154,13 @@
 				userAddress = w.address as Address | undefined;
 			});
 			unsubscribe();
+
+			console.log('[DEBUG] Creating/checking pool with:', {
+				tokenA: tokenA.address,
+				tokenB: tokenB.address,
+				feeTier,
+				userAddress
+			});
 
 			// 1. Ensure the pool exists before creating the market
 			const poolResult = await getOrCreateMarketPool(
@@ -249,7 +265,7 @@
 	autoclose={false}
 	size="lg"
 >
-	<form onsubmit={handleSubmit} class="max-h-[80vh] space-y-4 overflow-y-auto">
+	<form onsubmit={handleSubmit} autocomplete="off" class="max-h-[80vh] space-y-4 overflow-y-auto">
 		<!-- Section 1: Market Definition -->
 		<div class="rounded-lg border border-gray-200 p-4 dark:border-gray-700">
 			<h3 class="mb-3 text-lg font-semibold text-gray-900 dark:text-white">Market Definition</h3>
@@ -358,6 +374,7 @@
 						title="Market Expiration Date"
 						class="w-full"
 						inputClass="bg-gray-50 dark:bg-gray-700 w-full p-2.5 text-sm"
+						on:keydown={(e) => { if (e.key === 'Enter') e.preventDefault(); }}
 					/>
 					<Helper class="mt-1">Select the market's expiration date (your local timezone).</Helper>
 				</div>
@@ -373,7 +390,7 @@
 						aria-label="Set expiration time"
 						tabindex="0"
 					>
-						<Input type="time" id="expirationTime" bind:value={expirationTime} required />
+						<Input type="time" id="expirationTime" bind:value={expirationTime} required on:keydown={(e) => { if (e.key === 'Enter') e.preventDefault(); }} />
 					</div>
 					<Helper class="mt-1">Set the market's expiration time (your local timezone).</Helper>
 				</div>
