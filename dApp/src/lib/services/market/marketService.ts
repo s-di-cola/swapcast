@@ -4,6 +4,7 @@ import {getPredictionManager} from '$generated/types/PredictionManager';
 // @ts-ignore
 import {PUBLIC_PREDICTIONMANAGER_ADDRESS} from '$env/static/public';
 import {appKit} from '$lib/configs/wallet.config';
+import {getCurrentNetworkConfig} from "$lib/utils/network";
 
 // Types
 type MarketStatus = 'Open' | 'Expired' | 'Resolved';
