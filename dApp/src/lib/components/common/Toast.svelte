@@ -83,7 +83,7 @@
 
 {#if isVisible}
 	<div class="toast-wrapper toast-{position}">
-		<div class="flex w-80 items-center rounded-md bg-white py-4 px-5 shadow-stripe">
+		<div class="flex w-96 items-center rounded-md bg-white py-4 px-5 shadow-stripe">
 			<div class="mr-3 {iconColor}">
 				<svg class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
 					<path fill-rule="evenodd" d={iconPath} clip-rule="evenodd" />
