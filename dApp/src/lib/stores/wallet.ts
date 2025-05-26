@@ -6,6 +6,9 @@ import { PUBLIC_ADMIN_ADDRESS } from '$env/static/public';
 interface WalletBaseState {
 	isConnected: boolean;
 	address: string | null;
+	chain?: any;
+	rpcUrl?: string;
+	rawWalletInfo?: any; // Store the complete wallet info for debugging
 }
 
 const createWalletStore = () => {

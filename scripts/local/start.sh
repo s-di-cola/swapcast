@@ -354,7 +354,7 @@ deploy_contracts() {
   [ -n "$REWARD_DISTRIBUTOR" ] && echo "PUBLIC_REWARDDISTRIBUTOR_ADDRESS=$REWARD_DISTRIBUTOR" >> $DAPP_ENV_FILE
   [ -n "$SWAP_CAST_HOOK" ] && echo "PUBLIC_SWAPCASTHOOK_ADDRESS=$SWAP_CAST_HOOK" >> $DAPP_ENV_FILE
   # Add Uniswap v4 PoolManager address (mainnet)
-  echo "PUBLIC_UNIV4_POOLMANAGER_ADDRESS=0x0000000000FFe8B47B3e2130213B802212439497" >> $DAPP_ENV_FILE
+  echo "PUBLIC_UNIV4_POOLMANAGER_ADDRESS=0x000000000004444c5dc75cB358380D2e3dE08A90" >> $DAPP_ENV_FILE
   
   # Add the admin private key and address (using first Anvil account)
   # First Anvil account private key: 0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80

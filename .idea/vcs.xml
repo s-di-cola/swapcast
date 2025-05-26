@@ -2,7 +2,6 @@
 <project version="4">
   <component name="VcsDirectoryMappings">
     <mapping directory="$PROJECT_DIR$" vcs="Git" />
-    <mapping directory="$PROJECT_DIR$/frontend" vcs="Git" />
     <mapping directory="$PROJECT_DIR$/lib/forge-std" vcs="Git" />
     <mapping directory="$PROJECT_DIR$/lib/foundry-chainlink-toolkit" vcs="Git" />
     <mapping directory="$PROJECT_DIR$/lib/foundry-chainlink-toolkit/lib/chainlink-brownie-contracts" vcs="Git" />
@@ -11,6 +10,10 @@
     <mapping directory="$PROJECT_DIR$/lib/foundry-chainlink-toolkit/lib/openzeppelin-contracts" vcs="Git" />
     <mapping directory="$PROJECT_DIR$/lib/foundry-chainlink-toolkit/lib/openzeppelin-contracts/lib/forge-std" vcs="Git" />
     <mapping directory="$PROJECT_DIR$/lib/foundry-chainlink-toolkit/lib/openzeppelin-contracts/lib/forge-std/lib/ds-test" vcs="Git" />
+    <mapping directory="$PROJECT_DIR$/lib/openzeppelin-contracts" vcs="Git" />
+    <mapping directory="$PROJECT_DIR$/lib/openzeppelin-contracts/lib/erc4626-tests" vcs="Git" />
+    <mapping directory="$PROJECT_DIR$/lib/openzeppelin-contracts/lib/forge-std" vcs="Git" />
+    <mapping directory="$PROJECT_DIR$/lib/openzeppelin-contracts/lib/halmos-cheatcodes" vcs="Git" />
     <mapping directory="$PROJECT_DIR$/lib/v4-periphery" vcs="Git" />
     <mapping directory="$PROJECT_DIR$/lib/v4-periphery/lib/permit2" vcs="Git" />
     <mapping directory="$PROJECT_DIR$/lib/v4-periphery/lib/permit2/lib/forge-gas-snapshot" vcs="Git" />

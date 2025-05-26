@@ -8,8 +8,7 @@
 		Select,
 		Helper,
 		Spinner,
-		Toast,
-		Datepicker
+		Toast
 	} from 'flowbite-svelte';
 	import { CheckCircleSolid, CloseCircleSolid } from 'flowbite-svelte-icons';
 	import { createMarket, getOrCreateMarketPool } from '$lib/services/market/marketService';
@@ -34,7 +33,7 @@
 	let feeTier: number = 3000;
 	let predictionMarketType: 'price_binary' = 'price_binary';
 	let targetPriceStr: string = '';
-	let expirationDay: Date | undefined = undefined;
+	let expirationDay: string = "";
 	let expirationTime: string = '17:00'; // Default to 5 PM
 
 	let tokenList: Token[] = [];
@@ -91,6 +90,22 @@
 	async function handleSubmit(event: Event) {
 		event.preventDefault();
 		console.log('Create Market form submitted');
+
+		// Check wallet connection first
+		let isWalletConnected = false;
+		let walletAddress: string | null = null;
+		const unsubscribeWallet = walletStore.subscribe((w) => {
+			isWalletConnected = w.isConnected;
+			walletAddress = w.address;
+		});
+		unsubscribeWallet();
+
+		if (!isWalletConnected || !walletAddress) {
+			showErrorToast = true;
+			toastMessage = 'Please connect your wallet before creating a market.';
+			setTimeout(() => (showErrorToast = false), 5000);
+			return;
+		}
 
 		if (
 			!targetPriceStr ||
@@ -218,7 +233,7 @@
 		tokenA_address = '';
 		tokenB_address = '';
 		targetPriceStr = '';
-		expirationDay = undefined;
+		expirationDay = "";
 		expirationTime = '17:00';
 		feeTier = 3000;
 	}
@@ -368,12 +383,13 @@
 			<div class="grid grid-cols-1 gap-4 md:grid-cols-2">
 				<div>
 					<Label for="expirationDate" class="mb-2 block">Expiration Date</Label>
-					<Datepicker
+					<Input
+						type="date"
 						id="expirationDate"
 						bind:value={expirationDay}
-						title="Market Expiration Date"
-						class="w-full"
-						inputClass="bg-gray-50 dark:bg-gray-700 w-full p-2.5 text-sm"
+						class="w-full bg-gray-50 dark:bg-gray-700 p-2.5 text-sm"
+						min={minExpirationDate.toISOString().split('T')[0]}
+						required
 						on:keydown={(e) => { if (e.key === 'Enter') e.preventDefault(); }}
 					/>
 					<Helper class="mt-1">Select the market's expiration date (your local timezone).</Helper>
