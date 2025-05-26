@@ -3,7 +3,7 @@ import {createPool} from './poolService';
 import {getPredictionManager} from '$generated/types/PredictionManager';
 // @ts-ignore
 import {PUBLIC_PREDICTIONMANAGER_ADDRESS} from '$env/static/public';
-import {modal} from '$lib/configs/wallet.config';
+import {appKit} from '$lib/configs/wallet.config';
 
 // Types
 type MarketStatus = 'Open' | 'Expired' | 'Resolved';
@@ -44,20 +44,6 @@ const getMarketStatus = (
     return {status: 'Open', expirationDisplay};
 };
 
-/**
- * Gets the current RPC URL and chain ID from the modal or falls back to anvil
- * @returns An object containing the current RPC URL and chain configuration
- */
-export function getCurrentNetworkConfig() {
-    const network = modal.getCaipNetwork();
-    const rpcUrl = network?.rpcUrls?.default?.http?.[0];
-    const chainId = network?.id;
-    console.log(`RPC: ${rpcUrl}, Chain: ${chainId}, Network: ${network?.name}`)
-    return {
-        rpcUrl,
-        chain: { id: chainId } as Chain
-    };
-}
 
 /**
  * Get the total number of markets

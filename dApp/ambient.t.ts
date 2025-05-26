@@ -3,7 +3,6 @@
 // Declare the $env modules
 declare module '$env/static/public' {
   export const PUBLIC_ADMIN_ADDRESS: string;
-  // Add other PUBLIC_* variables you use
   export const PUBLIC_PREDICTIONMANAGER_ADDRESS: string;
   export const PUBLIC_REOWN_PROJECT_ID: string;
   // ...other public env vars

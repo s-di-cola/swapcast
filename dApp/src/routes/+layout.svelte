@@ -6,7 +6,7 @@
     import {goto} from '$app/navigation';
     import {browser} from '$app/environment';
     import '../app.css';
-    import {modal} from '$lib/configs/wallet.config';
+    import {appKit} from '$lib/configs/wallet.config';
     import {isAdmin} from "$lib/utils/admin";
 
     let {children} = $props<{ children: any }>();
@@ -32,7 +32,7 @@
      * Redirects unauthenticated users away from protected routes
      */
     function handleUnauthenticatedAccess() {
-        const isAuthenticated = modal.getIsConnectedState();
+        const isAuthenticated = appKit.getIsConnectedState();
         if (!isAuthenticated && isProtectedRoute) {
             goto('/');
         }
@@ -42,7 +42,7 @@
      * Redirects authenticated users from the home page to their appropriate dashboard
      */
     function handleAuthenticatedHomeRedirect() {
-        const isAuthenticated = modal.getIsConnectedState();
+        const isAuthenticated = appKit.getIsConnectedState();
         const isHomePage = pathname === '/';
 
         if (isAuthenticated && isHomePage) {
@@ -55,7 +55,7 @@
      * Prevents non-admin users from accessing admin routes
      */
     function handleUnauthorizedAdminAccess() {
-        const isAuthenticated = modal.getIsConnectedState();
+        const isAuthenticated = appKit.getIsConnectedState();
         const userIsAdmin = isAdmin();
 
         if (isAuthenticated && isAdminRoute && !userIsAdmin) {

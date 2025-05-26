@@ -12,7 +12,7 @@ export const wagmiAdapter = new WagmiAdapter({
 
 export const wagmiConfig = wagmiAdapter.wagmiConfig;
 
-export const modal = createAppKit({
+export const appKit = createAppKit({
 	adapters: [wagmiAdapter],
 	networks: [anvil],
 	metadata: {

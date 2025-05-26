@@ -5,7 +5,7 @@ import {getPoolManager} from '$generated/types/PoolManager';
 // @ts-ignore
 import {PUBLIC_SWAPCASTHOOK_ADDRESS, PUBLIC_UNIV4_POOLMANAGER_ADDRESS} from '$env/static/public';
 import {anvil} from '$lib/configs/networks';
-import {modal} from '$lib/configs/wallet.config';
+import {appKit} from '$lib/configs/wallet.config';
 
 
 /**
@@ -51,16 +51,16 @@ export async function createPool(
 
         const poolManager = getPoolManager({
             address: PUBLIC_UNIV4_POOLMANAGER_ADDRESS,
-            chain: modal.getChainId(),
-            transport: http(modal.getNetwork()?.rpcUrls.default.http[0])
+            chain: appKit.getChainId(),
+            transport: http(appKit.getNetwork()?.rpcUrls.default.http[0])
         })
 
 
         await poolManager.simulate.initialize([poolKey, sqrtPriceX96]);
 
         const hash = await poolManager.write.initialize([poolKey, sqrtPriceX96],{
-            chain: modal.getChainId(),
-            account: modal.getAccount() as `0x${string}`,
+            chain: appKit.getChainId(),
+            account: appKit.getAccount() as `0x${string}`,
         });
 
         return {
