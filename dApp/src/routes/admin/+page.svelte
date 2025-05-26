@@ -1,11 +1,11 @@
 <script lang="ts">
-	import { onMount } from 'svelte';
-	import { page } from '$app/state';
-	import { getAllMarkets, getMarketCount, type Market } from '$lib/services/market/marketService';
-	import CreateMarketModal from '$lib/components/admin/CreateMarketModal.svelte';
-	import MarketDetailsModal from '$lib/components/admin/MarketDetailsModal.svelte';
+    import {onMount} from 'svelte';
+    import {page} from '$app/state';
+    import {getAllMarkets, getMarketCount, type Market} from '$lib/services/market/marketService';
+    import CreateMarketModal from '$lib/components/admin/CreateMarketModal.svelte';
+    import MarketDetailsModal from '$lib/components/admin/MarketDetailsModal.svelte';
 
-	// State variables
+    // State variables
 	let markets: Market[] = [];
 	let marketCount = 0;
 	let totalStake = 0;

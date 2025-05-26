@@ -1,16 +1,9 @@
 <script lang="ts">
-	import { Button, Input, Alert, Label, Helper } from 'flowbite-svelte';
-	import {
-		SortHorizontalOutline,
-		ArrowRightOutline,
-		ArrowDownOutline,
-		ArrowUpOutline,
-		CheckOutline
-	} from 'flowbite-svelte-icons';
-	import type { PredictionSide, Token } from '../../types';
-	import { browser } from '$app/environment'; // Import browser check
+    import {ArrowDownOutline, ArrowUpOutline, CheckOutline, SortHorizontalOutline} from 'flowbite-svelte-icons';
+    import type {PredictionSide, Token} from '../../types';
+    import {browser} from '$app/environment'; // Import browser check
 
-	export let payAmount: number | undefined = undefined;
+    export let payAmount: number | undefined = undefined;
 	export let payToken: Token;
 	export let receiveAmount: number | undefined = undefined;
 	export let receiveToken: Token;

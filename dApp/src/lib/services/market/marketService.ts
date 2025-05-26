@@ -1,6 +1,11 @@
 // Market service for fetching and managing prediction markets
-import { createPublicClient, http } from 'viem';
-import { networks } from '$lib/configs/wallet.config';
+import {type Address, createPublicClient, type Hash, http, parseEther} from 'viem';
+import {modal, networks} from '$lib/configs/wallet.config';
+import {createPool} from './poolService';
+import {getPredictionManager} from '$generated/types/PredictionManager';
+
+// Constants
+import {PUBLIC_PREDICTIONMANAGER_ADDRESS} from '$env/static/public';
 // Use the first network from wallet config for public reads
 const network = networks[0];
 const RPC_URL = network.rpcUrls?.default?.http?.[0] || 'http://localhost:8545';
@@ -8,7 +13,6 @@ export const publicClient = createPublicClient({
 	chain: network,
 	transport: http(RPC_URL)
 });
-import { modal } from '$lib/configs/wallet.config';
 
 // Gets the connected wallet client for sending transactions
 export async function getConnectedWalletClient() {
@@ -16,12 +20,7 @@ export async function getConnectedWalletClient() {
 	if (!walletInfo) throw new Error('No wallet connected');
 	return walletInfo;
 }
-import { checkPoolExists, createPool } from './poolService';
-import { createWalletClient, custom, parseEther, toHex, type Address, type Hash } from 'viem';
-import { getPredictionManager } from '$generated/types/PredictionManager';
 
-// Constants
-import { PUBLIC_PREDICTIONMANAGER_ADDRESS } from '$env/static/public';
 // Use PUBLIC_PREDICTIONMANAGER_ADDRESS directly throughout this file.
 
 // Types

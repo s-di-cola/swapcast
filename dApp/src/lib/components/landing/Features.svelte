@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { AwardOutline, TicketOutline, CogOutline, LinkOutline } from 'flowbite-svelte-icons';
+    import {AwardOutline, CogOutline, LinkOutline, TicketOutline} from 'flowbite-svelte-icons';
 </script>
 
 <section id="features" class="bg-gray-50 py-24">

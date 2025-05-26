@@ -1,10 +1,10 @@
 <script lang="ts">
-	import { modal } from '$lib/configs/wallet.config';
-	import { walletStore } from '$lib/stores/wallet';
-	import { onMount } from 'svelte';
-	import type { UseAppKitAccountReturn } from '@reown/appkit';
+    import {modal} from '$lib/configs/wallet.config';
+    import {walletStore} from '$lib/stores/wallet';
+    import {onMount} from 'svelte';
+    import type {UseAppKitAccountReturn} from '@reown/appkit';
 
-	onMount(() => {
+    onMount(() => {
 		// Initial wallet info check
 		try {
 			modal.getWalletInfo().then(walletInfo => {
@@ -30,7 +30,7 @@
 		try {
 			unsubscribe = modal.subscribeAccount((newAccount: UseAppKitAccountReturn) => {
 				console.log('Account update received:', newAccount);
-				
+
 				// When account changes, get full wallet info
 				if (newAccount && typeof newAccount.address === 'string') {
 					try {
@@ -70,7 +70,7 @@
 		} catch (error) {
 			console.error('Error subscribing to account changes:', error);
 		}
-		
+
 		// Handle cleanup
 		return () => {
 			if (typeof unsubscribe === 'function') {

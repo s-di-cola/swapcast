@@ -1,22 +1,13 @@
 <script lang="ts">
-	import { onMount } from 'svelte';
-	import { page } from '$app/stores';
-	import SwapPanel from '$lib/components/app/SwapPanel.svelte';
-	import MarketDetailsModal from '$lib/components/admin/MarketDetailsModal.svelte';
-	import { Badge, Button, Card, Spinner } from 'flowbite-svelte';
-	import {
-		ChartLineUpOutline,
-		ChartPieOutline,
-		AwardOutline,
-		AdjustmentsHorizontalOutline,
-		ArrowRightOutline
-	} from 'flowbite-svelte-icons';
-	import type { Token, PredictionSide } from '$lib/types';
-	import { getAllMarkets } from '$lib/services/market/marketService';
-	import { goto } from '$app/navigation';
-	import { browser } from '$app/environment';
+    import {onMount} from 'svelte';
+    import {page} from '$app/stores';
+    import SwapPanel from '$lib/components/app/SwapPanel.svelte';
+    import MarketDetailsModal from '$lib/components/admin/MarketDetailsModal.svelte';
+    import {Spinner} from 'flowbite-svelte';
+    import type {PredictionSide, Token} from '$lib/types';
+    import {getAllMarkets} from '$lib/services/market/marketService';
 
-	// Define Token Objects
+    // Define Token Objects
 	const ethToken: Token = { symbol: 'ETH', name: 'Ethereum' };
 	const usdcToken: Token = { symbol: 'USDC', name: 'USD Coin' };
 

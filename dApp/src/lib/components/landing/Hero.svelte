@@ -1,8 +1,8 @@
 <script lang="ts">
-	import WalletConnection from '../common/WalletConnection.svelte';
-	import { goto } from '$app/navigation';
+    import WalletConnection from '../common/WalletConnection.svelte';
+    import {goto} from '$app/navigation';
 
-	function goToApp() {
+    function goToApp() {
 		goto('/app');
 	}
 </script>

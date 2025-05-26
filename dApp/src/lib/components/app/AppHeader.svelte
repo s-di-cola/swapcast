@@ -1,9 +1,9 @@
 <script lang="ts">
-	import { page } from '$app/state';
-	import { walletStore } from '$lib/stores/wallet';
-	import WalletConnection from '$lib/components/common/WalletConnection.svelte';
+    import {page} from '$app/state';
+    import {walletStore} from '$lib/stores/wallet';
+    import WalletConnection from '$lib/components/common/WalletConnection.svelte';
 
-	// Navigation items
+    // Navigation items
 	const commonNavItems = [
 		{ href: '/app/markets', text: 'Markets' },
 		{ href: '/app/portfolio', text: 'Portfolio' }

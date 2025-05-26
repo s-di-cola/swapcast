@@ -1,15 +1,14 @@
 <script lang="ts">
-	import { page } from '$app/state';
-	import { walletStore } from '$lib/stores/wallet';
-	import AppHeader from '$lib/components/app/AppHeader.svelte';
-	import LandingHeader from '$lib/components/landing/LandingHeader.svelte';
-	import Footer from '$lib/components/common/Footer.svelte';
-	import { goto } from '$app/navigation';
-	import { browser } from '$app/environment';
-import { PUBLIC_ADMIN_ADDRESS } from '$env/static/public';
-	import '../app.css';
+    import {page} from '$app/state';
+    import {walletStore} from '$lib/stores/wallet';
+    import AppHeader from '$lib/components/app/AppHeader.svelte';
+    import LandingHeader from '$lib/components/landing/LandingHeader.svelte';
+    import Footer from '$lib/components/common/Footer.svelte';
+    import {goto} from '$app/navigation';
+    import {browser} from '$app/environment';
+    import '../app.css';
 
-	let { children } = $props<{ children: any }>();
+    let { children } = $props<{ children: any }>();
 
 	// Determine route types
 	const isAppRoute = $derived(page.url.pathname.startsWith('/app'));

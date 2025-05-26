@@ -1,13 +1,12 @@
-import type { Address, Hash } from 'viem';
-import { http } from 'viem';
-import { getTickSpacing } from '$lib/services/market/helpers';
-import { modal, wagmiAdapter, wagmiConfig } from '$lib/configs/wallet.config';
-import { Token } from '@uniswap/sdk-core';
-import { getPoolManager } from '$generated/types/PoolManager';
-import { PUBLIC_UNIV4_POOLMANAGER_ADDRESS, PUBLIC_SWAPCASTHOOK_ADDRESS } from '$env/static/public';
-import { anvil } from '$lib/configs/networks';
-import { publicClient } from './marketService';
-import { writeContract } from '@wagmi/core';
+import type {Address, Hash} from 'viem';
+import {getTickSpacing} from '$lib/services/market/helpers';
+import {modal, wagmiConfig} from '$lib/configs/wallet.config';
+import {Token} from '@uniswap/sdk-core';
+import {getPoolManager} from '$generated/types/PoolManager';
+import {PUBLIC_SWAPCASTHOOK_ADDRESS, PUBLIC_UNIV4_POOLMANAGER_ADDRESS} from '$env/static/public';
+import {anvil} from '$lib/configs/networks';
+import {publicClient} from './marketService';
+import {writeContract} from '@wagmi/core';
 
 /**
  * Check if a pool exists for the given token pair and fee
@@ -42,7 +41,7 @@ export async function createPool(
         message: 'Cannot create a pool with identical tokens'
       };
     }
-    
+
     // Use provided account or get it from wallet
     if (!account) {
       const walletInfo = await modal.getWalletInfo();
@@ -54,7 +53,7 @@ export async function createPool(
       }
       account = walletInfo.address as Address;
     }
-    
+
     // Sort tokens in canonical order
     const [token0, token1] = sortTokens(tokenA, tokenB, anvil.id);
     console.log('Sorted tokens:', {
@@ -75,15 +74,15 @@ export async function createPool(
       tickSpacing: tickSpacing,
       hooks: PUBLIC_SWAPCASTHOOK_ADDRESS as `0x${string}`
     };
-    
+
     console.log('Attempting to initialize pool with:', poolKey);
-    
+
     // Get the PoolManager contract
     const poolManager = getPoolManager({
       address: PUBLIC_UNIV4_POOLMANAGER_ADDRESS as Address,
       chain: anvil
     });
-    
+
     // Prepare the transaction request
     const request = await publicClient.simulateContract({
       ...poolManager,
@@ -91,7 +90,7 @@ export async function createPool(
       args: [poolKey, sqrtPriceX96],
       account: account
     });
-    
+
     // Send the transaction using wagmi's writeContract
     const hash = await writeContract(wagmiConfig, {
       address: PUBLIC_UNIV4_POOLMANAGER_ADDRESS as `0x${string}`,
@@ -100,7 +99,7 @@ export async function createPool(
       args: [poolKey, sqrtPriceX96],
       account: account as `0x${string}`
     });
-    
+
     console.log('Pool creation transaction hash:', hash);
     return {
       success: true,
@@ -109,7 +108,7 @@ export async function createPool(
     };
   } catch (error: any) {
     console.error('Error creating pool:', error);
-    
+
     // Check if the error indicates the pool already exists
     if (error.message && error.message.includes('PoolAlreadyExists')) {
       return {
@@ -117,7 +116,7 @@ export async function createPool(
         message: 'Pool already exists with these tokens and fee tier.'
       };
     }
-    
+
     return {
       success: false,
       message: `Failed to create pool: ${error.message || 'Unknown error'}`

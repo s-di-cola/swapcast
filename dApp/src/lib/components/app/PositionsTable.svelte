@@ -6,7 +6,7 @@
 		status: string;
 		date: string;
 	}> = [];
-	import { Card } from 'flowbite-svelte';
+    import {Card} from 'flowbite-svelte';
 </script>
 
 <Card class="w-full rounded-3xl border-0 bg-white/95 p-6 shadow-2xl">

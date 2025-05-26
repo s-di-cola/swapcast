@@ -1,6 +1,7 @@
-import { writable, derived, get } from 'svelte/store';
+import {derived, get, writable} from 'svelte/store';
 
-import { PUBLIC_ADMIN_ADDRESS } from '$env/static/public';
+import {PUBLIC_ADMIN_ADDRESS} from '$env/static/public';
+
 // Use PUBLIC_ADMIN_ADDRESS directly throughout this file.
 
 interface WalletBaseState {

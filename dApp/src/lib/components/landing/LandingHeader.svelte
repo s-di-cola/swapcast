@@ -1,5 +1,5 @@
 <script lang="ts">
-	import WalletConnection from '$lib/components/common/WalletConnection.svelte';
+    import WalletConnection from '$lib/components/common/WalletConnection.svelte';
 </script>
 
 <header

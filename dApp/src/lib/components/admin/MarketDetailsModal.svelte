@@ -1,10 +1,9 @@
 <script lang="ts">
-	import { Modal, Button, Spinner } from 'flowbite-svelte';
-	import { XSolid, ChartPieSolid, ClockSolid, ExclamationCircleSolid } from 'flowbite-svelte-icons';
-	import { getMarketDetails, type Market } from '$lib/services/market/marketService';
-	import { onMount } from 'svelte';
+    import {Button, Modal, Spinner} from 'flowbite-svelte';
+    import {ChartPieSolid, ClockSolid, ExclamationCircleSolid, XSolid} from 'flowbite-svelte-icons';
+    import {getMarketDetails, type Market} from '$lib/services/market/marketService';
 
-	export let showModal = false;
+    export let showModal = false;
 	export let marketId: string | null = null;
 	export let onClose: () => void;
 

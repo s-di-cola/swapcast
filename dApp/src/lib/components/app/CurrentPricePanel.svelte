@@ -1,8 +1,8 @@
 <script lang="ts">
 	export let price: number;
 	export let symbol: string = 'ETH/USDC';
-	// TradingView widget integration can go here later
-	import { Card } from 'flowbite-svelte';
+    // TradingView widget integration can go here later
+    import {Card} from 'flowbite-svelte';
 </script>
 
 <Card class="flex flex-col items-center gap-3 rounded-2xl border-0 bg-white/95 p-5 shadow-xl">
