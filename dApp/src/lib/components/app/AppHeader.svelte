@@ -1,7 +1,7 @@
 <script lang="ts">
     import {page} from '$app/state';
-    import {walletStore} from '$lib/stores/wallet';
     import WalletConnection from '$lib/components/common/WalletConnection.svelte';
+	import {isAdmin} from "$lib/utils/admin";
 
     // Navigation items
 	const commonNavItems = [
@@ -10,7 +10,7 @@
 	];
 
 	// Only show navigation items for non-admin users
-	$: navItems = $walletStore.isAdmin ? [] : commonNavItems;
+	$: navItems = isAdmin() ? [] : commonNavItems;
 </script>
 
 <header
@@ -28,7 +28,7 @@
 				</a>
 			</div>
 
-			{#if !$walletStore.isAdmin}
+			{#if !isAdmin()}
 				<nav class="hidden space-x-8 md:flex">
 					{#each navItems as item}
 						<a

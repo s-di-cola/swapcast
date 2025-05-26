@@ -3,7 +3,6 @@
 	import {Button, Helper, Input, Label, Modal, Select, Spinner, Toast} from 'flowbite-svelte';
 	import {CheckCircleSolid, CloseCircleSolid} from 'flowbite-svelte-icons';
 	import {createMarket, getOrCreateMarketPool} from '$lib/services/market/marketService';
-	import {walletStore} from '$lib/stores/wallet';
 	import type {Address} from 'viem';
 
 	export let showModal = false;

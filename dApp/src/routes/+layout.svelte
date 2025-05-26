@@ -1,65 +1,87 @@
 <script lang="ts">
     import {page} from '$app/state';
-    import {walletStore} from '$lib/stores/wallet';
     import AppHeader from '$lib/components/app/AppHeader.svelte';
     import LandingHeader from '$lib/components/landing/LandingHeader.svelte';
     import Footer from '$lib/components/common/Footer.svelte';
     import {goto} from '$app/navigation';
     import {browser} from '$app/environment';
     import '../app.css';
+    import {modal} from '$lib/configs/wallet.config';
+    import {isAdmin} from "$lib/utils/admin";
 
-    let { children } = $props<{ children: any }>();
+    let {children} = $props<{ children: any }>();
 
-	// Determine route types
-	const isAppRoute = $derived(page.url.pathname.startsWith('/app'));
-	const isAdminRoute = $derived(page.url.pathname.startsWith('/admin'));
-	const isProtectedRoute = $derived(isAppRoute || isAdminRoute);
-	const pathname = $derived(page.url.pathname);
+    // Determine route types
+    const isAppRoute = $derived(page.url.pathname.startsWith('/app'));
+    const isAdminRoute = $derived(page.url.pathname.startsWith('/admin'));
+    const isProtectedRoute = $derived(isAppRoute || isAdminRoute);
+    const pathname = $derived(page.url.pathname);
 
-	// Handle route protection and redirects
-	$effect(() => {
-		if (!browser) return;
+    /**
+     * Handles route protection and redirects based on user authentication status and role
+     */
+    $effect(() => {
+        if (!browser) return;
 
-		const { isConnected, isAdmin, address } = $walletStore;
+        handleUnauthenticatedAccess();
+        handleAuthenticatedHomeRedirect();
+        handleUnauthorizedAdminAccess();
+    });
 
+    /**
+     * Redirects unauthenticated users away from protected routes
+     */
+    function handleUnauthenticatedAccess() {
+        const isAuthenticated = modal.getIsConnectedState();
+        if (!isAuthenticated && isProtectedRoute) {
+            goto('/');
+        }
+    }
 
-		// If user is not connected and trying to access protected routes
-		if (!isConnected && isProtectedRoute) {
-			goto('/');
-			return;
-		}
+    /**
+     * Redirects authenticated users from the home page to their appropriate dashboard
+     */
+    function handleAuthenticatedHomeRedirect() {
+        const isAuthenticated = modal.getIsConnectedState();
+        const isHomePage = pathname === '/';
 
-		// If user is connected and on root, redirect to appropriate route
-		if (isConnected && pathname === '/') {
-			goto(isAdmin ? '/admin' : '/app');
-			return;
-		}
+        if (isAuthenticated && isHomePage) {
+            const userDashboard = isAdmin() ? '/admin' : '/app';
+            goto(userDashboard);
+        }
+    }
 
-		// If non-admin tries to access admin routes
-		if (isConnected && isAdminRoute && !isAdmin) {
-			goto('/app');
-		}
-	});
+    /**
+     * Prevents non-admin users from accessing admin routes
+     */
+    function handleUnauthorizedAdminAccess() {
+        const isAuthenticated = modal.getIsConnectedState();
+        const userIsAdmin = isAdmin();
+
+        if (isAuthenticated && isAdminRoute && !userIsAdmin) {
+            goto('/app');
+        }
+    }
 </script>
 
 <svelte:head>
-	<title>SwapCast - Decentralized Prediction Markets</title>
-	<meta
-		name="description"
-		content="Trade on the future of crypto with SwapCast's decentralized prediction markets"
-	/>
+    <title>SwapCast - Decentralized Prediction Markets</title>
+    <meta
+            name="description"
+            content="Trade on the future of crypto with SwapCast's decentralized prediction markets"
+    />
 </svelte:head>
 
 <div class="flex min-h-screen flex-col">
-	{#if isAppRoute || isAdminRoute}
-		<AppHeader />
-	{:else}
-		<LandingHeader />
-	{/if}
+    {#if isAppRoute || isAdminRoute}
+        <AppHeader/>
+    {:else}
+        <LandingHeader/>
+    {/if}
 
-	<main class="min-h-screen pt-16" class:bg-gray-50={isAppRoute}>
-		{@render children()}
-	</main>
+    <main class="min-h-screen pt-16" class:bg-gray-50={isAppRoute}>
+        {@render children()}
+    </main>
 
-	<Footer />
+    <Footer/>
 </div>
