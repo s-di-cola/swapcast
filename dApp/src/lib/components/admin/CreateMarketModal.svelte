@@ -421,13 +421,12 @@
 			<Button type="button" color="alternative" onclick={handleCancelClick} disabled={isSubmitting}>
 				Cancel
 			</Button>
-			<Button type="submit" color="green" class="ml-3" disabled={isSubmitting}>
-				{#if isSubmitting}
-					<Spinner class="mr-2" size="4" color="red" /> Creating...
-				{:else}
-					Create Market
-				{/if}
-			</Button>
+			<Button type="submit" color="indigo" class="ml-3 inline-flex items-center rounded-md bg-indigo-600 px-4 py-2 text-sm font-medium text-white shadow-sm hover:bg-indigo-700 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-indigo-600" disabled={isSubmitting}>
+			{#if isSubmitting}
+				<Spinner class="mr-2" size="4" color="gray" />
+			{/if}
+			Create Market
+		</Button>
 		</div>
 	</form>
 </Modal>
