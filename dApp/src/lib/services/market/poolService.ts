@@ -2,10 +2,10 @@ import {type Address, type Hash, http} from 'viem';
 import {getTickSpacing} from '$lib/services/market/helpers';
 import {Token} from '@uniswap/sdk-core';
 import {getPoolManager} from '$generated/types/PoolManager';
-// @ts-ignore
 import {PUBLIC_SWAPCASTHOOK_ADDRESS, PUBLIC_UNIV4_POOLMANAGER_ADDRESS} from '$env/static/public';
 import {anvil} from '$lib/configs/networks';
 import {appKit} from '$lib/configs/wallet.config';
+import {getCurrentNetworkConfig} from "$lib/utils/network";
 
 
 /**
@@ -27,7 +27,7 @@ export async function createPool(
         }
 
         // Sort tokens in canonical order
-        const [token0, token1] = sortTokens(tokenA, tokenB, anvil.id);
+        const [token0, token1] = sortTokens(tokenA, tokenB, Number(appKit.getChainId()));
         console.log('Sorted tokens:', {
             token0: {address: token0.address, symbol: token0.symbol},
             token1: {address: token1.address, symbol: token1.symbol}
@@ -49,18 +49,20 @@ export async function createPool(
 
         console.log('Attempting to initialize pool with:', poolKey);
 
+        const currentNetworkConfig = getCurrentNetworkConfig();
         const poolManager = getPoolManager({
             address: PUBLIC_UNIV4_POOLMANAGER_ADDRESS,
-            chain: appKit.getChainId(),
-            transport: http(appKit.getNetwork()?.rpcUrls.default.http[0])
+            chain: currentNetworkConfig.chain,
+            transport: http(currentNetworkConfig.rpcUrl)
         })
-
-
-        await poolManager.simulate.initialize([poolKey, sqrtPriceX96]);
+        await poolManager.simulate.initialize([poolKey, sqrtPriceX96],{
+            chain: currentNetworkConfig.chain,
+            account: appKit.getAccount()?.address as Address,
+        });
 
         const hash = await poolManager.write.initialize([poolKey, sqrtPriceX96],{
-            chain: appKit.getChainId(),
-            account: appKit.getAccount() as `0x${string}`,
+            chain: currentNetworkConfig.chain,
+            account: appKit.getAccount()?.address as Address,
         });
 
         return {

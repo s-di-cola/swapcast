@@ -53,7 +53,7 @@ const getMarketStatus = (
 export async function getMarketCount(): Promise<number> {
     try {
         // Get chain ID with fallback
-        const { rpcUrl, chain } = getCurrentNetworkConfig();
+        const {rpcUrl, chain} = getCurrentNetworkConfig();
 
         // Create prediction manager with correct chain format
         const predictionManager = getPredictionManager({
@@ -126,52 +126,52 @@ interface MarketDetailsResult {
  * Creates a default market object for error cases
  */
 function createDefaultMarket(id: bigint): Market {
-  const timeRemaining = -1;
-  const { status, expirationDisplay } = getMarketStatus(false, timeRemaining);
+    const timeRemaining = -1;
+    const {status, expirationDisplay} = getMarketStatus(false, timeRemaining);
 
-  return {
-    id: id.toString(),
-    name: 'Error loading market',
-    assetSymbol: 'N/A',
-    exists: false,
-    resolved: false,
-    winningOutcome: 0,
-    totalStake0: BigInt(0),
-    totalStake1: BigInt(0),
-    expirationTime: 0,
-    priceAggregator: '0x0000000000000000000000000000000000000000' as Address,
-    priceThreshold: 0,
-    status,
-    expirationDisplay,
-    totalStake: '0'
-  };
+    return {
+        id: id.toString(),
+        name: 'Error loading market',
+        assetSymbol: 'N/A',
+        exists: false,
+        resolved: false,
+        winningOutcome: 0,
+        totalStake0: BigInt(0),
+        totalStake1: BigInt(0),
+        expirationTime: 0,
+        priceAggregator: '0x0000000000000000000000000000000000000000' as Address,
+        priceThreshold: 0,
+        status,
+        expirationDisplay,
+        totalStake: '0'
+    };
 }
 
 /**
  * Transforms raw market details into the Market interface
  */
 function transformMarketDetails(details: MarketDetailsResult): Market {
-  const now = Math.floor(Date.now() / 1000);
-  const timeRemaining = Number(details.expirationTimestamp) - now;
-  const { status, expirationDisplay } = getMarketStatus(details.resolved, timeRemaining);
-  const totalStake = (details.totalConvictionBearish + details.totalConvictionBullish).toString();
+    const now = Math.floor(Date.now() / 1000);
+    const timeRemaining = Number(details.expirationTimestamp) - now;
+    const {status, expirationDisplay} = getMarketStatus(details.resolved, timeRemaining);
+    const totalStake = (details.totalConvictionBearish + details.totalConvictionBullish).toString();
 
-  return {
-    id: details.marketId.toString(),
-    name: details.description || `Market ${details.marketId}`,
-    assetSymbol: details.assetPair,
-    exists: details.exists,
-    resolved: details.resolved,
-    winningOutcome: details.winningOutcome,
-    totalStake0: details.totalConvictionBearish,
-    totalStake1: details.totalConvictionBullish,
-    expirationTime: Number(details.expirationTimestamp),
-    priceAggregator: details.priceOracle,
-    priceThreshold: Number(details.priceThreshold) / 10 ** 18,
-    status,
-    expirationDisplay,
-    totalStake
-  };
+    return {
+        id: details.marketId.toString(),
+        name: details.description || `Market ${details.marketId}`,
+        assetSymbol: details.assetPair,
+        exists: details.exists,
+        resolved: details.resolved,
+        winningOutcome: details.winningOutcome,
+        totalStake0: details.totalConvictionBearish,
+        totalStake1: details.totalConvictionBullish,
+        expirationTime: Number(details.expirationTimestamp),
+        priceAggregator: details.priceOracle,
+        priceThreshold: Number(details.priceThreshold) / 10 ** 18,
+        status,
+        expirationDisplay,
+        totalStake
+    };
 }
 
 /**
@@ -180,49 +180,49 @@ function transformMarketDetails(details: MarketDetailsResult): Market {
  * @returns A Promise resolving to a Market object
  */
 export async function getMarketDetails(marketId: string | bigint): Promise<Market> {
-  const id = typeof marketId === 'string' ? BigInt(marketId) : marketId;
+    const id = typeof marketId === 'string' ? BigInt(marketId) : marketId;
 
-  try {
-    const { rpcUrl, chain } = getCurrentNetworkConfig();
-    const predictionManager = getPredictionManager({
-      address: PUBLIC_PREDICTIONMANAGER_ADDRESS,
-      chain: chain,
-      transport: http(rpcUrl)
-    });
+    try {
+        const {rpcUrl, chain} = getCurrentNetworkConfig();
+        const predictionManager = getPredictionManager({
+            address: PUBLIC_PREDICTIONMANAGER_ADDRESS,
+            chain: chain,
+            transport: http(rpcUrl)
+        });
 
-    const result = await predictionManager.read.getMarketDetails([id]);
+        const result = await predictionManager.read.getMarketDetails([id]);
 
-    // Convert the array result to a typed object
-    const [
-      _id, description, assetPair, exists, resolved, winningOutcome,
-      totalConvictionBearish, totalConvictionBullish, expirationTimestamp,
-      priceOracle, priceThreshold
-    ] = result as readonly [
-      bigint, string, string, boolean, boolean, number,
-      bigint, bigint, bigint, Address, bigint
-    ];
+        // Convert the array result to a typed object
+        const [
+            _id, description, assetPair, exists, resolved, winningOutcome,
+            totalConvictionBearish, totalConvictionBullish, expirationTimestamp,
+            priceOracle, priceThreshold
+        ] = result as readonly [
+            bigint, string, string, boolean, boolean, number,
+            bigint, bigint, bigint, Address, bigint
+        ];
 
-    const details: MarketDetailsResult = {
-      marketId: _id,
-      description,
-      assetPair,
-      exists,
-      resolved,
-      winningOutcome,
-      totalConvictionBearish,
-      totalConvictionBullish,
-      expirationTimestamp,
-      priceOracle,
-      priceThreshold
-    };
+        const details: MarketDetailsResult = {
+            marketId: _id,
+            description,
+            assetPair,
+            exists,
+            resolved,
+            winningOutcome,
+            totalConvictionBearish,
+            totalConvictionBullish,
+            expirationTimestamp,
+            priceOracle,
+            priceThreshold
+        };
 
-    console.log(`[marketService] Got market details for ID ${id}:`, details);
+        console.log(`[marketService] Got market details for ID ${id}:`, details);
 
-    return transformMarketDetails(details);
-  } catch (error) {
-    console.error(`Error getting market details for ID ${id}:`, error);
-    return createDefaultMarket(id);
-  }
+        return transformMarketDetails(details);
+    } catch (error) {
+        console.error(`Error getting market details for ID ${id}:`, error);
+        return createDefaultMarket(id);
+    }
 }
 
 /**
@@ -231,8 +231,7 @@ export async function getMarketDetails(marketId: string | bigint): Promise<Marke
  * @param priceFeedKey Key for the price feed (e.g., 'ETH/USD')
  * @param expirationTime Expiration time of the market
  * @param priceThresholdStr Target price threshold for the market (as a string)
- * @param minStakeStr Minimum stake amount (as a string)
- * @param account Optional account address to use (defaults to admin account)
+ * @param poolKey The Uniswap v4 pool key
  * @returns Object containing success status, message, and transaction hash
  */
 export async function createMarket(
@@ -240,26 +239,72 @@ export async function createMarket(
     priceFeedKey: string,
     expirationTime: Date,
     priceThresholdStr: string,
-    minStakeStr: string = '0.01',
-    account?: Address
+    poolKey: {
+        currency0: Address,
+        currency1: Address,
+        fee: number,
+        tickSpacing: number,
+        hooks: Address
+    }
 ): Promise<{ success: boolean; message: string; hash?: Hash }> {
     try {
         // Convert expiration time to Unix timestamp (seconds)
         const expirationTimestamp = BigInt(Math.floor(expirationTime.getTime() / 1000));
-        const priceThreshold = parseEther(priceThresholdStr);
-        const minStake = parseEther(minStakeStr);
+
+        // Convert price threshold to BigInt (ensure it's a string first)
+        const priceThreshold = parseEther(String(priceThresholdStr));
+
+        // For price aggregator, you'd typically use a Chainlink price feed address
+        // This is just a placeholder - you would need to get the actual address for your asset pair
+        const priceAggregator = "0x5f4eC3Df9cbd43714FE2740f5E3616155c5b8419" as Address; // ETH/USD price feed on mainnet
 
         console.log('Creating market with params:', {
-            description: marketName,
-            assetPair: priceFeedKey,
+            name: marketName,
+            assetSymbol: priceFeedKey,
             expirationTimestamp: expirationTimestamp.toString(),
+            priceAggregator,
             priceThreshold: priceThreshold.toString(),
-            minStake: minStake.toString()
+            poolKey
+        });
+
+        // Get the prediction manager contract
+        const currentNetworkConfig = getCurrentNetworkConfig();
+        const predictionManager = getPredictionManager({
+            address: PUBLIC_PREDICTIONMANAGER_ADDRESS,
+            chain: currentNetworkConfig.chain,
+            transport: http(currentNetworkConfig.rpcUrl)
+        });
+
+        // First simulate the transaction to check for errors
+        await predictionManager.simulate.createMarket([
+            marketName,
+            priceFeedKey,
+            expirationTimestamp,
+            priceAggregator,
+            priceThreshold,
+            poolKey
+        ], {
+            chain: currentNetworkConfig.chain,
+            account: appKit.getAccount()?.address as Address,
+        });
+
+        // Then execute the transaction
+        const hash = await predictionManager.write.createMarket([
+            marketName,
+            priceFeedKey,
+            expirationTimestamp,
+            priceAggregator,
+            priceThreshold,
+            poolKey
+        ], {
+            chain: currentNetworkConfig.chain,
+            account: appKit.getAccount()?.address as Address,
         });
 
         return {
             success: true,
             message: `Market "${marketName}" created successfully!`,
+            hash
         };
     } catch (error: any) {
         console.error('Error creating market:', error);

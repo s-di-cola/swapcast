@@ -4,6 +4,10 @@
 	import {CheckCircleSolid, CloseCircleSolid} from 'flowbite-svelte-icons';
 	import {createMarket, getOrCreateMarketPool} from '$lib/services/market/marketService';
 	import type {Address} from 'viem';
+	import {PUBLIC_SWAPCASTHOOK_ADDRESS} from "$env/static/public";
+	import {getTickSpacing} from "$lib/services/market/helpers";
+	import {sortTokens} from "$lib/services/market/poolService";
+	import {appKit} from "$lib/configs/wallet.config";
 
 	export let showModal = false;
 	export let onClose: () => void;
@@ -37,7 +41,7 @@
 	let isSubmitting = false;
 
 	let modalElement: HTMLElement | null = null;
-	let minExpirationDate: Date;
+	let minExpirationDate: Date | undefined;
 
 	onMount(async () => {
 		try {
@@ -56,10 +60,20 @@
 			isLoadingTokens = false;
 		}
 
-		const today = new Date();
-		minExpirationDate = new Date(today);
-		minExpirationDate.setDate(today.getDate() + 1);
-		minExpirationDate.setHours(0, 0, 0, 0); // Start of tomorrow
+		// Initialize the minimum expiration date
+		try {
+			const today = new Date();
+			minExpirationDate = new Date(today);
+			minExpirationDate.setDate(today.getDate() + 1);
+			minExpirationDate.setHours(0, 0, 0, 0); // Start of tomorrow
+
+			// Set a default expiration day
+			if (!expirationDay) {
+				expirationDay = minExpirationDate.toISOString().split('T')[0];
+			}
+		} catch (err) {
+			console.error('Error initializing dates:', err);
+		}
 	});
 
 	function openTimePicker() {
@@ -78,144 +92,151 @@
 	}
 
 	async function handleSubmit(event: Event) {
-		event.preventDefault();
-		console.log('Create Market form submitted');
-
-		// Check wallet connection first
-		let isWalletConnected = false;
-		let walletAddress: string | null = null;
-		const unsubscribeWallet = walletStore.subscribe((w) => {
-			isWalletConnected = w.isConnected;
-			walletAddress = w.address;
-		});
-		unsubscribeWallet();
-
-		if (!isWalletConnected || !walletAddress) {
-			showErrorToast = true;
-			toastMessage = 'Please connect your wallet before creating a market.';
-			setTimeout(() => (showErrorToast = false), 5000);
-			return;
-		}
-
-		if (
-			!targetPriceStr ||
-			!tokenA_address ||
-			!tokenB_address ||
-			!marketName ||
-			!feeTier ||
-			!expirationDay
-		) {
-			showErrorToast = true;
-			toastMessage = 'Please fill in all required fields, including the expiration date.';
-			setTimeout(() => (showErrorToast = false), 5000);
-			return;
-		}
-
-		const selectedExpirationDate = new Date(expirationDay);
-		selectedExpirationDate.setHours(0, 0, 0, 0);
-
-		if (selectedExpirationDate < minExpirationDate) {
-			showErrorToast = true;
-			toastMessage = 'Expiration date must be tomorrow or later.';
-			setTimeout(() => (showErrorToast = false), 5000);
-			return;
-		}
-
-		isSubmitting = true;
-		showSuccessToast = false;
-		showErrorToast = false;
-
+		// In the handleSubmit function of CreateMarketModal.svelte
 		try {
-			const tokenA = tokenList.find((t) => t.address === tokenA_address);
-			const tokenB = tokenList.find((t) => t.address === tokenB_address);
-
-			if (!tokenA || !tokenB || !tokenA.address || !tokenB.address) {
-				showErrorToast = true;
-				toastMessage = 'Please select valid tokens for both Token A and Token B.';
-				setTimeout(() => (showErrorToast = false), 5000);
-				isSubmitting = false;
-				return;
-			}
-
-			// Additional check: addresses must look like 0x... and not be empty
-			if (!/^0x[a-fA-F0-9]{40}$/.test(tokenA.address) || !/^0x[a-fA-F0-9]{40}$/.test(tokenB.address)) {
-				showErrorToast = true;
-				toastMessage = 'Token addresses are invalid.';
-				setTimeout(() => (showErrorToast = false), 5000);
-				isSubmitting = false;
-				return;
-			}
+			const { tokenA, tokenB } = getValidatedTokens();
+			if (!tokenA || !tokenB) return;
 
 			const priceFeedKey = `${tokenA.symbol}/${tokenB.symbol}`;
-			const [hoursStr, minutesStr] = expirationTime.split(':');
-			const hours = parseInt(hoursStr, 10);
-			const minutes = parseInt(minutesStr, 10);
-			const localExpirationDateTime = new Date(selectedExpirationDate);
-			localExpirationDateTime.setHours(hours, minutes, 0, 0);
+			const expirationDateTime = calculateExpirationDateTime();
 
-			// Get the current user's address from walletStore
-			let userAddress: Address | undefined = undefined;
-			const unsubscribe = walletStore.subscribe((w: { address: string | null }) => {
-				userAddress = w.address as Address | undefined;
-			});
-			unsubscribe();
-
+			// Step 1: Create or verify pool exists
 			console.log('[DEBUG] Creating/checking pool with:', {
 				tokenA: tokenA.address,
 				tokenB: tokenB.address,
 				feeTier,
-				userAddress
 			});
 
-			// 1. Ensure the pool exists before creating the market
 			const poolResult = await getOrCreateMarketPool(
-				tokenA.address,
-				tokenB.address,
-				feeTier,
-				userAddress
+					tokenA.address,
+					tokenB.address,
+					feeTier,
 			);
+
 			console.log('Pool result:', poolResult);
 			if (!poolResult.poolExists && !poolResult.poolCreated) {
-				showErrorToast = true;
-				toastMessage = poolResult.error || 'Failed to create or find the required pool.';
-				setTimeout(() => (showErrorToast = false), 5000);
-				isSubmitting = false;
+				showToast('error', poolResult.error || 'Failed to create or find the required pool.');
 				return;
 			}
 
+			// Step 2: Create the market
 			console.log('Proceeding to create market');
-			// 2. Create the market via the service
-			const marketResult = await createMarket(
-				marketName,
-				priceFeedKey,
-				localExpirationDateTime,
-				targetPriceStr,
-				'0.01', // minStake
-				userAddress
-			);
-			console.log('Market result:', marketResult);
 
+			// Get the required parameters for createMarket
+			const tokens = sortTokens(tokenA.address, tokenB.address, Number(appKit.getChainId()));
+			const tickSpacing = getTickSpacing(feeTier);
+
+			// Prepare the pool key
+			const poolKey = {
+				currency0: tokens[0].address as `0x${string}`,
+				currency1: tokens[1].address as `0x${string}`,
+				fee: feeTier,
+				tickSpacing: tickSpacing,
+				hooks: PUBLIC_SWAPCASTHOOK_ADDRESS as `0x${string}`
+			};
+
+			const marketResult = await createMarket(
+					marketName,
+					priceFeedKey,
+					expirationDateTime,
+					targetPriceStr,
+					poolKey
+			);
+
+			console.log('Market result:', marketResult);
 			if (!marketResult.success) {
-				showErrorToast = true;
-				toastMessage = marketResult.message;
-				setTimeout(() => (showErrorToast = false), 5000);
-				isSubmitting = false;
+				showToast('error', marketResult.message);
 				return;
 			}
 
-			showSuccessToast = true;
-			toastMessage = 'Market and pool created successfully!';
-			setTimeout(() => (showSuccessToast = false), 5000);
+			showToast('success', 'Market and pool created successfully!');
 			resetForm();
 			showModal = false;
+
 		} catch (error: any) {
 			console.error('Error creating market:', error);
-			toastMessage = `Failed to create market: ${error.message || 'Unknown error'}`;
-			showErrorToast = true;
-			setTimeout(() => (showErrorToast = false), 5000);
+			showToast('error', `Failed to create market: ${error.message || 'Unknown error'}`);
 		} finally {
 			isSubmitting = false;
 		}
+	}
+
+	// Helper functions to simplify the main function
+	function validateForm() {
+		if (!targetPriceStr || !tokenA_address || !tokenB_address || !marketName || !feeTier || !expirationDay) {
+			showToast('error', 'Please fill in all required fields, including the expiration date.');
+			return false;
+		}
+
+		const selectedExpirationDate = new Date(expirationDay +1);
+		selectedExpirationDate.setHours(0, 0, 0, 0);
+
+		if (selectedExpirationDate < minExpirationDate!) {
+			showToast('error', 'Expiration date must be tomorrow or later.');
+			return false;
+		}
+
+		return true;
+	}
+
+	function getValidatedTokens() {
+		const tokenA = tokenList.find((t) => t.address === tokenA_address);
+		const tokenB = tokenList.find((t) => t.address === tokenB_address);
+
+		if (!tokenA || !tokenB || !tokenA.address || !tokenB.address) {
+			showToast('error', 'Please select valid tokens for both Token A and Token B.');
+			isSubmitting = false;
+			return {};
+		}
+
+		// Additional check: addresses must look like 0x... and not be empty
+		if (!/^0x[a-fA-F0-9]{40}$/.test(tokenA.address) || !/^0x[a-fA-F0-9]{40}$/.test(tokenB.address)) {
+			showToast('error', 'Token addresses are invalid.');
+			isSubmitting = false;
+			return {};
+		}
+
+		return { tokenA, tokenB };
+	}
+
+	function calculateExpirationDateTime() {
+		const selectedExpirationDate = new Date(expirationDay);
+		selectedExpirationDate.setHours(0, 0, 0, 0);
+
+		const [hoursStr, minutesStr] = expirationTime.split(':');
+		const hours = parseInt(hoursStr, 10);
+		const minutes = parseInt(minutesStr, 10);
+
+		const localExpirationDateTime = new Date(selectedExpirationDate);
+		localExpirationDateTime.setHours(hours, minutes, 0, 0);
+
+		return localExpirationDateTime;
+	}
+
+	function showToast(type: 'success' | 'error', message: string) {
+		if (type === 'success') {
+			showSuccessToast = true;
+		} else {
+			showErrorToast = true;
+		}
+
+		toastMessage = message;
+		setTimeout(() => {
+			if (type === 'success') {
+				showSuccessToast = false;
+			} else {
+				showErrorToast = false;
+			}
+		}, 5000);
+
+		if (type === 'error') {
+			isSubmitting = false;
+		}
+	}
+
+	function resetToastState() {
+		showSuccessToast = false;
+		showErrorToast = false;
 	}
 
 	function resetForm() {
@@ -378,9 +399,9 @@
 						id="expirationDate"
 						bind:value={expirationDay}
 						class="w-full bg-gray-50 dark:bg-gray-700 p-2.5 text-sm"
-						min={minExpirationDate.toISOString().split('T')[0]}
+						min={minExpirationDate ? minExpirationDate.toISOString().split('T')[0] : ''}
 						required
-						on:keydown={(e) => { if (e.key === 'Enter') e.preventDefault(); }}
+						onkeydown={(e) => { if (e.key === 'Enter') e.preventDefault(); }}
 					/>
 					<Helper class="mt-1">Select the market's expiration date (your local timezone).</Helper>
 				</div>
@@ -396,7 +417,7 @@
 						aria-label="Set expiration time"
 						tabindex="0"
 					>
-						<Input type="time" id="expirationTime" bind:value={expirationTime} required on:keydown={(e) => { if (e.key === 'Enter') e.preventDefault(); }} />
+						<Input type="time" id="expirationTime" bind:value={expirationTime} required onkeydown={(e) => { if (e.key === 'Enter') e.preventDefault(); }} />
 					</div>
 					<Helper class="mt-1">Set the market's expiration time (your local timezone).</Helper>
 				</div>

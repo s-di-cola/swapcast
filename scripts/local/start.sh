@@ -259,7 +259,7 @@ start_anvil() {
   pkill -f anvil > /dev/null 2>&1 || true
 
   # Start anvil with mainnet fork in the background
-    anvil --fork-url "$FORK_RPC_URL" --port $ANVIL_PORT > "$LOG_DIR"/anvil.log 2>&1 &
+    anvil --fork-url "$FORK_RPC_URL" --port $ANVIL_PORT --chain-id 31337 > "$LOG_DIR"/anvil.log 2>&1 &
   ANVIL_PID=$!
 
   # Save PID immediately
