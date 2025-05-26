@@ -1,10 +1,9 @@
-import {type Address, type Hash, http, parseEther, createPublicClient} from 'viem';
+import {type Address, type Chain, type Hash, http, parseEther} from 'viem';
 import {createPool} from './poolService';
-import {getPredictionManager, PredictionManagerAbi} from '$generated/types/PredictionManager';
+import {getPredictionManager} from '$generated/types/PredictionManager';
+// @ts-ignore
 import {PUBLIC_PREDICTIONMANAGER_ADDRESS} from '$env/static/public';
 import {modal} from '$lib/configs/wallet.config';
-import {wagmiConfig} from '$lib/configs/wallet.config';
-import {simulateContract} from '@wagmi/core';
 
 // Types
 type MarketStatus = 'Open' | 'Expired' | 'Resolved';
@@ -45,19 +44,46 @@ const getMarketStatus = (
     return {status: 'Open', expirationDisplay};
 };
 
+/**
+ * Gets the current RPC URL and chain ID from the modal or falls back to anvil
+ * @returns An object containing the current RPC URL and chain configuration
+ */
+export function getCurrentNetworkConfig() {
+    const network = modal.getCaipNetwork();
+    const rpcUrl = network?.rpcUrls?.default?.http?.[0];
+    const chainId = network?.id;
+    console.log(`RPC: ${rpcUrl}, Chain: ${chainId}, Network: ${network?.name}`)
+    return {
+        rpcUrl,
+        chain: { id: chainId } as Chain
+    };
+}
+
+/**
+ * Get the total number of markets
+ * @returns The count of markets as a number
+ */
 export async function getMarketCount(): Promise<number> {
     try {
+        // Get chain ID with fallback
+        const { rpcUrl, chain } = getCurrentNetworkConfig();
+
+        // Create prediction manager with correct chain format
         const predictionManager = getPredictionManager({
             address: PUBLIC_PREDICTIONMANAGER_ADDRESS,
-            chain: modal.getChainId(),
-            transport: http(modal.getNetwork()?.rpcUrls.default.http[0])
+            chain: chain,
+            transport: http(rpcUrl)
         });
-        return Number(predictionManager.read.getMarketCount());
+
+        // Await the async call
+        const count = await predictionManager.read.getMarketCount();
+        return Number(count);
     } catch (error) {
         console.error('getMarketCount error:', error);
         return 0;
     }
 }
+
 
 /**
  * Get all markets
@@ -109,106 +135,107 @@ interface MarketDetailsResult {
     priceThreshold: bigint;
 }
 
+/**
+ * Creates a default market object for error cases
+ */
+function createDefaultMarket(id: bigint): Market {
+  const timeRemaining = -1;
+  const { status, expirationDisplay } = getMarketStatus(false, timeRemaining);
+
+  return {
+    id: id.toString(),
+    name: 'Error loading market',
+    assetSymbol: 'N/A',
+    exists: false,
+    resolved: false,
+    winningOutcome: 0,
+    totalStake0: BigInt(0),
+    totalStake1: BigInt(0),
+    expirationTime: 0,
+    priceAggregator: '0x0000000000000000000000000000000000000000' as Address,
+    priceThreshold: 0,
+    status,
+    expirationDisplay,
+    totalStake: '0'
+  };
+}
+
+/**
+ * Transforms raw market details into the Market interface
+ */
+function transformMarketDetails(details: MarketDetailsResult): Market {
+  const now = Math.floor(Date.now() / 1000);
+  const timeRemaining = Number(details.expirationTimestamp) - now;
+  const { status, expirationDisplay } = getMarketStatus(details.resolved, timeRemaining);
+  const totalStake = (details.totalConvictionBearish + details.totalConvictionBullish).toString();
+
+  return {
+    id: details.marketId.toString(),
+    name: details.description || `Market ${details.marketId}`,
+    assetSymbol: details.assetPair,
+    exists: details.exists,
+    resolved: details.resolved,
+    winningOutcome: details.winningOutcome,
+    totalStake0: details.totalConvictionBearish,
+    totalStake1: details.totalConvictionBullish,
+    expirationTime: Number(details.expirationTimestamp),
+    priceAggregator: details.priceOracle,
+    priceThreshold: Number(details.priceThreshold) / 10 ** 18,
+    status,
+    expirationDisplay,
+    totalStake
+  };
+}
+
+/**
+ * Fetches detailed information about a specific market
+ * @param marketId - The ID of the market to fetch
+ * @returns A Promise resolving to a Market object
+ */
 export async function getMarketDetails(marketId: string | bigint): Promise<Market> {
-    const id = typeof marketId === 'string' ? BigInt(marketId) : marketId;
-    try {
-        const predictionManager = getPredictionManager({
-            address: PUBLIC_PREDICTIONMANAGER_ADDRESS,
-            chain: modal.getChainId(),
-            transport: http(modal.getNetwork()?.rpcUrls.default.http[0])
-        });
-        // Call the read method with type safety - need to await the result
-        const result = await predictionManager.read.getMarketDetails(id);
+  const id = typeof marketId === 'string' ? BigInt(marketId) : marketId;
 
-        // Convert the array result to a typed object
-        const [
-            _id,
-            description,
-            assetPair,
-            exists,
-            resolved,
-            winningOutcome,
-            totalConvictionBearish,
-            totalConvictionBullish,
-            expirationTimestamp,
-            priceOracle,
-            priceThreshold
-        ] = result as readonly [
-            bigint,
-            string,
-            string,
-            boolean,
-            boolean,
-            number,
-            bigint,
-            bigint,
-            bigint,
-            Address,
-            bigint
-        ];
+  try {
+    const { rpcUrl, chain } = getCurrentNetworkConfig();
+    const predictionManager = getPredictionManager({
+      address: PUBLIC_PREDICTIONMANAGER_ADDRESS,
+      chain: chain,
+      transport: http(rpcUrl)
+    });
 
-        // Create a properly typed object
-        const details: MarketDetailsResult = {
-            marketId: _id,
-            description,
-            assetPair,
-            exists,
-            resolved,
-            winningOutcome,
-            totalConvictionBearish,
-            totalConvictionBullish,
-            expirationTimestamp,
-            priceOracle,
-            priceThreshold
-        };
+    const result = await predictionManager.read.getMarketDetails([id]);
 
-        console.log(`[marketService] Got market details for ID ${id}:`, details);
+    // Convert the array result to a typed object
+    const [
+      _id, description, assetPair, exists, resolved, winningOutcome,
+      totalConvictionBearish, totalConvictionBullish, expirationTimestamp,
+      priceOracle, priceThreshold
+    ] = result as readonly [
+      bigint, string, string, boolean, boolean, number,
+      bigint, bigint, bigint, Address, bigint
+    ];
 
-        const now = Math.floor(Date.now() / 1000);
-        const timeRemaining = Number(details.expirationTimestamp) - now;
-        const {status, expirationDisplay} = getMarketStatus(details.resolved, timeRemaining);
-        const totalStake = (details.totalConvictionBearish + details.totalConvictionBullish).toString();
+    const details: MarketDetailsResult = {
+      marketId: _id,
+      description,
+      assetPair,
+      exists,
+      resolved,
+      winningOutcome,
+      totalConvictionBearish,
+      totalConvictionBullish,
+      expirationTimestamp,
+      priceOracle,
+      priceThreshold
+    };
 
-        return {
-            id: id.toString(),
-            name: details.description || `Market ${id}`,
-            assetSymbol: details.assetPair,
-            exists: details.exists,
-            resolved: details.resolved,
-            winningOutcome: details.winningOutcome,
-            totalStake0: details.totalConvictionBearish,
-            totalStake1: details.totalConvictionBullish,
-            expirationTime: Number(details.expirationTimestamp),
-            priceAggregator: details.priceOracle,
-            priceThreshold: Number(details.priceThreshold) / 10 ** 18,
-            status,
-            expirationDisplay,
-            totalStake
-        };
-    } catch (error) {
-        console.error(`Error getting market details for ID ${id}:`, error);
+    console.log(`[marketService] Got market details for ID ${id}:`, details);
 
-        // Return a default market object with exists: false
-        const timeRemaining = -1;
-        const {status, expirationDisplay} = getMarketStatus(false, timeRemaining);
-
-        return {
-            id: id.toString(),
-            name: 'Error loading market',
-            assetSymbol: 'N/A',
-            exists: false,
-            resolved: false,
-            winningOutcome: 0,
-            totalStake0: BigInt(0),
-            totalStake1: BigInt(0),
-            expirationTime: 0,
-            priceAggregator: '0x0000000000000000000000000000000000000000' as Address,
-            priceThreshold: 0,
-            status,
-            expirationDisplay,
-            totalStake: '0'
-        };
-    }
+    return transformMarketDetails(details);
+  } catch (error) {
+    console.error(`Error getting market details for ID ${id}:`, error);
+    return createDefaultMarket(id);
+  }
 }
 
 /**
@@ -305,4 +332,3 @@ export async function getOrCreateMarketPool(
         return {poolExists: false, poolCreated: false, error: err.message};
     }
 }
-

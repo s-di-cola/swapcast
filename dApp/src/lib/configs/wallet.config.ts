@@ -1,6 +1,7 @@
 import {createAppKit} from '@reown/appkit';
 import {WagmiAdapter} from '@reown/appkit-adapter-wagmi';
 import {anvil} from '$lib/configs/networks';
+// @ts-ignore
 import {PUBLIC_REOWN_PROJECT_ID} from '$env/static/public';
 
 export const networks = [anvil];
