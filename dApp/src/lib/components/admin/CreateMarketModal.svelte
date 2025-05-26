@@ -1,13 +1,19 @@
 <script lang="ts">
-	import {onMount} from 'svelte';
-	import {Button, Helper, Input, Label, Modal, Select, Spinner, Toast} from 'flowbite-svelte';
-	import {CheckCircleSolid, CloseCircleSolid} from 'flowbite-svelte-icons';
+	import {onMount, createEventDispatcher} from 'svelte';
+	import {Button, Helper, Input, Label, Modal, Select, Spinner} from 'flowbite-svelte';
+	import {toastStore} from '$lib/stores/toastStore';
 	import {createMarket, getOrCreateMarketPool} from '$lib/services/market/marketService';
 	import type {Address} from 'viem';
 	import {PUBLIC_SWAPCASTHOOK_ADDRESS} from "$env/static/public";
 	import {getTickSpacing} from "$lib/services/market/helpers";
 	import {sortTokens} from "$lib/services/market/poolService";
 	import {appKit} from "$lib/configs/wallet.config";
+	
+	// Setup event dispatcher
+	const dispatch = createEventDispatcher<{
+		marketCreated: { marketId: string, name: string };
+		marketCreationFailed: { error: string };
+	}>();
 
 	export let showModal = false;
 	export let onClose: () => void;
@@ -34,9 +40,7 @@
 	let isLoadingTokens: boolean = true;
 	let errorLoadingTokens: string | null = null;
 
-	let showSuccessToast = false;
-	let showErrorToast = false;
-	let toastMessage = '';
+	// Toast notifications are now handled by the global toast store
 
 	let isSubmitting = false;
 
@@ -99,6 +103,11 @@
 
 			const priceFeedKey = `${tokenA.symbol}/${tokenB.symbol}`;
 			const expirationDateTime = calculateExpirationDateTime();
+			
+			// If expirationDateTime is null, validation failed
+			if (expirationDateTime === null) {
+				return;
+			}
 
 			// Step 1: Create or verify pool exists
 			console.log('[DEBUG] Creating/checking pool with:', {
@@ -150,12 +159,23 @@
 			}
 
 			showToast('success', 'Market and pool created successfully!');
+			
+			// Dispatch success event with market details
+			dispatch('marketCreated', {
+				marketId: marketResult.marketId || '0',
+				name: marketName
+			});
+			
 			resetForm();
 			showModal = false;
 
 		} catch (error: any) {
 			console.error('Error creating market:', error);
-			showToast('error', `Failed to create market: ${error.message || 'Unknown error'}`);
+			const errorMessage = `Failed to create market: ${error.message || 'Unknown error'}`;
+			showToast('error', errorMessage);
+			
+			// Dispatch error event
+			dispatch('marketCreationFailed', { error: errorMessage });
 		} finally {
 			isSubmitting = false;
 		}
@@ -207,36 +227,31 @@
 		const hours = parseInt(hoursStr, 10);
 		const minutes = parseInt(minutesStr, 10);
 
-		const localExpirationDateTime = new Date(selectedExpirationDate);
-		localExpirationDateTime.setHours(hours, minutes, 0, 0);
+		selectedExpirationDate.setHours(hours, minutes, 0, 0);
 
-		return localExpirationDateTime;
+		// Ensure the expiration date is in the future
+		if (selectedExpirationDate.getTime() <= Date.now()) {
+			showToast('error', 'Expiration time must be in the future.');
+			isSubmitting = false;
+			return null;
+		}
+
+		// Return Unix timestamp in seconds
+		return Math.floor(selectedExpirationDate.getTime() / 1000);
 	}
 
 	function showToast(type: 'success' | 'error', message: string) {
 		if (type === 'success') {
-			showSuccessToast = true;
+			toastStore.success(message);
 		} else {
-			showErrorToast = true;
-		}
-
-		toastMessage = message;
-		setTimeout(() => {
-			if (type === 'success') {
-				showSuccessToast = false;
-			} else {
-				showErrorToast = false;
-			}
-		}, 5000);
-
-		if (type === 'error') {
+			toastStore.error(message);
 			isSubmitting = false;
 		}
 	}
 
+	// No longer needed with the global toast store
 	function resetToastState() {
-		showSuccessToast = false;
-		showErrorToast = false;
+		// Toast state is now managed by the toast store
 	}
 
 	function resetForm() {
@@ -260,29 +275,7 @@
 	}
 </script>
 
-{#if showSuccessToast}
-	<Toast color="green" class="fixed top-5 right-5 z-50" dismissable={false}>
-		<svelte:fragment slot="icon">
-			<div>
-				<CheckCircleSolid class="h-5 w-5" />
-				<span class="sr-only">Check icon</span>
-			</div>
-		</svelte:fragment>
-		{toastMessage}
-	</Toast>
-{/if}
-
-{#if showErrorToast}
-	<Toast color="red" class="fixed top-5 right-5 z-50" dismissable={false}>
-		<svelte:fragment slot="icon">
-			<div>
-				<CloseCircleSolid class="h-5 w-5" />
-				<span class="sr-only">Error icon</span>
-			</div>
-		</svelte:fragment>
-		{toastMessage}
-	</Toast>
-{/if}
+<!-- Toast notifications are now handled by the global ToastContainer component in the layout -->
 
 <Modal
 	title="Create New Prediction Market"
@@ -438,3 +431,34 @@
 		</div>
 	</form>
 </Modal>
+
+<style>
+	@keyframes slideDown {
+		from {
+			transform: translateY(-100%) translateX(-50%);
+			opacity: 0;
+		}
+		to {
+			transform: translateY(0) translateX(-50%);
+			opacity: 1;
+		}
+	}
+
+	@keyframes progress {
+		from { width: 0%; }
+		to { width: 100%; }
+	}
+
+	:global(.animate-slide-down) {
+		animation: slideDown 0.2s ease-out;
+	}
+
+	:global(.shadow-stripe) {
+		box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15), 0 0 1px rgba(0, 0, 0, 0.1);
+	}
+
+	:global(.progress-bar) {
+		animation: progress 5s linear forwards;
+		width: 0%;
+	}
+</style>

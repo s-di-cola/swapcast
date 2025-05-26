@@ -13,6 +13,7 @@ export interface Market {
     id: string;
     name: string;
     assetSymbol: string;
+    assetPair: string; // Adding assetPair property to match UI usage
     exists: boolean;
     resolved: boolean;
     winningOutcome: number;
@@ -127,12 +128,14 @@ interface MarketDetailsResult {
  */
 function createDefaultMarket(id: bigint): Market {
     const timeRemaining = -1;
-    const {status, expirationDisplay} = getMarketStatus(false, timeRemaining);
+    const { status, expirationDisplay } = getMarketStatus(false, timeRemaining);
+    const totalStake = '0';
 
     return {
         id: id.toString(),
-        name: 'Error loading market',
-        assetSymbol: 'N/A',
+        name: `Market ${id}`,
+        assetSymbol: 'Unknown',
+        assetPair: 'Unknown',
         exists: false,
         resolved: false,
         winningOutcome: 0,
@@ -143,7 +146,7 @@ function createDefaultMarket(id: bigint): Market {
         priceThreshold: 0,
         status,
         expirationDisplay,
-        totalStake: '0'
+        totalStake
     };
 }
 
@@ -160,6 +163,7 @@ function transformMarketDetails(details: MarketDetailsResult): Market {
         id: details.marketId.toString(),
         name: details.description || `Market ${details.marketId}`,
         assetSymbol: details.assetPair,
+        assetPair: details.assetPair, // Set assetPair to match UI usage
         exists: details.exists,
         resolved: details.resolved,
         winningOutcome: details.winningOutcome,
@@ -167,7 +171,7 @@ function transformMarketDetails(details: MarketDetailsResult): Market {
         totalStake1: details.totalConvictionBullish,
         expirationTime: Number(details.expirationTimestamp),
         priceAggregator: details.priceOracle,
-        priceThreshold: Number(details.priceThreshold) / 10 ** 18,
+        priceThreshold: Number(details.priceThreshold) / 1e18, // Convert from wei to ETH
         status,
         expirationDisplay,
         totalStake
@@ -225,31 +229,44 @@ export async function getMarketDetails(marketId: string | bigint): Promise<Marke
     }
 }
 
+// Define interface for MarketCreated event args
+export interface MarketCreatedEventArgs {
+    marketId: bigint;
+    poolKey: {
+        currency0: Address;
+        currency1: Address;
+        fee: number;
+        tickSpacing: number;
+        hooks: Address;
+    };
+    creator: Address;
+}
+
 /**
  * Create a new prediction market
  * @param marketName Name/description of the market
  * @param priceFeedKey Key for the price feed (e.g., 'ETH/USD')
  * @param expirationTime Expiration time of the market
- * @param priceThresholdStr Target price threshold for the market (as a string)
- * @param poolKey The Uniswap v4 pool key
- * @returns Object containing success status, message, and transaction hash
+ * @param priceThresholdStr Price threshold as a string (will be converted to wei)
+ * @param poolKey Pool key object with token addresses, fee, etc.
+ * @returns Promise with success status, message, transaction hash if successful, and market ID if created
  */
 export async function createMarket(
     marketName: string,
     priceFeedKey: string,
-    expirationTime: Date,
+    expirationTime: number,
     priceThresholdStr: string,
     poolKey: {
-        currency0: Address,
-        currency1: Address,
-        fee: number,
-        tickSpacing: number,
+        currency0: Address;
+        currency1: Address;
+        fee: number;
+        tickSpacing: number;
         hooks: Address
     }
-): Promise<{ success: boolean; message: string; hash?: Hash }> {
+): Promise<{ success: boolean; message: string; hash?: Hash; marketId?: string }> {
     try {
-        // Convert expiration time to Unix timestamp (seconds)
-        const expirationTimestamp = BigInt(Math.floor(expirationTime.getTime() / 1000));
+        // expirationTime is already a Unix timestamp (seconds)
+        const expirationTimestamp = BigInt(expirationTime);
 
         // Convert price threshold to BigInt (ensure it's a string first)
         const priceThreshold = parseEther(String(priceThresholdStr));
@@ -301,11 +318,55 @@ export async function createMarket(
             account: appKit.getAccount()?.address as Address,
         });
 
-        return {
-            success: true,
-            message: `Market "${marketName}" created successfully!`,
-            hash
-        };
+        // Wait for transaction receipt to get the emitted events
+        // Use type assertion to handle the potential missing property
+        const publicClient = (appKit as any).getPublicClient ? (appKit as any).getPublicClient() : null;
+        
+        if (!publicClient) {
+            return {
+                success: true,
+                message: `Market "${marketName}" created successfully, but couldn't get market ID.`,
+                hash
+            };
+        }
+        
+        try {
+            // Wait for transaction receipt
+            const receipt = await publicClient.waitForTransactionReceipt({ hash });
+            
+            // Find the MarketCreated event in the logs
+            const marketCreatedEvent = receipt.logs.find((log: any) => {
+                // Check if this log is from the PredictionManager contract
+                return log.address.toLowerCase() === PUBLIC_PREDICTIONMANAGER_ADDRESS.toLowerCase();
+            });
+            
+            if (marketCreatedEvent) {
+                // Get the market ID from the event data (first topic after the event signature is the market ID)
+                const marketId = marketCreatedEvent.topics[1] ? 
+                    BigInt(marketCreatedEvent.topics[1]).toString() : 
+                    'unknown';
+                    
+                return {
+                    success: true,
+                    message: `Market "${marketName}" created successfully!`,
+                    hash,
+                    marketId
+                };
+            }
+            
+            return {
+                success: true,
+                message: `Market "${marketName}" created successfully!`,
+                hash
+            };
+        } catch (error) {
+            console.error('Error getting market ID from transaction receipt:', error);
+            return {
+                success: true,
+                message: `Market "${marketName}" created successfully, but couldn't get market ID.`,
+                hash
+            };
+        }
     } catch (error: any) {
         console.error('Error creating market:', error);
         return {

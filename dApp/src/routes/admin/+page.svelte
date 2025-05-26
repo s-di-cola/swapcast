@@ -1,19 +1,22 @@
 <script lang="ts">
     import {onMount} from 'svelte';
-    import {page} from '$app/state';
+    import {page} from '$app/stores';
     import {getAllMarkets, getMarketCount, type Market} from '$lib/services/market/marketService';
     import CreateMarketModal from '$lib/components/admin/CreateMarketModal.svelte';
     import MarketDetailsModal from '$lib/components/admin/MarketDetailsModal.svelte';
+    import {toastStore} from '$lib/stores/toastStore';
 
-    // State variables
-	let markets: Market[] = [];
-	let marketCount = 0;
-	let totalStake = 0;
-	let loading = true;
-	let error = '';
-	let showCreateMarketModal = false;
-	let showMarketDetailsModal = false;
-	let selectedMarketId: string | null = null;
+    // State variables with Svelte 5 runes
+	let markets = $state<Market[]>([]);
+	let marketCount = $state(0);
+	let totalStake = $state(0);
+	let loading = $state(true);
+	let error = $state('');
+	let showCreateMarketModal = $state(false);
+	let showMarketDetailsModal = $state(false);
+	let selectedMarketId = $state<string | null>(null);
+	
+	// Toast notifications are now handled by the global toast store
 
 	// Format currency values
 	function formatCurrency(value: string | number): string {
@@ -24,6 +27,16 @@
 			return `$${(num / 1_000).toFixed(2)}K`;
 		} else {
 			return `$${num.toFixed(2)}`;
+		}
+	}
+
+	// Show toast notification using the global toast store
+	function showToast(type: 'success' | 'error', message: string, duration: number = 5000) {
+		const options = { duration };
+		if (type === 'success') {
+			toastStore.success(message, options);
+		} else {
+			toastStore.error(message, options);
 		}
 	}
 
@@ -48,6 +61,7 @@
 		} catch (err) {
 			console.error('Error fetching market data:', err);
 			error = 'Failed to load market data. Please try again.';
+			showToast('error', 'Failed to load market data. Please try again.');
 			loading = false;
 		}
 	}
@@ -62,24 +76,41 @@
 	// Refresh data
 	function refreshData() {
 		fetchMarketData();
+		showToast('success', 'Market data refreshed successfully');
 	}
 
 	// Handle market creation from modal
 	function handleMarketCreated() {
 		fetchMarketData(); // Refresh market list
+		showToast('success', 'New market created successfully!');
 	}
+
+	// Create derived values using $derived rune
+	let openMarketsCount = $derived(markets.filter(m => m.status === 'Open').length);
+	let expiredMarketsCount = $derived(markets.filter(m => m.status === 'Expired').length);
+	let resolvedMarketsCount = $derived(markets.filter(m => m.status === 'Resolved').length);
 
 	// Check URL parameters for market ID on mount
 	onMount(() => {
 		fetchMarketData();
 
 		// Check if marketId is in URL parameters
-		const marketIdParam = page.url.searchParams.get('marketId');
+		const marketIdParam = $page.url.searchParams.get('marketId');
 		if (marketIdParam) {
 			selectedMarketId = marketIdParam;
 			showMarketDetailsModal = true;
 		}
 	});
+
+	// Setup an effect to update the page title when market count changes
+	$effect(() => {
+		if (marketCount > 0) {
+			document.title = `SwapCast Admin (${marketCount} Markets)`;
+		} else {
+			document.title = 'SwapCast Admin';
+		}
+	});
+
 </script>
 
 <div class="mx-auto min-h-screen max-w-7xl p-6 md:p-10" style="background-color: #f8fafc;">
@@ -93,7 +124,7 @@
 		<div>
 			<button
 				type="button"
-				on:click={() => (showCreateMarketModal = true)}
+				onclick={() => (showCreateMarketModal = true)}
 				class="inline-flex items-center rounded-lg bg-indigo-600 px-5 py-2.5 text-center text-sm font-medium text-white transition-all duration-200 hover:bg-indigo-700 focus:ring-4 focus:ring-indigo-300 focus:outline-none"
 			>
 				<svg
@@ -241,8 +272,8 @@
 		<div class="mb-4 flex items-center justify-between">
 			<h2 class="text-xl font-semibold text-gray-800">Market List</h2>
 			<button
-				on:click={refreshData}
-				class="flex items-center rounded-lg bg-gray-50 px-4 py-2 text-sm font-medium text-gray-700 transition-all duration-150 ease-in-out hover:bg-gray-100"
+				onclick={refreshData}
+				class="flex items-center rounded-md bg-white px-4 py-2 text-sm font-medium text-gray-700 shadow-sm hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2"
 			>
 				<svg
 					xmlns="http://www.w3.org/2000/svg"
@@ -347,9 +378,9 @@
 					{:else if markets.length > 0}
 						{#each markets as market (market.id)}
 							<tr
-								class="cursor-pointer transition-colors hover:bg-gray-50"
-								on:click={() => handleMarketClick(market.id)}
-							>
+							class="cursor-pointer transition-colors hover:bg-gray-50"
+							onclick={() => handleMarketClick(market.id)}
+						>
 								<td class="px-6 py-4 text-sm font-medium whitespace-nowrap text-gray-900"
 									>#{market.id}</td
 								>
@@ -401,19 +432,54 @@
 		</div>
 	</section>
 
-	<!-- Modal components -->
-	<CreateMarketModal
-		bind:showModal={showCreateMarketModal}
-		onClose={() => (showCreateMarketModal = false)}
-	/>
+	<!-- Toast notifications are now handled by the global ToastContainer component in the layout -->
+
+<!-- Modal components -->
+<CreateMarketModal
+	bind:showModal={showCreateMarketModal}
+	onClose={() => (showCreateMarketModal = false)}
+	on:marketCreated={handleMarketCreated}
+/>
 
 	<MarketDetailsModal
-		bind:showModal={showMarketDetailsModal}
-		marketId={selectedMarketId}
-		onClose={() => (showMarketDetailsModal = false)}
-	/>
+	bind:showModal={showMarketDetailsModal}
+	marketId={selectedMarketId}
+	onClose={() => (showMarketDetailsModal = false)}
+	on:marketUpdated={() => {
+		fetchMarketData();
+		showToast('success', 'Market updated successfully');
+	}}
+/>
 </div>
 
 <style>
 	/* Scoped styles for the admin dashboard */
+	@keyframes slideDown {
+		from {
+			transform: translateY(-100%);
+			opacity: 0;
+		}
+		to {
+			transform: translateY(0);
+			opacity: 1;
+		}
+	}
+
+	@keyframes progress {
+		from { width: 0%; }
+		to { width: 100%; }
+	}
+
+	:global(.animate-slide-down) {
+		animation: slideDown 0.2s ease-out;
+	}
+
+	:global(.shadow-stripe) {
+		box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15), 0 0 1px rgba(0, 0, 0, 0.1);
+	}
+
+	:global(.progress-bar) {
+		animation: progress 5s linear forwards;
+		width: 0%;
+	}
 </style>

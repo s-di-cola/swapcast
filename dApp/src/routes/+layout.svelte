@@ -3,6 +3,7 @@
     import AppHeader from '$lib/components/app/AppHeader.svelte';
     import LandingHeader from '$lib/components/landing/LandingHeader.svelte';
     import Footer from '$lib/components/common/Footer.svelte';
+    import ToastContainer from '$lib/components/common/ToastContainer.svelte';
     import {goto} from '$app/navigation';
     import {browser} from '$app/environment';
     import '../app.css';
@@ -84,4 +85,7 @@
     </main>
 
     <Footer/>
+    
+    <!-- Global toast container for app-wide notifications -->
+    <ToastContainer />
 </div>
