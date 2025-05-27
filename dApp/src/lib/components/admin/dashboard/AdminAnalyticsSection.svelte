@@ -1,19 +1,28 @@
 <script lang="ts">
-    // Component for the analytics section with placeholder graph
-    export let marketCount: number = 0;
+    /**
+     * AdminAnalyticsSection Component
+     * 
+     * Displays platform analytics with interactive charts showing:
+     * - Markets created over time
+     * - Active predictions over time
+     */
+    import AdminAnalyticsChart from './AdminAnalyticsChart.svelte';
+    
+    // Component props using SvelteKit 5 syntax
+    let { activeMarketsCount = 0 }: { activeMarketsCount?: number } = $props();
+    
+    // Component state using $state
+    let selectedTimeRange = $state<'7d' | '30d'>('7d');
+    
+    // Handle time range selection
+    function setTimeRange(range: '7d' | '30d'): void {
+        selectedTimeRange = range;
+    }
 </script>
 
 <section class="mb-10">
     <div class="mb-4 flex items-center justify-between">
         <h2 class="text-xl font-semibold text-gray-800">Platform Analytics</h2>
-        <div class="flex space-x-2">
-            <button class="rounded-full bg-emerald-100 px-3 py-1 text-xs font-medium text-emerald-600"
-                >Last 7d</button
-            >
-            <button class="rounded-full bg-gray-100 px-3 py-1 text-xs font-medium text-gray-600"
-                >Last 30d</button
-            >
-        </div>
     </div>
     <div
         class="min-h-[300px] rounded-lg border border-gray-100 bg-white p-6 shadow-sm md:min-h-[400px]"
@@ -30,12 +39,12 @@
                 </div>
             </div>
             <div class="text-right">
-                <h3 class="text-2xl font-bold text-gray-900">{marketCount}</h3>
-                <p class="text-sm text-gray-500">Total Markets</p>
+                <h3 class="text-2xl font-bold text-gray-900">{activeMarketsCount}</h3>
+                <p class="text-sm text-gray-500">Active Markets</p>
             </div>
         </div>
-        <div class="flex h-64 items-center justify-center border-t border-gray-100 pt-6">
-            <p class="text-sm text-gray-400">Placeholder for analytics graph</p>
+        <div class="h-64 border-t border-gray-100 pt-6">
+            <AdminAnalyticsChart timeRange={selectedTimeRange} />
         </div>
     </div>
 </section>

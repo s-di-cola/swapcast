@@ -4,8 +4,11 @@
 	import { toastStore, type Toast } from '$lib/stores/toastStore';
 	import ToastComponent from './Toast.svelte';
 
-	// Group toasts by position
-	$: toastsByPosition = groupToastsByPosition($toastStore);
+	// Use $derived instead of $: for computed values
+	const toastsByPosition = $derived(groupToastsByPosition($toastStore));
+
+	// Debug logging
+	console.log('🍞 ToastContainer - toasts:', $toastStore);
 
 	function groupToastsByPosition(toasts: Toast[]) {
 		const groups: Record<string, Toast[]> = {
@@ -20,6 +23,7 @@
 			groups[position].push(toast);
 		});
 
+		console.log('🍞 Grouped toasts:', groups);
 		return groups;
 	}
 </script>
@@ -36,7 +40,10 @@
 					position={toast.position || 'top-center'}
 					dismissible={toast.dismissible !== false}
 					show={true}
-					onClose={() => toastStore.removeToast(toast.id)}
+					onClose={() => {
+						console.log('🍞 Toast onClose called for:', toast.id);
+						toastStore.removeToast(toast.id);
+					}}
 				/>
 			{/each}
 		</div>

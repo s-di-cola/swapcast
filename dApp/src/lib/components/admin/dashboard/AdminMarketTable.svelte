@@ -2,22 +2,56 @@
     import type { Market } from '$lib/services/market/marketService';
     import type { MarketSortField, SortDirection } from '$lib/services/market/marketService';
     
-    // Component for the market list table
-    export let markets: Market[] = [];
-    export let loading: boolean = false;
-    export let onMarketClick: (marketId: string) => void;
-    export let onRefresh: () => void = () => {}; // Optional refresh callback
-    export let onSort: (field: MarketSortField, direction: SortDirection) => void = () => {};
-    export let onPageChange: (page: number) => void = () => {};
-    export let totalPages: number = 1;
-    export let currentPage: number = 1;
+    /**
+     * MarketList Component Props
+     * 
+     * A comprehensive table component for displaying market data with sorting,
+     * pagination, and interactive features.
+     */
+    let {
+        /** Array of market objects to display in the table */
+        markets = [],
+        /** Loading state to show spinner and disable interactions */
+        loading = false,
+        /** Callback function triggered when a market row is clicked */
+        onMarketClick,
+        /** Optional callback function for refresh button clicks */
+        onRefresh = () => {},
+        /** Optional callback function for column sorting */
+        onSort = () => {},
+        /** Optional callback function for pagination changes */
+        onPageChange = () => {},
+        /** Total number of pages for pagination display */
+        totalPages = 1,
+        /** Current active page number */
+        currentPage = 1
+    }: {
+        markets?: Market[];
+        loading?: boolean;
+        onMarketClick: (marketId: string) => void;
+        onRefresh?: () => void;
+        onSort?: (field: MarketSortField, direction: SortDirection) => void;
+        onPageChange?: (page: number) => void;
+        totalPages?: number;
+        currentPage?: number;
+    } = $props();
     
-    // Sorting state
-    let sortField: MarketSortField = 'id';
-    let sortDirection: SortDirection = 'asc';
+    /** Current field being used for sorting */
+    let sortField: MarketSortField = $state('id');
+    /** Current sorting direction (ascending or descending) */
+    let sortDirection: SortDirection = $state('asc');
     
-    // Handle column header click for sorting
-    function handleSort(field: MarketSortField) {
+    /**
+     * Handles column header clicks for sorting functionality
+     * 
+     * When a user clicks on a sortable column header:
+     * - If it's the same column, toggles between asc/desc
+     * - If it's a different column, sets to ascending and updates the field
+     * - Calls the parent component's onSort callback with new sort parameters
+     * 
+     * @param field - The market field to sort by
+     */
+    function handleSort(field: MarketSortField): void {
         // If clicking the same column, toggle direction
         if (field === sortField) {
             sortDirection = sortDirection === 'asc' ? 'desc' : 'asc';
@@ -31,19 +65,39 @@
         onSort(sortField, sortDirection);
     }
     
-    // Format currency values
+    /**
+     * Formats numerical currency values with appropriate suffixes
+     * 
+     * Converts large numbers to more readable format:
+     * - Values >= 1M: Shows as "$X.XXM" 
+     * - Values >= 1K: Shows as "$X.XXK"
+     * - Values < 1K: Shows as "$X.XX"
+     * 
+     * @param value - The currency value as string or number
+     * @returns Formatted currency string with appropriate suffix
+     */
     function formatCurrency(value: string | number): string {
         const num = typeof value === 'string' ? parseFloat(value) : value;
         if (num >= 1_000_000) {
-            return `$${(num / 1_000_000).toFixed(2)}M`;
+            return `${(num / 1_000_000).toFixed(2)}M`;
         } else if (num >= 1_000) {
-            return `$${(num / 1_000).toFixed(2)}K`;
+            return `${(num / 1_000).toFixed(2)}K`;
         } else {
-            return `$${num.toFixed(2)}`;
+            return `${num.toFixed(2)}`;
         }
     }
     
-    // Generate sort indicator arrow
+    /**
+     * Generates visual sort indicator for table headers
+     * 
+     * Shows an arrow indicating the current sort direction:
+     * - Returns '↑' for ascending sort on active column
+     * - Returns '↓' for descending sort on active column  
+     * - Returns empty string for inactive columns
+     * 
+     * @param field - The field to check for sort indicator
+     * @returns Sort direction arrow or empty string
+     */
     function getSortIndicator(field: MarketSortField): string {
         if (field !== sortField) return '';
         return sortDirection === 'asc' ? '↑' : '↓';
@@ -55,7 +109,7 @@
         <h2 class="text-xl font-semibold text-gray-800">Market List</h2>
         <button
             type="button"
-            on:click={onRefresh}
+            onclick={onRefresh}
             class="inline-flex items-center rounded-md bg-white px-3 py-2 text-sm font-medium text-gray-700 shadow-sm ring-1 ring-inset ring-gray-300 hover:bg-gray-50"
             disabled={loading}
         >
@@ -82,49 +136,49 @@
                     <th
                         scope="col"
                         class="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500 cursor-pointer hover:bg-gray-100"
-                        on:click={() => handleSort('id')}
+                        onclick={() => handleSort('id')}
                     >
                         ID {getSortIndicator('id')}
                     </th>
                     <th
                         scope="col"
                         class="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500 cursor-pointer hover:bg-gray-100"
-                        on:click={() => handleSort('name')}
+                        onclick={() => handleSort('name')}
                     >
                         Market {getSortIndicator('name')}
                     </th>
                     <th
                         scope="col"
                         class="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500 cursor-pointer hover:bg-gray-100"
-                        on:click={() => handleSort('assetPair')}
+                        onclick={() => handleSort('assetPair')}
                     >
                         Asset Pair {getSortIndicator('assetPair')}
                     </th>
                     <th
                         scope="col"
                         class="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500 cursor-pointer hover:bg-gray-100"
-                        on:click={() => handleSort('status')}
+                        onclick={() => handleSort('status')}
                     >
                         Status {getSortIndicator('status')}
                     </th>
                     <th
                         scope="col"
                         class="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500 cursor-pointer hover:bg-gray-100"
-                        on:click={() => handleSort('expirationTime')}
+                        onclick={() => handleSort('expirationTime')}
                     >
                         Expiration {getSortIndicator('expirationTime')}
                     </th>
                     <th
                         scope="col"
                         class="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500 cursor-pointer hover:bg-gray-100"
-                        on:click={() => handleSort('priceThreshold')}
+                        onclick={() => handleSort('priceThreshold')}
                     >
                         Target Price {getSortIndicator('priceThreshold')}
                     </th>
                     <th
                         scope="col"
                         class="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500 cursor-pointer hover:bg-gray-100"
-                        on:click={() => handleSort('totalStake')}
+                        onclick={() => handleSort('totalStake')}
                     >
                         Total Stake {getSortIndicator('totalStake')}
                     </th>
@@ -166,9 +220,9 @@
                 {:else if markets.length > 0}
                     {#each markets as market (market.id)}
                         <tr
-                        class="cursor-pointer transition-colors hover:bg-gray-50"
-                        on:click={() => onMarketClick(market.id)}
-                    >
+                            class="cursor-pointer transition-colors hover:bg-gray-50"
+                            onclick={() => onMarketClick(market.id)}
+                        >
                             <td class="px-6 py-4 text-sm font-medium whitespace-nowrap text-gray-900">
                                 #{market.id}
                             </td>
@@ -191,9 +245,9 @@
                                     {market.status}
                                 </span>
                             </td>
-                            <td class="px-6 py-4 text-sm whitespace-nowrap text-gray-500"
-                                >{market.expirationDisplay}</td
-                            >
+                            <td class="px-6 py-4 text-sm whitespace-nowrap text-gray-500">
+                                {market.expirationDisplay}
+                            </td>
                             <td class="px-6 py-4 text-sm whitespace-nowrap text-gray-500">
                                 ${market.priceThreshold}
                             </td>
@@ -201,18 +255,24 @@
                                 {formatCurrency(market.totalStake)}
                             </td>
                             <td class="px-6 py-4 text-sm font-medium whitespace-nowrap">
-                                <button class="text-indigo-600 transition-colors hover:text-indigo-800"
-                                    >Details</button
+                                <button 
+                                    class="text-indigo-600 transition-colors hover:text-indigo-800"
+                                    onclick={(e) => {
+                                        e.stopPropagation();
+                                        onMarketClick(market.id);
+                                    }}
                                 >
+                                    Details
+                                </button>
                             </td>
                         </tr>
                     {/each}
                 {:else}
                     <tr>
                         <td colspan="8" class="px-6 py-12 text-center text-sm text-gray-500 italic">
-                            No markets found. <a href="/admin/market" class="text-emerald-600 hover:underline"
-                                >Create your first market</a
-                            >.
+                            No markets found. <a href="/admin/market" class="text-emerald-600 hover:underline">
+                                Create your first market
+                            </a>.
                         </td>
                     </tr>
                 {/if}
@@ -228,15 +288,17 @@
             </div>
             <div class="flex space-x-2">
                 <button
+                    type="button"
                     class="rounded-md bg-gray-100 px-3 py-1 text-xs font-medium text-gray-600 transition-colors hover:bg-gray-200 disabled:opacity-50 disabled:cursor-not-allowed"
-                    on:click={() => onPageChange(currentPage - 1)}
+                    onclick={() => onPageChange(currentPage - 1)}
                     disabled={loading || currentPage === 1}
                 >
                     Previous
                 </button>
                 <button
+                    type="button"
                     class="rounded-md bg-indigo-600 px-3 py-1 text-xs font-medium text-white transition-colors hover:bg-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed"
-                    on:click={() => onPageChange(currentPage + 1)}
+                    onclick={() => onPageChange(currentPage + 1)}
                     disabled={loading || currentPage >= totalPages}
                 >
                     Next

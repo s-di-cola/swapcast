@@ -1,11 +1,32 @@
 <script lang="ts">
-    // Component for the admin summary cards (total markets, active markets, total volume)
-    export let marketCount: number = 0;
-    export let openMarketsCount: number = 0;
-    export let totalStake: number = 0;
-    export let loading: boolean = false;
+    /**
+     * AdminSummaryCards Component
+     * 
+     * Displays summary statistics for the platform in card format:
+     * - Total Markets
+     * - Active Markets
+     * - Total Stake Volume
+     */
     
-    // Format currency values
+    // Component props using SvelteKit 5 syntax
+    let {
+        marketCount = 0,
+        openMarketsCount = 0,
+        totalStake = 0,
+        loading = false
+    }: {
+        marketCount?: number;
+        openMarketsCount?: number;
+        totalStake?: number;
+        loading?: boolean;
+    } = $props();
+    
+    /**
+     * Formats numerical currency values with appropriate suffixes
+     * 
+     * @param value - The currency value as string or number
+     * @returns Formatted currency string with appropriate suffix
+     */
     function formatCurrency(value: string | number): string {
         const num = typeof value === 'string' ? parseFloat(value) : value;
         if (num >= 1_000_000) {

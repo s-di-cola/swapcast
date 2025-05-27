@@ -3,25 +3,32 @@
 	import { browser } from '$app/environment';
 	import type { ToastType, ToastPosition } from '$lib/stores/toastStore';
 
-	// Toast properties
-	export let type: ToastType = 'success';
-	export let message: string = '';
-	export let duration: number = 5000;
-	export let show: boolean = false;
-	export let position: ToastPosition = 'top-center';
-	export let dismissible: boolean = true;
-	export let onClose: () => void = () => {};
+	// SvelteKit 5 props syntax
+	let {
+		type = 'success',
+		message = '',
+		duration = 5000,
+		show = false,
+		position = 'top-center',
+		dismissible = true,
+		onClose = () => {}
+	}: {
+		type?: ToastType;
+		message?: string;
+		duration?: number;
+		show?: boolean;
+		position?: ToastPosition;
+		dismissible?: boolean;
+		onClose?: () => void;
+	} = $props();
 
-	// Make sure the show property is properly tracked in Svelte 5
-	$: isVisible = show;
+	// Internal state with $state()
+	let timer: ReturnType<typeof setTimeout> | null = $state(null);
 
-	// Internal state
-	let timer: ReturnType<typeof setTimeout> | null = null;
-
-	// Computed properties for styling based on type
-	$: iconColor = getIconColor(type);
-	$: progressBarColor = getProgressBarColor(type);
-	$: iconPath = getIconPath(type);
+	// Computed properties using $derived()
+	const iconColor = $derived(getIconColor(type));
+	const progressBarColor = $derived(getProgressBarColor(type));
+	const iconPath = $derived(getIconPath(type));
 
 	// Helper functions for dynamic styling
 	function getIconPath(type: ToastType): string {
@@ -59,22 +66,36 @@
 		}
 	}
 	
-	// Watch for changes to isVisible and duration using a reactive statement
-	$: {
-		if (isVisible && duration > 0) {
+	// Use $effect() for timer management
+	$effect(() => {
+		if (show && duration > 0) {
 			// Clear any existing timer first
-			if (timer) clearTimeout(timer);
+			if (timer) {
+				clearTimeout(timer);
+				timer = null;
+			}
 			
 			// Set new timer
 			timer = setTimeout(() => {
 				onClose();
 			}, duration);
 		}
-	}
+		
+		// Cleanup function when effect re-runs or component unmounts
+		return () => {
+			if (timer) {
+				clearTimeout(timer);
+				timer = null;
+			}
+		};
+	});
 	
 	// Clean up on component destruction
 	onDestroy(() => {
-		if (timer) clearTimeout(timer);
+		if (timer) {
+			clearTimeout(timer);
+			timer = null;
+		}
 	});
 	
 	function handleClose() {
@@ -82,7 +103,7 @@
 	}
 </script>
 
-{#if isVisible}
+{#if show}
 	<div class="toast-wrapper toast-{position}">
 		<div class="flex w-96 items-center rounded-md bg-white py-4 px-5 shadow-stripe">
 			<div class="mr-3 {iconColor}">
@@ -97,7 +118,7 @@
 				<button 
 					type="button" 
 					class="ml-4 flex-shrink-0 text-gray-400 hover:text-gray-600 focus:outline-none"
-					on:click={handleClose}
+					onclick={handleClose}
 					aria-label="Close"
 				>
 					<svg class="h-4 w-4" fill="currentColor" viewBox="0 0 20 20">
@@ -180,7 +201,6 @@
 		}
 		to {
 			transform: translateX(0);
-			opacity: 1;
 		}
 	}
 

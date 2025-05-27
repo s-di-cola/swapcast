@@ -24,7 +24,21 @@
             isConnected = state.open || appKit.getIsConnectedState();
         });
         isConnected = appKit.getIsConnectedState();
-        return unsubscribe;
+        
+        // Add global event listener to prevent page refreshes
+        const handleClick = (e: MouseEvent) => {
+            // Prevent default for buttons in the admin section
+            if (isAdminRoute && e.target instanceof Element && e.target.closest('button, th[role="button"], tr[role="button"]')) {
+                e.preventDefault();
+            }
+        };
+        
+        document.addEventListener('click', handleClick, true);
+        
+        return () => {
+            unsubscribe();
+            document.removeEventListener('click', handleClick, true);
+        };
     });
 
 
