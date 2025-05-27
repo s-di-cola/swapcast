@@ -1,229 +1,281 @@
 <script lang="ts">
-    /**
-     * TransactionHistory Component
-     * 
-     * Displays a list of transactions related to a specific market.
-     * Shows transaction details including hash, timestamp, sender, type, and amount.
-     * Fetches real transaction data from the subgraph.
-     */
     import { onMount } from 'svelte';
     import type { Market } from '$lib/services/market/marketService';
-    import { getMarketPredictions, formatPredictionOutcome, formatTimestamp, type SubgraphPrediction } from '$lib/services/subgraph/subgraphService';
-
-    export let market: Market;
+    import { 
+        getMarketPredictions, 
+        formatPredictionOutcome, 
+        formatTimestamp, 
+        type SubgraphPrediction 
+    } from '$lib/services/subgraph/subgraphService';
     
-    let transactions: SubgraphPrediction[] = [];
-    let isLoading = false;
-    let error: string | null = null;
-    let page = 1;
-    let pageSize = 10; // Number of transactions per page
+    interface Props {
+        market: Market;
+    }
     
-    /**
-     * Formats currency values for display with appropriate suffixes
-     * 
-     * @param value - The numeric value to format
-     * @returns Formatted string with $ symbol and K/M suffix for large numbers
-     */
+    interface TransactionState {
+        data: SubgraphPrediction[];
+        isLoading: boolean;
+        error: string | null;
+        page: number;
+        pageSize: number;
+    }
+    
+    interface TableColumn {
+        key: string;
+        label: string;
+        className?: string;
+    }
+    
+    interface OutcomeStyle {
+        bg: string;
+        text: string;
+    }
+    
+    let { market }: Props = $props();
+    
+    let transactionState = $state<TransactionState>({
+        data: [],
+        isLoading: false,
+        error: null,
+        page: 1,
+        pageSize: 10
+    });
+    
+    const TABLE_COLUMNS: TableColumn[] = [
+        { key: 'transaction', label: 'Transaction' },
+        { key: 'time', label: 'Time' },
+        { key: 'user', label: 'User' },
+        { key: 'position', label: 'Position' },
+        { key: 'amount', label: 'Amount' }
+    ] as const;
+    
+    const OUTCOME_STYLES: Record<number, OutcomeStyle> = {
+        1: { bg: 'bg-green-100', text: 'text-green-800' },
+        0: { bg: 'bg-red-100', text: 'text-red-800' }
+    } as const;
+    
+    const UI_TEXT = {
+        title: 'Transaction History',
+        loading: 'Loading transactions...',
+        noTransactions: 'No transactions found for this market.',
+        showing: 'Showing',
+        transactions: 'transactions',
+        previous: 'Previous',
+        next: 'Next',
+        retry: 'Retry',
+        error: 'Error:'
+    } as const;
+    
+    const ETHERSCAN_BASE_URL = 'https://etherscan.io/address/';
+    
     function formatCurrency(value: string | number): string {
         const num = typeof value === 'string' ? parseFloat(value) : value;
-        if (num >= 1_000_000) {
-            return `$${(num / 1_000_000).toFixed(2)}M`;
-        } else if (num >= 1_000) {
-            return `$${(num / 1_000).toFixed(2)}K`;
-        } else {
-            return `$${num.toFixed(2)}`;
-        }
-    }
-
-    /**
-     * Generates an Etherscan URL for a given address
-     * 
-     * @param address - Ethereum address to link to
-     * @returns Etherscan URL for the address
-     */
-    function getEtherscanLink(address: string) {
-        return `https://etherscan.io/address/${address}`;
+        if (num >= 1_000_000) return `$${(num / 1_000_000).toFixed(2)}M`;
+        if (num >= 1_000) return `$${(num / 1_000).toFixed(2)}K`;
+        return `$${num.toFixed(2)}`;
     }
     
-    /**
-     * Fetches transaction data from the subgraph for the current market
-     */
-    async function fetchTransactions() {
+    function getEtherscanLink(address: string): string {
+        return `${ETHERSCAN_BASE_URL}${address}`;
+    }
+    
+    function formatTransactionHash(hash: string): string {
+        return `${hash.substring(0, 10)}...${hash.substring(hash.length - 8)}`;
+    }
+    
+    function formatUserAddress(address: string): string {
+        return `${address.substring(0, 6)}...${address.substring(address.length - 4)}`;
+    }
+    
+    function formatTransactionAmount(amount: string): string {
+        return `${formatCurrency(parseFloat(amount) / 1e18)} ETH`;
+    }
+    
+    function getOutcomeStyles(outcome: number): OutcomeStyle {
+        return OUTCOME_STYLES[outcome] || OUTCOME_STYLES[0];
+    }
+    
+    async function fetchTransactions(): Promise<void> {
         if (!market?.id) return;
         
-        isLoading = true;
-        error = null;
+        transactionState.isLoading = true;
+        transactionState.error = null;
         
         try {
-            transactions = await getMarketPredictions(market.id, pageSize);
+            transactionState.data = await getMarketPredictions(
+                market.id, 
+                transactionState.pageSize,
+                transactionState.page
+            );
         } catch (err) {
-            error = err instanceof Error ? err.message : 'Failed to fetch transaction data';
+            transactionState.error = err instanceof Error ? err.message : 'Failed to fetch transaction data';
         } finally {
-            isLoading = false;
+            transactionState.isLoading = false;
         }
     }
     
-    /**
-     * Fetches more transactions when paginating
-     * 
-     * @param direction - Direction to paginate ('next' or 'prev')
-     */
-    async function fetchMoreTransactions(direction: 'next' | 'prev') {
-        if (isLoading || !market?.id) return;
+    async function fetchMoreTransactions(direction: 'next' | 'prev'): Promise<void> {
+        if (transactionState.isLoading || !market?.id) return;
         
-        if (direction === 'prev' && page > 1) {
-            page--;
-        } else if (direction === 'next' && transactions.length === pageSize) {
-            page++;
+        const canGoPrev = direction === 'prev' && transactionState.page > 1;
+        const canGoNext = direction === 'next' && transactionState.data.length === transactionState.pageSize;
+        
+        if (!canGoPrev && !canGoNext) return;
+        
+        const previousPage = transactionState.page;
+        
+        if (direction === 'prev') {
+            transactionState.page--;
         } else {
-            return; // No need to fetch if we can't move in that direction
+            transactionState.page++;
         }
         
-        isLoading = true;
-        error = null;
+        transactionState.isLoading = true;
+        transactionState.error = null;
         
         try {
-            transactions = await getMarketPredictions(market.id, pageSize, page);
+            transactionState.data = await getMarketPredictions(
+                market.id, 
+                transactionState.pageSize, 
+                transactionState.page
+            );
         } catch (err) {
-            // If we get an error, revert the page change
-            if (direction === 'prev') page++;
-            else if (direction === 'next') page--;
-            
-            error = err instanceof Error ? err.message : 'Failed to fetch transaction data';
+            transactionState.page = previousPage;
+            transactionState.error = err instanceof Error ? err.message : 'Failed to fetch transaction data';
         } finally {
-            isLoading = false;
+            transactionState.isLoading = false;
         }
     }
     
-    // Fetch transactions when the component mounts or when the market changes
-    $: if (market?.id) {
+    function handleRetry(): void {
         fetchTransactions();
     }
-</script>
-
-<div class="rounded-lg border border-gray-200 bg-white p-4 shadow-sm">
-    <h3 class="mb-4 text-lg font-semibold text-gray-800">Transaction History</h3>
-
-    {#if isLoading && transactions.length === 0}
-        <div class="flex items-center justify-center py-8">
-            <div class="h-6 w-6 animate-spin rounded-full border-2 border-indigo-600 border-t-transparent"></div>
-            <span class="ml-2 text-gray-600">Loading transactions...</span>
-        </div>
-    {:else if error}
-        <div class="rounded-md bg-red-50 p-4 text-sm text-red-800">
-            <p>Error: {error}</p>
-            <button 
-                class="mt-2 rounded-md bg-red-100 px-3 py-1 text-xs font-medium text-red-800 hover:bg-red-200"
-                on:click={fetchTransactions}
-            >
-                Retry
-            </button>
-        </div>
-    {:else if transactions.length === 0}
-        <div class="py-8 text-center text-gray-500">
-            <p>No transactions found for this market.</p>
-        </div>
-    {:else}
-        <div class="overflow-x-auto relative">
-            {#if isLoading && transactions.length > 0}
-                <div class="absolute inset-0 flex items-center justify-center bg-white bg-opacity-70 z-10">
-                    <div class="h-6 w-6 animate-spin rounded-full border-2 border-indigo-600 border-t-transparent"></div>
-                </div>
-            {/if}
-            <table class="min-w-full divide-y divide-gray-100">
-                <thead>
-                    <tr>
-                        <th
-                            class="bg-gray-50 px-4 py-3 text-left text-xs font-medium tracking-wider text-gray-500 uppercase"
-                        >
-                            Transaction
-                        </th>
-                        <th
-                            class="bg-gray-50 px-4 py-3 text-left text-xs font-medium tracking-wider text-gray-500 uppercase"
-                        >
-                            Time
-                        </th>
-                        <th
-                            class="bg-gray-50 px-4 py-3 text-left text-xs font-medium tracking-wider text-gray-500 uppercase"
-                        >
-                            User
-                        </th>
-                        <th
-                            class="bg-gray-50 px-4 py-3 text-left text-xs font-medium tracking-wider text-gray-500 uppercase"
-                        >
-                            Position
-                        </th>
-                        <th
-                            class="bg-gray-50 px-4 py-3 text-left text-xs font-medium tracking-wider text-gray-500 uppercase"
-                        >
-                            Amount
-                        </th>
-                    </tr>
-                </thead>
-                <tbody class="divide-y divide-gray-100 bg-white">
-                    {#each transactions as tx}
-                        <tr class="hover:bg-gray-50">
-                            <td class="px-4 py-3 text-sm whitespace-nowrap text-blue-600 hover:text-blue-800">
-                                <a
-                                    href={getEtherscanLink(tx.id)}
-                                    target="_blank"
-                                    rel="noopener noreferrer"
-                                    class="truncate max-w-[150px] inline-block align-bottom"
-                                >
-                                    {tx.id.substring(0, 10)}...{tx.id.substring(tx.id.length - 8)}
-                                </a>
-                            </td>
-                            <td class="px-4 py-3 text-sm whitespace-nowrap text-gray-700">
-                                {formatTimestamp(tx.timestamp)}
-                            </td>
-                            <td class="px-4 py-3 text-sm whitespace-nowrap text-gray-700">
-                                <a
-                                    href={getEtherscanLink(tx.user.address)}
-                                    target="_blank"
-                                    rel="noopener noreferrer"
-                                    class="truncate max-w-[100px] inline-block align-bottom text-blue-600 hover:text-blue-800"
-                                >
-                                    {tx.user.address.substring(0, 6)}...{tx.user.address.substring(tx.user.address.length - 4)}
-                                </a>
-                            </td>
-                            <td class="px-4 py-3 text-sm whitespace-nowrap">
-                                <span
-                                    class="rounded-full px-2.5 py-0.5 text-xs font-medium {tx.outcome === 1
-                                        ? 'bg-green-100 text-green-800'
-                                        : 'bg-red-100 text-red-800'}"
-                                >
-                                    {formatPredictionOutcome(tx.outcome)}
-                                </span>
-                            </td>
-                            <td class="px-4 py-3 text-sm whitespace-nowrap text-gray-700">
-                                {formatCurrency(parseFloat(tx.amount) / 1e18)} ETH
-                            </td>
-                        </tr>
-                    {/each}
-                </tbody>
-            </table>
-        </div>
-    {/if}
-
-    {#if transactions.length > 0}
-        <div class="mt-4 flex items-center justify-between">
-            <div class="text-sm text-gray-500">Showing {transactions.length} transactions</div>
-            <div class="flex space-x-2">
-                <button
-                    class="rounded-md bg-gray-100 px-3 py-1 text-xs font-medium text-gray-600 transition-colors hover:bg-gray-200 disabled:opacity-50 disabled:cursor-not-allowed"
-                    on:click={() => fetchMoreTransactions('prev')}
-                    disabled={isLoading || page === 1}
+    
+    function handlePrevious(): void {
+        fetchMoreTransactions('prev');
+    }
+    
+    function handleNext(): void {
+        fetchMoreTransactions('next');
+    }
+    
+    const canGoPrevious = $derived(transactionState.page > 1);
+    const canGoNext = $derived(transactionState.data.length === transactionState.pageSize);
+    const hasTransactions = $derived(transactionState.data.length > 0);
+    const isInitialLoading = $derived(transactionState.isLoading && transactionState.data.length === 0);
+    const isPaginating = $derived(transactionState.isLoading && transactionState.data.length > 0);
+    
+    $effect(() => {
+        if (market?.id) {
+            transactionState.page = 1;
+            fetchTransactions();
+        }
+    });
+    </script>
+    
+    <div class="rounded-lg border border-gray-200 bg-white p-4 shadow-sm">
+        <h3 class="mb-4 text-lg font-semibold text-gray-800">{UI_TEXT.title}</h3>
+    
+        {#if isInitialLoading}
+            <div class="flex items-center justify-center py-8">
+                <div class="h-6 w-6 animate-spin rounded-full border-2 border-indigo-600 border-t-transparent"></div>
+                <span class="ml-2 text-gray-600">{UI_TEXT.loading}</span>
+            </div>
+        {:else if transactionState.error}
+            <div class="rounded-md bg-red-50 p-4 text-sm text-red-800">
+                <p>{UI_TEXT.error} {transactionState.error}</p>
+                <button 
+                    class="mt-2 rounded-md bg-red-100 px-3 py-1 text-xs font-medium text-red-800 hover:bg-red-200 transition-colors"
+                    onclick={handleRetry}
                 >
-                    Previous
-                </button>
-                <button
-                    class="rounded-md bg-indigo-600 px-3 py-1 text-xs font-medium text-white transition-colors hover:bg-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed"
-                    on:click={() => fetchMoreTransactions('next')}
-                    disabled={isLoading || transactions.length < pageSize}
-                >
-                    Next
+                    {UI_TEXT.retry}
                 </button>
             </div>
-        </div>
-    {/if}
-</div>
+        {:else if !hasTransactions}
+            <div class="py-8 text-center text-gray-500">
+                <p>{UI_TEXT.noTransactions}</p>
+            </div>
+        {:else}
+            <div class="overflow-x-auto relative">
+                {#if isPaginating}
+                    <div class="absolute inset-0 flex items-center justify-center bg-white bg-opacity-70 z-10">
+                        <div class="h-6 w-6 animate-spin rounded-full border-2 border-indigo-600 border-t-transparent"></div>
+                    </div>
+                {/if}
+                
+                <table class="min-w-full divide-y divide-gray-100">
+                    <thead>
+                        <tr>
+                            {#each TABLE_COLUMNS as column}
+                                <th class="bg-gray-50 px-4 py-3 text-left text-xs font-medium tracking-wider text-gray-500 uppercase">
+                                    {column.label}
+                                </th>
+                            {/each}
+                        </tr>
+                    </thead>
+                    <tbody class="divide-y divide-gray-100 bg-white">
+                        {#each transactionState.data as tx}
+                            {@const outcomeStyles = getOutcomeStyles(tx.outcome)}
+                            <tr class="hover:bg-gray-50 transition-colors">
+                                <td class="px-4 py-3 text-sm whitespace-nowrap text-blue-600 hover:text-blue-800">
+                                    <a
+                                        href={getEtherscanLink(tx.id)}
+                                        target="_blank"
+                                        rel="noopener noreferrer"
+                                        class="truncate max-w-[150px] inline-block align-bottom"
+                                    >
+                                        {formatTransactionHash(tx.id)}
+                                    </a>
+                                </td>
+                                <td class="px-4 py-3 text-sm whitespace-nowrap text-gray-700">
+                                    {formatTimestamp(tx.timestamp)}
+                                </td>
+                                <td class="px-4 py-3 text-sm whitespace-nowrap text-gray-700">
+                                    <a
+                                        href={getEtherscanLink(tx.user.address)}
+                                        target="_blank"
+                                        rel="noopener noreferrer"
+                                        class="truncate max-w-[100px] inline-block align-bottom text-blue-600 hover:text-blue-800"
+                                    >
+                                        {formatUserAddress(tx.user.address)}
+                                    </a>
+                                </td>
+                                <td class="px-4 py-3 text-sm whitespace-nowrap">
+                                    <span class="rounded-full px-2.5 py-0.5 text-xs font-medium {outcomeStyles.bg} {outcomeStyles.text}">
+                                        {formatPredictionOutcome(tx.outcome)}
+                                    </span>
+                                </td>
+                                <td class="px-4 py-3 text-sm whitespace-nowrap text-gray-700">
+                                    {formatTransactionAmount(tx.amount)}
+                                </td>
+                            </tr>
+                        {/each}
+                    </tbody>
+                </table>
+            </div>
+        {/if}
+    
+        {#if hasTransactions}
+            <div class="mt-4 flex items-center justify-between">
+                <div class="text-sm text-gray-500">
+                    {UI_TEXT.showing} {transactionState.data.length} {UI_TEXT.transactions}
+                </div>
+                <div class="flex space-x-2">
+                    <button
+                        class="rounded-md bg-gray-100 px-3 py-1 text-xs font-medium text-gray-600 transition-colors hover:bg-gray-200 disabled:opacity-50 disabled:cursor-not-allowed"
+                        onclick={handlePrevious}
+                        disabled={transactionState.isLoading || !canGoPrevious}
+                    >
+                        {UI_TEXT.previous}
+                    </button>
+                    <button
+                        class="rounded-md bg-indigo-600 px-3 py-1 text-xs font-medium text-white transition-colors hover:bg-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed"
+                        onclick={handleNext}
+                        disabled={transactionState.isLoading || !canGoNext}
+                    >
+                        {UI_TEXT.next}
+                    </button>
+                </div>
+            </div>
+        {/if}
+    </div>
