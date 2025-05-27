@@ -1,9 +1,8 @@
 <script lang="ts">
     import {page} from '$app/state';
-    import AppHeader from '$lib/components/app/AppHeader.svelte';
-    import LandingHeader from '$lib/components/landing/LandingHeader.svelte';
     import Footer from '$lib/components/common/Footer.svelte';
     import ToastContainer from '$lib/components/common/ToastContainer.svelte';
+    import Header from '$lib/components/common/Header.svelte';
     import {goto} from '$app/navigation';
     import {browser} from '$app/environment';
     import '../app.css';
@@ -84,11 +83,13 @@
 </svelte:head>
 
 <div class="flex min-h-screen flex-col bg-white">
-    {#if isAppRoute}
-        <AppHeader />
-    {:else if !isAdminRoute}
-        <LandingHeader />
-    {/if}
+    <!-- Unified header with different props based on route -->
+    <Header 
+        showLandingLinks={!isConnected || (!isAppRoute && !isAdminRoute)}
+        showAppLinks={isConnected && isAppRoute}
+        showAdminLinks={isConnected && isAdminRoute}
+        title={isAdminRoute ? "SwapCast Admin" : "SwapCast"}
+    />
     
     <main class="flex-1">
         {@render children()}

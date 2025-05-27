@@ -15,11 +15,11 @@
 	function formatCurrency(value: string | number): string {
 		const num = typeof value === 'string' ? parseFloat(value) : value;
 		if (num >= 1_000_000) {
-			return `$${(num / 1_000_000).toFixed(2)}M`;
+			return `${(num / 1_000_000).toFixed(2)}M`;
 		} else if (num >= 1_000) {
-			return `$${(num / 1_000).toFixed(2)}K`;
+			return `${(num / 1_000).toFixed(2)}K`;
 		} else {
-			return `$${num.toFixed(2)}`;
+			return `${num.toFixed(2)}`;
 		}
 	}
 
@@ -52,15 +52,19 @@
 		try {
 			isLoading = true;
 			errorMsg = '';
+			console.log(`[MarketDetailsModal] Fetching market details for ID ${marketId}...`);
 			const data = await getMarketDetails(marketId);
+			console.log(`[MarketDetailsModal] Received market data:`, data);
 
 			if (data && data.exists) {
 				marketToDisplay = data;
+				console.log(`[MarketDetailsModal] Market data set to display:`, marketToDisplay);
 			} else {
 				errorMsg = 'Market not found or data is invalid.';
+				console.error(`[MarketDetailsModal] Market not found or invalid data:`, data);
 			}
 		} catch (err) {
-			console.error(`Error fetching market details for ID ${marketId}:`, err);
+			console.error(`[MarketDetailsModal] Error fetching market details for ID ${marketId}:`, err);
 			errorMsg = 'Failed to load market details. Please try again.';
 		} finally {
 			isLoading = false;
@@ -84,11 +88,8 @@
 				Market Details
 			{/if}
 		</h3>
-		<Button
-			class="ml-auto inline-flex items-center rounded-lg bg-transparent p-1.5 text-sm text-gray-400 hover:bg-gray-200 hover:text-gray-900"
-			on:click={() => onClose()}
-		>
-			<XSolid class="h-5 w-5" />
+		<Button onclick={() => onClose()}>
+			<XSolid class="h-5 w-5 " />
 		</Button>
 	</div>
 
@@ -163,6 +164,14 @@
 						<span class="font-semibold">{formatCurrency(marketToDisplay.totalStake)}</span>
 					</div>
 					<div class="flex justify-between">
+						<span class="text-gray-600">Bearish Stake:</span>
+						<span class="font-semibold">{formatCurrency(Number(marketToDisplay.totalStake0) / 1e18)}</span>
+					</div>
+					<div class="flex justify-between">
+						<span class="text-gray-600">Bullish Stake:</span>
+						<span class="font-semibold">{formatCurrency(Number(marketToDisplay.totalStake1) / 1e18)}</span>
+					</div>
+					<div class="flex justify-between">
 						<span class="text-gray-600">Market Resolved:</span>
 						<span class="font-semibold">{marketToDisplay.resolved ? 'Yes' : 'No'}</span>
 					</div>
@@ -191,9 +200,21 @@
 				</div>
 				<div class="flex justify-between">
 					<span class="text-gray-600">Expiration Time:</span>
-					<span class="font-semibold"
-						>{new Date(marketToDisplay.expirationTime * 1000).toLocaleString()}</span
-					>
+					<span class="font-semibold">
+						{new Date(marketToDisplay.expirationTime * 1000).toLocaleString(undefined, {
+							year: 'numeric',
+							month: 'short',
+							day: 'numeric',
+							hour: '2-digit',
+							minute: '2-digit',
+							second: '2-digit',
+							hour12: false
+						})}
+					</span>
+				</div>
+				<div class="flex justify-between">
+					<span class="text-gray-600">Current Status:</span>
+					<span class="font-semibold">{marketToDisplay.status}</span>
 				</div>
 			</div>
 		</div>
@@ -243,18 +264,25 @@
 						<line x1="0" y1="300" x2="800" y2="300" stroke="#f3f4f6" stroke-width="1" />
 					</g>
 
-					<!-- Price Threshold Line -->
-					<line
-						x1="0"
-						y1="150"
-						x2="800"
-						y2="150"
-						stroke="#ef4444"
-						stroke-width="2"
-						stroke-dasharray="5,5"
-					/>
+					{#if marketToDisplay?.priceThreshold}
+						{@const thresholdY = 150} <!-- Middle position for visualization -->
+						<!-- Price Threshold Line -->
+						<line
+							x1="0"
+							y1={thresholdY}
+							x2="800"
+							y2={thresholdY}
+							stroke="#ef4444"
+							stroke-width="2"
+							stroke-dasharray="5,5"
+						/>
+						<!-- Threshold Label on Line -->
+						<text x="10" y={thresholdY - 5} font-size="10" fill="#ef4444" font-weight="bold">
+							Threshold: ${marketToDisplay.priceThreshold.toFixed(2)}
+						</text>
+					{/if}
 
-					<!-- Price Chart Line -->
+					<!-- Price Chart Line (simulated data) -->
 					<path
 						d="M0,200 C50,180 100,220 150,190 C200,160 250,140 300,120 C350,100 400,80 450,90 C500,100 550,130 600,110 C650,90 700,70 750,60 L800,40"
 						fill="none"
@@ -283,26 +311,48 @@
 				<div
 					class="absolute top-0 right-0 flex h-full flex-col justify-between py-2 pr-2 text-xs text-gray-500"
 				>
-					<div>$2,500</div>
-					<div>$2,000</div>
-					<div>$1,500</div>
-					<div>$1,000</div>
-					<div>$500</div>
+					{#if marketToDisplay?.priceThreshold}
+						{@const basePrice = marketToDisplay.priceThreshold}
+						{@const maxPrice = basePrice * 1.5}
+						{@const step = maxPrice / 5}
+						<div>${formatCurrency(maxPrice)}</div>
+						<div>${formatCurrency(maxPrice - step)}</div>
+						<div>${formatCurrency(maxPrice - 2 * step)}</div>
+						<div>${formatCurrency(maxPrice - 3 * step)}</div>
+						<div>${formatCurrency(maxPrice - 4 * step)}</div>
+					{:else}
+						<div>$2,500</div>
+						<div>$2,000</div>
+						<div>$1,500</div>
+						<div>$1,000</div>
+						<div>$500</div>
+					{/if}
 				</div>
 
 				<!-- Threshold Label -->
 				<div
 					class="absolute top-1/2 left-2 -translate-y-1/2 transform text-xs font-medium text-red-500"
 				>
-					Threshold: ${marketToDisplay?.priceThreshold || '0'}
+					Threshold: ${formatCurrency(marketToDisplay?.priceThreshold || 0)}
 				</div>
 			</div>
 
 			<div class="mt-2 flex justify-between text-xs text-gray-500">
-				<span>May 6</span>
-				<span>May 9</span>
-				<span>May 12</span>
-				<span>May 13</span>
+				{#if marketToDisplay?.expirationTime}
+					{@const endDate = new Date(marketToDisplay.expirationTime * 1000)}
+					{@const startDate = new Date(endDate.getTime() - (30 * 24 * 60 * 60 * 1000))}
+					{@const midDate1 = new Date(startDate.getTime() + ((endDate.getTime() - startDate.getTime()) / 3))}
+					{@const midDate2 = new Date(startDate.getTime() + (2 * (endDate.getTime() - startDate.getTime()) / 3))}
+					<div>{startDate.toLocaleDateString(undefined, {month: 'short', day: 'numeric'})}</div>
+					<div>{midDate1.toLocaleDateString(undefined, {month: 'short', day: 'numeric'})}</div>
+					<div>{midDate2.toLocaleDateString(undefined, {month: 'short', day: 'numeric'})}</div>
+					<div>{endDate.toLocaleDateString(undefined, {month: 'short', day: 'numeric'})}</div>
+				{:else}
+					<div>-</div>
+					<div>-</div>
+					<div>-</div>
+					<div>-</div>
+				{/if}
 			</div>
 		</div>
 
@@ -485,9 +535,9 @@
 	{/if}
 
 	<svelte:fragment slot="footer">
-		<Button color="alternative" on:click={() => onClose()}>Close</Button>
+		<Button color="alternative" onclick={() => onClose()}>Close</Button>
 		{#if marketToDisplay}
-			<Button color="blue" on:click={() => fetchMarketData()}>Refresh Data</Button>
+			<Button color="blue" onclick={() => fetchMarketData()}>Refresh Data</Button>
 		{/if}
 	</svelte:fragment>
 </Modal>

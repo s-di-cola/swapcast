@@ -5,9 +5,9 @@
     import CreateMarketModal from '$lib/components/admin/CreateMarketModal.svelte';
     import MarketDetailsModal from '$lib/components/admin/MarketDetailsModal.svelte';
     import { toastStore } from '$lib/stores/toastStore';
+    import { setCreateMarketAction, clearCreateMarketAction } from '$lib/stores/headerStore';
     
     // Core admin components
-    import AdminHeader from '$lib/components/admin/AdminHeader.svelte';
     import AdminSummaryCards from '$lib/components/admin/AdminSummaryCards.svelte';
     import AdminAnalyticsSection from '$lib/components/admin/AdminAnalyticsSection.svelte';
     import AdminMarketTable from '$lib/components/admin/AdminMarketTable.svelte';
@@ -121,15 +121,24 @@
 	let resolvedMarketsCount = $derived(markets.filter(m => m.status === 'Resolved').length);
 
 	// Check URL parameters for market ID on mount
-	onMount(() => {
-		fetchMarketData();
-
+	onMount(async () => {
+		// Set the create market action in the header store
+		setCreateMarketAction(() => (showCreateMarketModal = true));
+		
+		// Fetch market data
+		await fetchMarketData();
+		
 		// Check if marketId is in URL parameters
 		const marketIdParam = $page.url.searchParams.get('marketId');
 		if (marketIdParam) {
 			selectedMarketId = marketIdParam;
 			showMarketDetailsModal = true;
 		}
+		
+		// Clean up when component is destroyed
+		return () => {
+			clearCreateMarketAction();
+		};
 	});
 
 	// Setup an effect to update the page title when market count changes
@@ -144,8 +153,6 @@
 </script>
 
 <div class="mx-auto min-h-screen max-w-7xl p-6 md:p-10 bg-gray-50">
-	<AdminHeader onCreateMarketClick={() => (showCreateMarketModal = true)} />
-
 	<main class="space-y-8">
 		<!-- Summary Cards -->
 		<AdminSummaryCards 
