@@ -17,6 +17,19 @@
     const isAdminRoute = $derived(page.url.pathname.startsWith('/admin'));
     const isProtectedRoute = $derived(isAppRoute || isAdminRoute);
     const pathname = $derived(page.url.pathname);
+    let isConnected = $state(appKit.getIsConnectedState());
+
+    $effect(() => {
+        if (!browser) return;
+        const unsubscribe = appKit.subscribeState((state) => {
+            isConnected = state.open || appKit.getIsConnectedState();
+        });
+        isConnected = appKit.getIsConnectedState();
+        return unsubscribe;
+    });
+
+
+
 
     /**
      * Handles route protection and redirects based on user authentication status and role
@@ -29,12 +42,11 @@
         handleUnauthorizedAdminAccess();
     });
 
-    /**
+   /**
      * Redirects unauthenticated users away from protected routes
      */
-    function handleUnauthenticatedAccess() {
-        const isAuthenticated = appKit.getIsConnectedState();
-        if (!isAuthenticated && isProtectedRoute) {
+     function handleUnauthenticatedAccess() {
+        if (!isConnected && isProtectedRoute) {
             goto('/');
         }
     }
@@ -43,10 +55,9 @@
      * Redirects authenticated users from the home page to their appropriate dashboard
      */
     function handleAuthenticatedHomeRedirect() {
-        const isAuthenticated = appKit.getIsConnectedState();
         const isHomePage = pathname === '/';
 
-        if (isAuthenticated && isHomePage) {
+        if (isConnected && isHomePage) {
             const userDashboard = isAdmin() ? '/admin' : '/app';
             goto(userDashboard);
         }
@@ -56,10 +67,9 @@
      * Prevents non-admin users from accessing admin routes
      */
     function handleUnauthorizedAdminAccess() {
-        const isAuthenticated = appKit.getIsConnectedState();
         const userIsAdmin = isAdmin();
 
-        if (isAuthenticated && isAdminRoute && !userIsAdmin) {
+        if (isConnected && isAdminRoute && !userIsAdmin) {
             goto('/app');
         }
     }
