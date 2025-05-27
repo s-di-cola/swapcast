@@ -1,4 +1,6 @@
 <script lang="ts">
+	import { onMount } from 'svelte';
+	import { browser } from '$app/environment';
 	import { toastStore, type Toast } from '$lib/stores/toastStore';
 	import ToastComponent from './Toast.svelte';
 
@@ -45,10 +47,12 @@
 	/* Base container styles */
 	.toast-container {
 		position: fixed;
-		z-index: 9999;
+		z-index: 10000; /* Increased z-index to ensure it's above modals and other elements */
 		display: flex;
 		flex-direction: column;
 		pointer-events: none;
+		/* Ensure it's above all other content */
+		isolation: isolate;
 	}
 
 	/* Position-specific container styles */

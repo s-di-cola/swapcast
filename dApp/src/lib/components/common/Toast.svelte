@@ -1,5 +1,6 @@
 <script lang="ts">
 	import { onMount, onDestroy } from 'svelte';
+	import { browser } from '$app/environment';
 	import type { ToastType, ToastPosition } from '$lib/stores/toastStore';
 
 	// Toast properties
@@ -115,9 +116,11 @@
 	/* Base toast wrapper positioning */
 	.toast-wrapper {
 		position: fixed;
-		z-index: 9999;
+		z-index: 10001; /* Higher than container to ensure it's on top */
 		display: flex;
 		justify-content: center;
+		/* Ensure it's above all other content */
+		isolation: isolate;
 	}
 
 	/* Position-specific styles */

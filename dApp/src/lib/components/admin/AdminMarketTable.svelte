@@ -5,6 +5,7 @@
     export let markets: Market[] = [];
     export let loading: boolean = false;
     export let onMarketClick: (marketId: string) => void;
+    export let onRefresh: () => void = () => {}; // Optional refresh callback
     
     // Format currency values
     function formatCurrency(value: string | number): string {
@@ -22,6 +23,27 @@
 <section class="mb-10">
     <div class="mb-4 flex items-center justify-between">
         <h2 class="text-xl font-semibold text-gray-800">Market List</h2>
+        <button
+            type="button"
+            on:click={onRefresh}
+            class="inline-flex items-center rounded-md bg-white px-3 py-2 text-sm font-medium text-gray-700 shadow-sm ring-1 ring-inset ring-gray-300 hover:bg-gray-50"
+            disabled={loading}
+        >
+            <svg
+                class="-ml-0.5 mr-2 h-4 w-4 text-gray-700"
+                fill="none"
+                viewBox="0 0 24 24"
+                stroke="currentColor"
+            >
+                <path
+                    stroke-linecap="round"
+                    stroke-linejoin="round"
+                    stroke-width="2"
+                    d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"
+                ></path>
+            </svg>
+            {loading ? 'Refreshing...' : 'Refresh'}
+        </button>
     </div>
     <div class="overflow-hidden rounded-lg border border-gray-200 shadow-sm">
         <table class="min-w-full divide-y divide-gray-200">

@@ -40,7 +40,12 @@ function createToastStore() {
       dismissible: toastOptions.dismissible
     };
     
-    update(toasts => [...toasts, toast]);
+    console.log('Adding new toast:', { type, message, toastOptions });
+    update(toasts => {
+      const newToasts = [...toasts, toast];
+      console.log('Current toasts after add:', newToasts);
+      return newToasts;
+    });
     
     // Auto-remove toast after duration
     if (toast.duration > 0) {

@@ -73,19 +73,20 @@
     />
 </svelte:head>
 
-<div class="flex min-h-screen flex-col">
-    {#if isAppRoute || isAdminRoute}
-        <AppHeader/>
-    {:else}
-        <LandingHeader/>
+<div class="flex min-h-screen flex-col bg-white">
+    {#if isAppRoute}
+        <AppHeader />
+    {:else if !isAdminRoute}
+        <LandingHeader />
     {/if}
-
-    <main class="min-h-screen pt-16" class:bg-gray-50={isAppRoute}>
+    
+    <main class="flex-1">
         {@render children()}
     </main>
-
-    <Footer/>
     
-    <!-- Global toast container for app-wide notifications -->
+    {#if !isAdminRoute}
+        <Footer />
+    {/if}
+    
     <ToastContainer />
 </div>

@@ -36,13 +36,20 @@
 		}
 	}
 
-	// Show toast notification using the global toast store
-	function showToast(type: 'success' | 'error', message: string, duration: number = 5000) {
-		const options = { duration };
-		if (type === 'success') {
-			toastStore.success(message, options);
-		} else {
-			toastStore.error(message, options);
+	// Show toast notification
+	function showToast(type: 'success' | 'error' | 'info' | 'warning', message: string, duration = 5000) {
+		try {
+			if (type === 'success') {
+				toastStore.success(message, { duration });
+			} else if (type === 'error') {
+				toastStore.error(message, { duration });
+			} else if (type === 'info') {
+				toastStore.info(message, { duration });
+			} else {
+				toastStore.warning(message, { duration });
+			}
+		} catch (error) {
+			console.error('Error showing toast:', error);
 		}
 	}
 
@@ -52,22 +59,31 @@
 			loading = true;
 			error = '';
 
-			// Get market count
-			marketCount = await getMarketCount();
+			// Fetch all markets and count in parallel
+			const [marketList, count] = await Promise.all([
+				getAllMarkets(),
+				getMarketCount()
+			]);
 
-			// Get all markets
-			markets = await getAllMarkets();
-
-			// Calculate total stake
-			totalStake = markets.reduce((sum, market) => {
-				return sum + parseFloat(market.totalStake || '0');
+			// Update markets and count
+			markets = marketList;
+			marketCount = count;
+			
+			// Calculate total stake across all markets
+			totalStake = marketList.reduce((sum, market) => {
+				const stake0 = Number(market.totalStake0) / 1e18; // Convert from wei to ETH
+				const stake1 = Number(market.totalStake1) / 1e18; // Convert from wei to ETH
+				return sum + stake0 + stake1;
 			}, 0);
-
-			loading = false;
+			
+			// Show success toast
+			showToast('success', `Successfully refreshed ${marketList.length} markets`);
+			
 		} catch (err) {
 			console.error('Error fetching market data:', err);
-			error = 'Failed to load market data. Please try again.';
-			showToast('error', 'Failed to load market data. Please try again.');
+			error = 'Failed to load market data. Please try again later.';
+			showToast('error', error);
+		} finally {
 			loading = false;
 		}
 	}
@@ -80,9 +96,17 @@
 	}
 
 	// Refresh data
-	function refreshData() {
-		fetchMarketData();
-		showToast('success', 'Market data refreshed successfully');
+	async function refreshData() {
+		console.log('refreshData called');
+		try {
+			console.log('Calling fetchMarketData...');
+			await fetchMarketData();
+			console.log('fetchMarketData completed, showing success toast');
+			showToast('success', 'Market data refreshed successfully');
+		} catch (error) {
+			console.error('Error in refreshData:', error);
+			showToast('error', 'Failed to refresh market data');
+		}
 	}
 
 	// Handle market creation from modal
@@ -138,9 +162,8 @@
 		<AdminMarketTable 
 			markets={markets}
 			loading={loading}
-			onRefresh={refreshData}
+			onRefresh={fetchMarketData}
 			onMarketClick={handleMarketClick}
-			onCreateMarketClick={() => (showCreateMarketModal = true)}
 		/>
 	</main>
 
