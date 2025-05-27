@@ -3,7 +3,8 @@
     import { page } from '$app/stores';
     import { 
         getAllMarkets, 
-        getMarketCount, 
+        getMarketCount,
+        getActiveMarketsCount,
         type Market, 
         type MarketSortField, 
         type SortDirection,
@@ -85,20 +86,23 @@
 				sortDirection: sortDirection
 			};
 
-			// Fetch paginated markets and total count in parallel
-			const [paginatedResult, count] = await Promise.all([
-				getAllMarkets(paginationOptions),
-				getMarketCount()
-			]);
+			// Fetch paginated markets
+			const paginatedResult = await getAllMarkets(paginationOptions);
 
-			// Update markets, count, and pagination info
+			// Update markets and pagination info
 			markets = paginatedResult.markets;
-			marketCount = count;
+			
+			// Use the filtered count from paginatedResult for both the market count and pagination
+			// This ensures consistency between the summary cards and the market list
+			marketCount = paginatedResult.totalCount;
 			
 			// Calculate total pages based on the total count from the API
 			// This ensures we handle cases where there are exactly pageSize+1 markets (e.g., 11 markets with page size 10)
 			totalPages = Math.ceil(paginatedResult.totalCount / pageSize);
 			currentPage = paginatedResult.currentPage;
+			
+			// Get active markets count directly from the service
+			openMarketsCount = await getActiveMarketsCount();
 			
 			// Calculate total stake across all displayed markets
 			totalStake = paginatedResult.markets.reduce((sum: number, market: Market) => {
@@ -185,7 +189,8 @@
 	}
 
 	// Create derived values using $derived rune
-	let openMarketsCount = $derived(markets.filter(m => m.status === 'Open').length);
+	// Track the total number of open markets across all pages
+	let openMarketsCount = $state(0);
 	let expiredMarketsCount = $derived(markets.filter(m => m.status === 'Expired').length);
 	let resolvedMarketsCount = $derived(markets.filter(m => m.status === 'Resolved').length);
 

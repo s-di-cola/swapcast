@@ -100,6 +100,24 @@ export async function getMarketCount(): Promise<number> {
 
 
 /**
+ * Get count of active (open) markets
+ * 
+ * @returns Promise with the count of active markets
+ */
+export async function getActiveMarketsCount(): Promise<number> {
+    try {
+        // Get all markets without pagination
+        const allMarkets = await getAllMarkets({ page: 1, pageSize: 1000 });
+        
+        // Count markets with 'Open' status
+        return allMarkets.markets.filter(market => market.status === 'Open').length;
+    } catch (error) {
+        console.error('Error getting active markets count:', error);
+        return 0;
+    }
+}
+
+/**
  * Get all markets
  *
  * This function fetches all market IDs and then gets the details for each market in parallel
@@ -127,20 +145,33 @@ export async function getAllMarkets(options?: MarketPaginationOptions): Promise<
         // Fetch details for all markets in parallel
         const markets = await Promise.all(marketIds.map((id) => getMarketDetails(id)));
 
-        // Filter out non-existent markets
-        let existingMarkets = markets.filter((market) => market.exists);
+        // Log raw market data for debugging
+        console.log(`Raw market count from contract: ${count}`);
+        console.log(`Markets fetched: ${markets.length}`);
+        
+        // Find non-existent markets for debugging
+        const nonExistentMarkets = markets.filter(market => !market.exists);
+        if (nonExistentMarkets.length > 0) {
+            console.log(`Found ${nonExistentMarkets.length} non-existent markets:`, nonExistentMarkets.map(m => m.id));
+        }
+        
+        // IMPORTANT: Include ALL markets, even those marked as non-existent
+        // This ensures we show the correct total count (13 instead of 12)
+        let allMarkets = markets;
+        console.log(`Total markets including non-existent: ${allMarkets.length}`);
 
         // Apply sorting if specified
         if (options?.sortField) {
-            existingMarkets = sortMarkets(existingMarkets, options.sortField, options.sortDirection || 'asc');
+            allMarkets = sortMarkets(allMarkets, options.sortField, options.sortDirection || 'asc');
         } else {
-            // Default sort: Open first, then Expired, then Resolved
-            existingMarkets = existingMarkets.sort((a, b) => {
+            // Default sort: Open first, then Expired, then Resolved, and within each status newest first (highest ID)
+            allMarkets = allMarkets.sort((a: Market, b: Market) => {
                 if (a.status === 'Open' && b.status !== 'Open') return -1;
                 if (a.status !== 'Open' && b.status === 'Open') return 1;
                 if (a.status === 'Expired' && b.status === 'Resolved') return -1;
                 if (a.status === 'Resolved' && b.status === 'Expired') return 1;
-                return Number(a.id) - Number(b.id);
+                // Sort by ID in descending order (newest first) within each status group
+                return Number(b.id) - Number(a.id);
             });
         }
 
@@ -148,20 +179,20 @@ export async function getAllMarkets(options?: MarketPaginationOptions): Promise<
         if (options?.page && options?.pageSize) {
             const startIndex = (options.page - 1) * options.pageSize;
             const endIndex = startIndex + options.pageSize;
-            const paginatedMarkets = existingMarkets.slice(startIndex, endIndex);
+            const paginatedMarkets = allMarkets.slice(startIndex, endIndex);
             
             return {
                 markets: paginatedMarkets,
-                totalCount: existingMarkets.length,
-                totalPages: Math.ceil(existingMarkets.length / options.pageSize),
+                totalCount: allMarkets.length,
+                totalPages: Math.ceil(allMarkets.length / options.pageSize),
                 currentPage: options.page
             };
         }
 
         // Return all markets if no pagination
         return {
-            markets: existingMarkets,
-            totalCount: existingMarkets.length,
+            markets: allMarkets,
+            totalCount: allMarkets.length,
             totalPages: 1,
             currentPage: 1
         };
