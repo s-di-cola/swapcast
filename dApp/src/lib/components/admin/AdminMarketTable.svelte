@@ -1,11 +1,35 @@
 <script lang="ts">
     import type { Market } from '$lib/services/market/marketService';
+    import type { MarketSortField, SortDirection } from '$lib/services/market/marketService';
     
     // Component for the market list table
     export let markets: Market[] = [];
     export let loading: boolean = false;
     export let onMarketClick: (marketId: string) => void;
     export let onRefresh: () => void = () => {}; // Optional refresh callback
+    export let onSort: (field: MarketSortField, direction: SortDirection) => void = () => {};
+    export let onPageChange: (page: number) => void = () => {};
+    export let totalPages: number = 1;
+    export let currentPage: number = 1;
+    
+    // Sorting state
+    let sortField: MarketSortField = 'id';
+    let sortDirection: SortDirection = 'asc';
+    
+    // Handle column header click for sorting
+    function handleSort(field: MarketSortField) {
+        // If clicking the same column, toggle direction
+        if (field === sortField) {
+            sortDirection = sortDirection === 'asc' ? 'desc' : 'asc';
+        } else {
+            // New column, default to ascending
+            sortField = field;
+            sortDirection = 'asc';
+        }
+        
+        // Call the parent's sort handler
+        onSort(sortField, sortDirection);
+    }
     
     // Format currency values
     function formatCurrency(value: string | number): string {
@@ -17,6 +41,12 @@
         } else {
             return `$${num.toFixed(2)}`;
         }
+    }
+    
+    // Generate sort indicator arrow
+    function getSortIndicator(field: MarketSortField): string {
+        if (field !== sortField) return '';
+        return sortDirection === 'asc' ? '↑' : '↓';
     }
 </script>
 
@@ -51,45 +81,52 @@
                 <tr>
                     <th
                         scope="col"
-                        class="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500"
+                        class="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500 cursor-pointer hover:bg-gray-100"
+                        on:click={() => handleSort('id')}
                     >
-                        ID
+                        ID {getSortIndicator('id')}
                     </th>
                     <th
                         scope="col"
-                        class="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500"
+                        class="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500 cursor-pointer hover:bg-gray-100"
+                        on:click={() => handleSort('name')}
                     >
-                        Market
+                        Market {getSortIndicator('name')}
                     </th>
                     <th
                         scope="col"
-                        class="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500"
+                        class="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500 cursor-pointer hover:bg-gray-100"
+                        on:click={() => handleSort('assetPair')}
                     >
-                        Asset Pair
+                        Asset Pair {getSortIndicator('assetPair')}
                     </th>
                     <th
                         scope="col"
-                        class="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500"
+                        class="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500 cursor-pointer hover:bg-gray-100"
+                        on:click={() => handleSort('status')}
                     >
-                        Status
+                        Status {getSortIndicator('status')}
                     </th>
                     <th
                         scope="col"
-                        class="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500"
+                        class="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500 cursor-pointer hover:bg-gray-100"
+                        on:click={() => handleSort('expirationTime')}
                     >
-                        Expiration
+                        Expiration {getSortIndicator('expirationTime')}
                     </th>
                     <th
                         scope="col"
-                        class="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500"
+                        class="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500 cursor-pointer hover:bg-gray-100"
+                        on:click={() => handleSort('priceThreshold')}
                     >
-                        Target Price
+                        Target Price {getSortIndicator('priceThreshold')}
                     </th>
                     <th
                         scope="col"
-                        class="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500"
+                        class="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500 cursor-pointer hover:bg-gray-100"
+                        on:click={() => handleSort('totalStake')}
                     >
-                        Total Stake
+                        Total Stake {getSortIndicator('totalStake')}
                     </th>
                     <th scope="col" class="relative px-6 py-3">
                         <span class="sr-only">Actions</span>
@@ -182,4 +219,29 @@
             </tbody>
         </table>
     </div>
+    
+    <!-- Pagination Controls -->
+    {#if markets.length > 0}
+        <div class="mt-4 flex items-center justify-between">
+            <div class="text-sm text-gray-500">
+                Showing page {currentPage} of {totalPages}
+            </div>
+            <div class="flex space-x-2">
+                <button
+                    class="rounded-md bg-gray-100 px-3 py-1 text-xs font-medium text-gray-600 transition-colors hover:bg-gray-200 disabled:opacity-50 disabled:cursor-not-allowed"
+                    on:click={() => onPageChange(currentPage - 1)}
+                    disabled={loading || currentPage === 1}
+                >
+                    Previous
+                </button>
+                <button
+                    class="rounded-md bg-indigo-600 px-3 py-1 text-xs font-medium text-white transition-colors hover:bg-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed"
+                    on:click={() => onPageChange(currentPage + 1)}
+                    disabled={loading || currentPage >= totalPages}
+                >
+                    Next
+                </button>
+            </div>
+        </div>
+    {/if}
 </section>

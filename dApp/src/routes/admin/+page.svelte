@@ -1,7 +1,15 @@
 <script lang="ts">
     import { onMount } from 'svelte';
     import { page } from '$app/stores';
-    import { getAllMarkets, getMarketCount, type Market } from '$lib/services/market/marketService';
+    import { 
+        getAllMarkets, 
+        getMarketCount, 
+        type Market, 
+        type MarketSortField, 
+        type SortDirection,
+        type MarketPaginationOptions,
+        type PaginatedMarkets
+    } from '$lib/services/market/marketService';
     import CreateMarketModal from '$lib/components/admin/CreateMarketModal.svelte';
     import MarketDetailsModal from '$lib/components/admin/MarketDetailsModal.svelte';
     import { toastStore } from '$lib/stores/toastStore';
@@ -21,6 +29,13 @@
 	let showCreateMarketModal = $state(false);
 	let showMarketDetailsModal = $state(false);
 	let selectedMarketId = $state<string | null>(null);
+	
+	// Pagination and sorting state
+	let currentPage = $state(1);
+	let totalPages = $state(1);
+	let pageSize = $state(10); // 10 markets per page
+	let sortField = $state<MarketSortField>('id');
+	let sortDirection = $state<SortDirection>('asc');
 	
 	// Toast notifications are now handled by the global toast store
 
@@ -53,39 +68,92 @@
 		}
 	}
 
-	// Fetch market data
-	async function fetchMarketData() {
+	/**
+	 * Base function to fetch market data with pagination and sorting
+	 * @param showToastNotification Whether to show a toast notification after fetching data
+	 */
+	async function fetchMarketDataBase(showToastNotification: boolean = false) {
 		try {
 			loading = true;
 			error = '';
 
-			// Fetch all markets and count in parallel
-			const [marketList, count] = await Promise.all([
-				getAllMarkets(),
+			// Create pagination options
+			const paginationOptions: MarketPaginationOptions = {
+				page: currentPage,
+				pageSize: pageSize,
+				sortField: sortField,
+				sortDirection: sortDirection
+			};
+
+			// Fetch paginated markets and total count in parallel
+			const [paginatedResult, count] = await Promise.all([
+				getAllMarkets(paginationOptions),
 				getMarketCount()
 			]);
 
-			// Update markets and count
-			markets = marketList;
+			// Update markets, count, and pagination info
+			markets = paginatedResult.markets;
 			marketCount = count;
 			
-			// Calculate total stake across all markets
-			totalStake = marketList.reduce((sum, market) => {
+			// Calculate total pages based on the total count from the API
+			// This ensures we handle cases where there are exactly pageSize+1 markets (e.g., 11 markets with page size 10)
+			totalPages = Math.ceil(paginatedResult.totalCount / pageSize);
+			currentPage = paginatedResult.currentPage;
+			
+			// Calculate total stake across all displayed markets
+			totalStake = paginatedResult.markets.reduce((sum: number, market: Market) => {
 				const stake0 = Number(market.totalStake0) / 1e18; // Convert from wei to ETH
 				const stake1 = Number(market.totalStake1) / 1e18; // Convert from wei to ETH
 				return sum + stake0 + stake1;
 			}, 0);
 			
-			// Show success toast
-			showToast('success', `Successfully refreshed ${marketList.length} markets`);
+			// Only show success toast if requested
+			if (showToastNotification) {
+				showToast('success', `Successfully loaded ${paginatedResult.markets.length} of ${paginatedResult.totalCount} markets`);
+			}
 			
+			return true;
 		} catch (err) {
 			console.error('Error fetching market data:', err);
 			error = 'Failed to load market data. Please try again later.';
+			
+			// Always show error toasts
 			showToast('error', error);
+			return false;
 		} finally {
 			loading = false;
 		}
+	}
+	
+	// Fetch market data with toast notification (for refresh button)
+	async function fetchMarketData() {
+		return fetchMarketDataBase(true);
+	}
+	
+	// Fetch market data without toast notification (for pagination and sorting)
+	async function updateMarketData() {
+		return fetchMarketDataBase(false);
+	}
+
+	// Handle sorting when a column header is clicked
+	function handleSort(field: MarketSortField, direction: SortDirection) {
+		console.log(`Sorting by ${field} in ${direction} order`);
+		sortField = field;
+		sortDirection = direction;
+		
+		// Reset to page 1 when sorting changes
+		currentPage = 1;
+		
+		// Fetch data with new sorting (without toast notification)
+		updateMarketData();
+	}
+	
+	// Handle page change for pagination
+	function handlePageChange(page: number) {
+		console.log(`Changing to page ${page}`);
+		currentPage = page;
+		// Fetch data with new page (without toast notification)
+		updateMarketData();
 	}
 
 	// Open market details modal
@@ -95,17 +163,18 @@
 		showMarketDetailsModal = true;
 	}
 
-	// Refresh data
+	// Refresh data - explicitly shows toast notification
 	async function refreshData() {
 		console.log('refreshData called');
 		try {
-			console.log('Calling fetchMarketData...');
-			await fetchMarketData();
-			console.log('fetchMarketData completed, showing success toast');
-			showToast('success', 'Market data refreshed successfully');
-		} catch (error) {
-			console.error('Error in refreshData:', error);
-			showToast('error', 'Failed to refresh market data');
+			console.log('Calling fetchMarketData with toast notification...');
+			// Use the version that shows toast notifications
+			const success = await fetchMarketData();
+			
+			// No need for additional toast as fetchMarketData already shows one
+		} catch (err) {
+			console.error('Error refreshing data:', err);
+			// No need for additional toast as fetchMarketData already shows error
 		}
 	}
 
@@ -121,12 +190,12 @@
 	let resolvedMarketsCount = $derived(markets.filter(m => m.status === 'Resolved').length);
 
 	// Check URL parameters for market ID on mount
-	onMount(async () => {
+	onMount(() => {
 		// Set the create market action in the header store
 		setCreateMarketAction(() => (showCreateMarketModal = true));
 		
-		// Fetch market data
-		await fetchMarketData();
+		// Fetch market data without showing toast notification on initial load
+		updateMarketData();
 		
 		// Check if marketId is in URL parameters
 		const marketIdParam = $page.url.searchParams.get('marketId');
@@ -135,8 +204,9 @@
 			showMarketDetailsModal = true;
 		}
 		
-		// Clean up when component is destroyed
+		// Return cleanup function
 		return () => {
+			// Clean up header action on unmount
 			clearCreateMarketAction();
 		};
 	});
@@ -165,12 +235,16 @@
 		<!-- Analytics Section -->
 		<AdminAnalyticsSection />
 
-			<!-- Market List -->
+			<!-- Market List with Pagination and Sorting -->
 		<AdminMarketTable 
 			markets={markets}
 			loading={loading}
 			onRefresh={fetchMarketData}
 			onMarketClick={handleMarketClick}
+			onSort={handleSort}
+			onPageChange={handlePageChange}
+			totalPages={totalPages}
+			currentPage={currentPage}
 		/>
 	</main>
 

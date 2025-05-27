@@ -9,6 +9,32 @@ import {getCurrentNetworkConfig} from "$lib/utils/network";
 // Types
 type MarketStatus = 'Open' | 'Expired' | 'Resolved';
 
+/**
+ * Sort options for markets
+ */
+export type MarketSortField = 'id' | 'name' | 'assetPair' | 'status' | 'expirationTime' | 'priceThreshold' | 'totalStake';
+export type SortDirection = 'asc' | 'desc';
+
+/**
+ * Pagination options for markets
+ */
+export interface MarketPaginationOptions {
+    page: number;
+    pageSize: number;
+    sortField?: MarketSortField;
+    sortDirection?: SortDirection;
+}
+
+/**
+ * Paginated result for markets
+ */
+export interface PaginatedMarkets {
+    markets: Market[];
+    totalCount: number;
+    totalPages: number;
+    currentPage: number;
+}
+
 export interface Market {
     id: string;
     name: string;
@@ -78,14 +104,21 @@ export async function getMarketCount(): Promise<number> {
  *
  * This function fetches all market IDs and then gets the details for each market in parallel
  * It filters out non-existent markets and sorts them by status (Open first, then Expired, then Resolved)
+ * 
+ * @param options Optional pagination and sorting options
  */
-export async function getAllMarkets(): Promise<Market[]> {
+export async function getAllMarkets(options?: MarketPaginationOptions): Promise<PaginatedMarkets> {
     try {
         // Get the total count of markets
         const count = await getMarketCount();
 
         if (count === 0) {
-            return [];
+            return {
+                markets: [],
+                totalCount: 0,
+                totalPages: 0,
+                currentPage: 1
+            };
         }
 
         // Create an array of market IDs from 0 to count-1
@@ -95,17 +128,94 @@ export async function getAllMarkets(): Promise<Market[]> {
         const markets = await Promise.all(marketIds.map((id) => getMarketDetails(id)));
 
         // Filter out non-existent markets
-        const existingMarkets = markets.filter((market) => market.exists);
+        let existingMarkets = markets.filter((market) => market.exists);
 
-        // Sort markets by status: Open first, then Expired, then Resolved
-        return existingMarkets.sort((a, b) => {
-            const statusOrder = {Open: 0, Expired: 1, Resolved: 2};
-            return statusOrder[a.status] - statusOrder[b.status];
-        });
+        // Apply sorting if specified
+        if (options?.sortField) {
+            existingMarkets = sortMarkets(existingMarkets, options.sortField, options.sortDirection || 'asc');
+        } else {
+            // Default sort: Open first, then Expired, then Resolved
+            existingMarkets = existingMarkets.sort((a, b) => {
+                if (a.status === 'Open' && b.status !== 'Open') return -1;
+                if (a.status !== 'Open' && b.status === 'Open') return 1;
+                if (a.status === 'Expired' && b.status === 'Resolved') return -1;
+                if (a.status === 'Resolved' && b.status === 'Expired') return 1;
+                return Number(a.id) - Number(b.id);
+            });
+        }
+
+        // Apply pagination if specified
+        if (options?.page && options?.pageSize) {
+            const startIndex = (options.page - 1) * options.pageSize;
+            const endIndex = startIndex + options.pageSize;
+            const paginatedMarkets = existingMarkets.slice(startIndex, endIndex);
+            
+            return {
+                markets: paginatedMarkets,
+                totalCount: existingMarkets.length,
+                totalPages: Math.ceil(existingMarkets.length / options.pageSize),
+                currentPage: options.page
+            };
+        }
+
+        // Return all markets if no pagination
+        return {
+            markets: existingMarkets,
+            totalCount: existingMarkets.length,
+            totalPages: 1,
+            currentPage: 1
+        };
     } catch (error) {
         console.error('getAllMarkets error:', error);
-        return [];
+        return {
+            markets: [],
+            totalCount: 0,
+            totalPages: 0,
+            currentPage: 1
+        };
     }
+}
+
+/**
+ * Sort markets by the specified field and direction
+ * 
+ * @param markets The markets to sort
+ * @param sortField The field to sort by
+ * @param sortDirection The direction to sort (asc or desc)
+ * @returns Sorted array of markets
+ */
+function sortMarkets(markets: Market[], sortField: MarketSortField, sortDirection: SortDirection): Market[] {
+    return [...markets].sort((a, b) => {
+        let comparison = 0;
+        
+        switch (sortField) {
+            case 'id':
+                comparison = Number(a.id) - Number(b.id);
+                break;
+            case 'name':
+                comparison = a.name.localeCompare(b.name);
+                break;
+            case 'assetPair':
+                comparison = a.assetPair.localeCompare(b.assetPair);
+                break;
+            case 'status':
+                comparison = a.status.localeCompare(b.status);
+                break;
+            case 'expirationTime':
+                comparison = a.expirationTime - b.expirationTime;
+                break;
+            case 'priceThreshold':
+                comparison = a.priceThreshold - b.priceThreshold;
+                break;
+            case 'totalStake':
+                comparison = parseFloat(a.totalStake) - parseFloat(b.totalStake);
+                break;
+            default:
+                comparison = 0;
+        }
+        
+        return sortDirection === 'asc' ? comparison : -comparison;
+    });
 }
 
 // Define a proper interface for the contract return type
