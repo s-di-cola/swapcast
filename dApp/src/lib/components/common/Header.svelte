@@ -78,7 +78,7 @@
 
             <!-- Right side: Admin button and/or Wallet -->
             <div class="flex items-center">
-                {#if showAdminLinks && onCreateMarketClick}
+                {#if !showAdminLinks && onCreateMarketClick}
                     <button
                         type="button"
                         onclick={onCreateMarketClick}
