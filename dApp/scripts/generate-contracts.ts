@@ -1,7 +1,7 @@
-import {existsSync, mkdirSync, readFileSync, writeFileSync} from 'fs';
-import {dirname, join, resolve} from 'path';
-import {fileURLToPath} from 'url';
-import {format} from 'prettier';
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'fs';
+import { dirname, join, resolve } from 'path';
+import { fileURLToPath } from 'url';
+import { format } from 'prettier';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);

@@ -107,8 +107,17 @@ export async function generatePredictions(
 	// Process predictions in parallel batches
 	const BATCH_SIZE = 3; // Reduce batch size to 3 predictions in parallel to avoid overwhelming Anvil
 	
+	// Define prediction task type
+	type PredictionTask = {
+		userAccount: any;
+		outcome: number;
+		convictionStake: bigint;
+		totalAmount: bigint;
+		index: number;
+	};
+
 	// Prepare all prediction tasks
-	const predictionTasks = [];
+	const predictionTasks: PredictionTask[] = [];
 	
 	for (let i = 0; i < count; i++) {
 		// Get a user account (cycling through the available ones)
@@ -135,7 +144,7 @@ export async function generatePredictions(
 	}
 	
 	// Process predictions in batches
-	const predictionBatches = [];
+	const predictionBatches: PredictionTask[][] = [];
 	for (let i = 0; i < predictionTasks.length; i += BATCH_SIZE) {
 		predictionBatches.push(predictionTasks.slice(i, i + BATCH_SIZE));
 	}

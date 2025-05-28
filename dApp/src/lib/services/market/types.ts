@@ -1,6 +1,6 @@
 /**
  * Market Service Types
- * 
+ *
  * Type definitions for the market service module
  */
 
@@ -14,7 +14,14 @@ export type MarketStatus = 'Open' | 'Expired' | 'Resolved';
 /**
  * Fields available for sorting markets
  */
-export type MarketSortField = 'id' | 'name' | 'assetPair' | 'status' | 'expirationTime' | 'priceThreshold' | 'totalStake';
+export type MarketSortField =
+	| 'id'
+	| 'name'
+	| 'assetPair'
+	| 'status'
+	| 'expirationTime'
+	| 'priceThreshold'
+	| 'totalStake';
 
 /**
  * Sort direction options

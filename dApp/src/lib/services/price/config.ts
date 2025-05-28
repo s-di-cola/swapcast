@@ -1,6 +1,6 @@
 /**
  * CoinGecko Service Configuration
- * 
+ *
  * Configuration constants and utilities for the CoinGecko API service
  */
 
@@ -14,7 +14,7 @@ const DEFAULT_CONFIG = {
 	baseUrl: 'https://api.coingecko.com/api/v3',
 	rateLimit: {
 		maxRequests: 30, // Free tier limit
-		windowMs: 60000, // 1 minute
+		windowMs: 60000 // 1 minute
 	},
 	cache: {
 		ttl: 5 * 60 * 1000, // 5 minutes
@@ -69,21 +69,21 @@ export const COINGECKO_CONFIG: CoinGeckoConfig = {
  * Used when the API is unavailable or fails
  */
 export const FALLBACK_COIN_MAPPING: Record<string, string> = {
-	'BTC': 'bitcoin',
-	'ETH': 'ethereum',
-	'SOL': 'solana',
-	'USDT': 'tether',
-	'USDC': 'usd-coin',
-	'BNB': 'binancecoin',
-	'ADA': 'cardano',
-	'XRP': 'ripple',
-	'MATIC': 'matic-network',
-	'DOT': 'polkadot',
-	'AVAX': 'avalanche-2',
-	'LINK': 'chainlink',
-	'UNI': 'uniswap',
-	'LTC': 'litecoin',
-	'BCH': 'bitcoin-cash'
+	BTC: 'bitcoin',
+	ETH: 'ethereum',
+	SOL: 'solana',
+	USDT: 'tether',
+	USDC: 'usd-coin',
+	BNB: 'binancecoin',
+	ADA: 'cardano',
+	XRP: 'ripple',
+	MATIC: 'matic-network',
+	DOT: 'polkadot',
+	AVAX: 'avalanche-2',
+	LINK: 'chainlink',
+	UNI: 'uniswap',
+	LTC: 'litecoin',
+	BCH: 'bitcoin-cash'
 } as const;
 
 /**
@@ -92,7 +92,7 @@ export const FALLBACK_COIN_MAPPING: Record<string, string> = {
  */
 export const PRIORITY_COINS = [
 	'bitcoin',
-	'ethereum', 
+	'ethereum',
 	'tether',
 	'usd-coin',
 	'binancecoin',
@@ -111,10 +111,10 @@ export const CACHE_CONFIG = {
 	MAX_SIZE: DEFAULT_CONFIG.cache.maxSize,
 	// Different TTL for different data types
 	TTL_BY_TYPE: {
-		historical: 5 * 60 * 1000,    // 5 minutes
-		search: 10 * 60 * 1000,       // 10 minutes  
-		coinList: 60 * 60 * 1000,     // 1 hour
-		current: 30 * 1000            // 30 seconds
+		historical: 5 * 60 * 1000, // 5 minutes
+		search: 10 * 60 * 1000, // 10 minutes
+		coinList: 60 * 60 * 1000, // 1 hour
+		current: 30 * 1000 // 30 seconds
 	}
 } as const;
 
@@ -126,7 +126,7 @@ export const REQUEST_CONFIG = {
 	MAX_RETRIES: DEFAULT_CONFIG.request.retries,
 	RETRY_DELAY: 1000, // Base delay for exponential backoff
 	DEFAULT_HEADERS: {
-		'Accept': 'application/json',
+		Accept: 'application/json',
 		'User-Agent': 'SwapCast-Frontend/1.0'
 	}
 } as const;

@@ -1,4 +1,4 @@
-import {expect, test} from '@playwright/test';
+import { expect, test } from '@playwright/test';
 
 test.describe('Admin Dashboard', () => {
 	// Use reasonable timeouts for each test

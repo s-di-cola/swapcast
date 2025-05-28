@@ -1,172 +1,172 @@
 <script lang="ts">
-    /**
-     * Token interface for Uniswap token list items
-     */
-    interface Token {
-        name: string;
-        address: string;
-        symbol: string;
-        decimals: number;
-        chainId: number;
-        logoURI?: string;
-    }
+	/**
+	 * Token interface for Uniswap token list items
+	 */
+	interface Token {
+		name: string;
+		address: string;
+		symbol: string;
+		decimals: number;
+		chainId: number;
+		logoURI?: string;
+	}
 
-    /**
-     * Form state management with SvelteKit 5 runes
-     */
-    let marketName = $state('');
-    let tokenA_address = $state('');
-    let tokenB_address = $state('');
-    let predictionMarketType = $state<'price_binary' | 'price_range'>('price_binary');
-    let targetPrice = $state<number | null>(null);
-    let lowerBoundPrice = $state<number | null>(null);
-    let upperBoundPrice = $state<number | null>(null);
-    let durationHours = $state(24);
-    let resolutionSource = $state('');
+	/**
+	 * Form state management with SvelteKit 5 runes
+	 */
+	let marketName = $state('');
+	let tokenA_address = $state('');
+	let tokenB_address = $state('');
+	let predictionMarketType = $state<'price_binary' | 'price_range'>('price_binary');
+	let targetPrice = $state<number | null>(null);
+	let lowerBoundPrice = $state<number | null>(null);
+	let upperBoundPrice = $state<number | null>(null);
+	let durationHours = $state(24);
+	let resolutionSource = $state('');
 
-    /**
-     * Token list state
-     */
-    let tokenList = $state<Token[]>([]);
-    let isLoadingTokens = $state(true);
-    let errorLoadingTokens = $state<string | null>(null);
+	/**
+	 * Token list state
+	 */
+	let tokenList = $state<Token[]>([]);
+	let isLoadingTokens = $state(true);
+	let errorLoadingTokens = $state<string | null>(null);
 
-    /**
-     * Submission state
-     */
-    let isSubmitting = $state(false);
-    let submissionError = $state<string | null>(null);
-    let submissionSuccess = $state(false);
-    let createdMarketId = $state<string | null>(null);
+	/**
+	 * Submission state
+	 */
+	let isSubmitting = $state(false);
+	let submissionError = $state<string | null>(null);
+	let submissionSuccess = $state(false);
+	let createdMarketId = $state<string | null>(null);
 
-    /**
-     * Fetches token list from Uniswap's GitHub repository
-     * Filters for mainnet tokens only
-     */
-    async function fetchTokenList() {
-        try {
-            const response = await fetch(
-                'https://raw.githubusercontent.com/Uniswap/default-token-list/main/src/tokens/mainnet.json'
-            );
-            if (!response.ok) {
-                throw new Error(`Failed to fetch token list: ${response.statusText}`);
-            }
-            const data = await response.json();
-            tokenList = data.filter((token: Token) => token.chainId === 1);
-        } catch (err: any) {
-            errorLoadingTokens = err.message || 'Could not load token list.';
-        } finally {
-            isLoadingTokens = false;
-        }
-    }
+	/**
+	 * Fetches token list from Uniswap's GitHub repository
+	 * Filters for mainnet tokens only
+	 */
+	async function fetchTokenList() {
+		try {
+			const response = await fetch(
+				'https://raw.githubusercontent.com/Uniswap/default-token-list/main/src/tokens/mainnet.json'
+			);
+			if (!response.ok) {
+				throw new Error(`Failed to fetch token list: ${response.statusText}`);
+			}
+			const data = await response.json();
+			tokenList = data.filter((token: Token) => token.chainId === 1);
+		} catch (err: any) {
+			errorLoadingTokens = err.message || 'Could not load token list.';
+		} finally {
+			isLoadingTokens = false;
+		}
+	}
 
-    /**
-     * Handles form submission for creating a new market
-     * Validates inputs, prepares payload, and sends API request
-     */
-    async function handleSubmit() {
-        // Validate form data
-        if (!marketName || !tokenA_address || !tokenB_address || !durationHours || !resolutionSource) {
-            submissionError = 'Please fill in all required fields';
-            return;
-        }
+	/**
+	 * Handles form submission for creating a new market
+	 * Validates inputs, prepares payload, and sends API request
+	 */
+	async function handleSubmit() {
+		// Validate form data
+		if (!marketName || !tokenA_address || !tokenB_address || !durationHours || !resolutionSource) {
+			submissionError = 'Please fill in all required fields';
+			return;
+		}
 
-        if (predictionMarketType === 'price_binary' && !targetPrice) {
-            submissionError = 'Please enter a target price for binary markets';
-            return;
-        }
+		if (predictionMarketType === 'price_binary' && !targetPrice) {
+			submissionError = 'Please enter a target price for binary markets';
+			return;
+		}
 
-        if (predictionMarketType === 'price_range' && (!lowerBoundPrice || !upperBoundPrice)) {
-            submissionError = 'Please enter both lower and upper bound prices for range markets';
-            return;
-        }
+		if (predictionMarketType === 'price_range' && (!lowerBoundPrice || !upperBoundPrice)) {
+			submissionError = 'Please enter both lower and upper bound prices for range markets';
+			return;
+		}
 
-        // Reset submission state
-        isSubmitting = true;
-        submissionSuccess = false;
-        submissionError = null;
+		// Reset submission state
+		isSubmitting = true;
+		submissionSuccess = false;
+		submissionError = null;
 
-        try {
-            // Prepare the request payload
-            const payload: any = {
-                marketName,
-                tokenA_address,
-                tokenB_address,
-                predictionMarketType,
-                durationHours: parseInt(durationHours.toString()),
-                resolutionSource
-            };
+		try {
+			// Prepare the request payload
+			const payload: any = {
+				marketName,
+				tokenA_address,
+				tokenB_address,
+				predictionMarketType,
+				durationHours: parseInt(durationHours.toString()),
+				resolutionSource
+			};
 
-            // Add market type specific fields
-            if (predictionMarketType === 'price_binary' && targetPrice !== null) {
-                payload.targetPrice = parseFloat(targetPrice.toString());
-            } else if (
-                predictionMarketType === 'price_range' &&
-                lowerBoundPrice !== null &&
-                upperBoundPrice !== null
-            ) {
-                payload.lowerBoundPrice = parseFloat(lowerBoundPrice.toString());
-                payload.upperBoundPrice = parseFloat(upperBoundPrice.toString());
-            }
+			// Add market type specific fields
+			if (predictionMarketType === 'price_binary' && targetPrice !== null) {
+				payload.targetPrice = parseFloat(targetPrice.toString());
+			} else if (
+				predictionMarketType === 'price_range' &&
+				lowerBoundPrice !== null &&
+				upperBoundPrice !== null
+			) {
+				payload.lowerBoundPrice = parseFloat(lowerBoundPrice.toString());
+				payload.upperBoundPrice = parseFloat(upperBoundPrice.toString());
+			}
 
-            // Send the request to the API
-            const response = await fetch('/api/markets', {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json'
-                },
-                body: JSON.stringify(payload)
-            });
+			// Send the request to the API
+			const response = await fetch('/api/markets', {
+				method: 'POST',
+				headers: {
+					'Content-Type': 'application/json'
+				},
+				body: JSON.stringify(payload)
+			});
 
-            const result = await response.json();
+			const result = await response.json();
 
-            if (!response.ok || !result.success) {
-                throw new Error(result.details || result.error || 'Failed to create market');
-            }
+			if (!response.ok || !result.success) {
+				throw new Error(result.details || result.error || 'Failed to create market');
+			}
 
-            // Handle successful response
-            submissionSuccess = true;
-            createdMarketId = result.marketId;
-        } catch (error: any) {
-            submissionError = error.message || 'An unexpected error occurred';
-        } finally {
-            isSubmitting = false;
-        }
-    }
+			// Handle successful response
+			submissionSuccess = true;
+			createdMarketId = result.marketId;
+		} catch (error: any) {
+			submissionError = error.message || 'An unexpected error occurred';
+		} finally {
+			isSubmitting = false;
+		}
+	}
 
-    /**
-     * Resets all form fields to their default values
-     */
-    function resetForm() {
-        marketName = '';
-        tokenA_address = '';
-        tokenB_address = '';
-        predictionMarketType = 'price_binary';
-        targetPrice = null;
-        lowerBoundPrice = null;
-        upperBoundPrice = null;
-        durationHours = 24;
-        resolutionSource = '';
-    }
+	/**
+	 * Resets all form fields to their default values
+	 */
+	function resetForm() {
+		marketName = '';
+		tokenA_address = '';
+		tokenB_address = '';
+		predictionMarketType = 'price_binary';
+		targetPrice = null;
+		lowerBoundPrice = null;
+		upperBoundPrice = null;
+		durationHours = 24;
+		resolutionSource = '';
+	}
 
-    /**
-     * Initialize component and fetch token list
-     */
-    const cleanup = $effect.root(() => {
-        fetchTokenList();
-    });
+	/**
+	 * Initialize component and fetch token list
+	 */
+	const cleanup = $effect.root(() => {
+		fetchTokenList();
+	});
 
-    /**
-     * Reactive effect to update form fields based on market type
-     */
-    $effect(() => {
-        if (predictionMarketType === 'price_binary') {
-            lowerBoundPrice = null;
-            upperBoundPrice = null;
-        } else if (predictionMarketType === 'price_range') {
-            targetPrice = null;
-        }
-    });
+	/**
+	 * Reactive effect to update form fields based on market type
+	 */
+	$effect(() => {
+		if (predictionMarketType === 'price_binary') {
+			lowerBoundPrice = null;
+			upperBoundPrice = null;
+		} else if (predictionMarketType === 'price_range') {
+			targetPrice = null;
+		}
+	});
 </script>
 
 <div

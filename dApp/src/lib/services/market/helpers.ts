@@ -1,19 +1,19 @@
 /**
  * Uniswap v4 Fee Tiers and Tick Spacing Utilities
- * 
+ *
  * This module provides constants and utilities for working with Uniswap v4
  * fee tiers and their corresponding tick spacings.
- * 
+ *
  * @see https://docs.uniswap.org/sdk/v4/reference/constants
  * @see https://docs.uniswap.org/concepts/protocol/fees
  */
 
 /**
  * Standard Uniswap v4 fee amounts (in hundredths of a basis point)
- * 
+ *
  * @example
  * - LOWEST (100) = 0.01%
- * - LOW (500) = 0.05%  
+ * - LOW (500) = 0.05%
  * - MEDIUM (3000) = 0.30%
  * - HIGH (10000) = 1.00%
  */
@@ -30,7 +30,7 @@ export const FeeAmount = {
 
 /**
  * Tick spacing values corresponding to each fee tier
- * 
+ *
  * Tick spacing determines the granularity of liquidity positions.
  * Smaller spacing allows for more precise price ranges.
  */
@@ -48,12 +48,12 @@ export const TickSpacing = {
 /**
  * Type representing valid fee amounts
  */
-export type FeeAmountType = typeof FeeAmount[keyof typeof FeeAmount];
+export type FeeAmountType = (typeof FeeAmount)[keyof typeof FeeAmount];
 
 /**
  * Type representing valid tick spacing values
  */
-export type TickSpacingType = typeof TickSpacing[keyof typeof TickSpacing];
+export type TickSpacingType = (typeof TickSpacing)[keyof typeof TickSpacing];
 
 /**
  * Fee tier information with human-readable details
@@ -101,11 +101,11 @@ export const FEE_TIER_INFO: Record<FeeAmountType, FeeTierInfo> = {
 
 /**
  * Gets the tick spacing for a given fee amount
- * 
+ *
  * @param fee - The fee amount (in hundredths of basis points)
  * @returns The corresponding tick spacing
  * @throws {Error} If the fee amount is not supported
- * 
+ *
  * @example
  * ```typescript
  * const spacing = getTickSpacing(FeeAmount.MEDIUM); // Returns 60
@@ -131,11 +131,11 @@ export function getTickSpacing(fee: number): TickSpacingType {
 
 /**
  * Gets comprehensive information about a fee tier
- * 
+ *
  * @param fee - The fee amount
  * @returns Complete fee tier information
  * @throws {Error} If the fee amount is not supported
- * 
+ *
  * @example
  * ```typescript
  * const info = getFeeTierInfo(FeeAmount.MEDIUM);
@@ -155,10 +155,10 @@ export function getFeeTierInfo(fee: FeeAmountType): FeeTierInfo {
 
 /**
  * Checks if a fee amount is valid/supported
- * 
+ *
  * @param fee - The fee amount to validate
  * @returns True if the fee is supported, false otherwise
- * 
+ *
  * @example
  * ```typescript
  * console.log(isValidFeeAmount(3000)); // true
@@ -171,11 +171,11 @@ export function isValidFeeAmount(fee: number): fee is FeeAmountType {
 
 /**
  * Converts fee amount to human-readable percentage string
- * 
+ *
  * @param fee - The fee amount
  * @returns Formatted percentage string
  * @throws {Error} If the fee amount is not supported
- * 
+ *
  * @example
  * ```typescript
  * console.log(formatFeePercentage(3000)); // "0.30%"
@@ -188,9 +188,9 @@ export function formatFeePercentage(fee: FeeAmountType): string {
 
 /**
  * Gets all available fee tiers with their information
- * 
+ *
  * @returns Array of all fee tier information
- * 
+ *
  * @example
  * ```typescript
  * const allTiers = getAllFeeTiers();
@@ -205,11 +205,11 @@ export function getAllFeeTiers(): FeeTierInfo[] {
 
 /**
  * Finds the most appropriate fee tier for a given use case
- * 
+ *
  * @param isStablePair - Whether the pair consists of stable assets
  * @param isExoticPair - Whether the pair includes exotic/volatile assets
  * @returns Recommended fee amount
- * 
+ *
  * @example
  * ```typescript
  * const stableFee = getRecommendedFeeTier(true, false); // FeeAmount.LOWEST

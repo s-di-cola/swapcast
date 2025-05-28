@@ -1,15 +1,15 @@
 /**
  * Subgraph Service - Main Entry Point
- * 
+ *
  * This is the main entry point for subgraph-related operations.
  * It re-exports all functionality from the sub-modules for easy importing.
- * 
+ *
  * @example
  * ```typescript
- * import { 
- *   getMarketPredictions, 
- *   formatPredictionOutcome, 
- *   formatTimestamp 
+ * import {
+ *   getMarketPredictions,
+ *   formatPredictionOutcome,
+ *   formatTimestamp
  * } from '$lib/services/subgraph/subgraphService';
  * ```
  */
@@ -56,12 +56,7 @@ export {
 } from './utils';
 
 // Re-export client utilities
-export {
-	graphQLClient,
-	executeQuery,
-	checkSubgraphHealth,
-	getSubgraphMeta
-} from './client';
+export { graphQLClient, executeQuery, checkSubgraphHealth, getSubgraphMeta } from './client';
 
 // Re-export query constants (for advanced usage)
 export {

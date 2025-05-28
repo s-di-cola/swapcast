@@ -1,6 +1,6 @@
 /**
  * CoinGecko Service Types
- * 
+ *
  * Type definitions for CoinGecko API responses and service operations
  */
 

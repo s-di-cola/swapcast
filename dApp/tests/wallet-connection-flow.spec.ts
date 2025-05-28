@@ -1,9 +1,9 @@
-import {expect, type Page, test} from '@playwright/test';
-import {type Address, createTestClient, createWalletClient, http} from 'viem';
-import {privateKeyToAccount} from 'viem/accounts';
-import {anvil} from 'viem/chains';
-import {isConnected} from '$lib/stores/wallet';
-import {get} from 'svelte/store';
+import { expect, type Page, test } from '@playwright/test';
+import { type Address, createTestClient, createWalletClient, http } from 'viem';
+import { privateKeyToAccount } from 'viem/accounts';
+import { anvil } from 'viem/chains';
+import { isConnected } from '$lib/stores/wallet';
+import { get } from 'svelte/store';
 
 // Test account from Anvil
 const TEST_ACCOUNT = {

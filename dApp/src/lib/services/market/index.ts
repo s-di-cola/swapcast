@@ -1,9 +1,9 @@
 /**
  * Market Service - Main Entry Point
- * 
+ *
  * This is the main entry point for market-related operations.
  * It re-exports all functionality from the sub-modules for easy importing.
- * 
+ *
  * @example
  * ```typescript
  * import { getAllMarkets, createMarket, getMarketDetails } from '$lib/services/market/marketService';
@@ -26,10 +26,7 @@ export type {
 } from './types';
 
 // Re-export contract functions
-export { 
-	getMarketCount,
-    getMarketDetails
-} from './contracts';
+export { getMarketCount, getMarketDetails } from './contracts';
 
 // Re-export operations
 export {
@@ -40,8 +37,4 @@ export {
 } from './operations';
 
 // Re-export utilities if needed externally
-export {
-	getMarketStatus,
-	sortMarkets,
-	applyDefaultSort
-} from './utils';
+export { getMarketStatus, sortMarkets, applyDefaultSort } from './utils';

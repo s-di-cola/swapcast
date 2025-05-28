@@ -1,6 +1,6 @@
 /**
  * Market Operations
- * 
+ *
  * High-level market operations and business logic
  */
 
@@ -12,23 +12,23 @@ import { PUBLIC_PREDICTIONMANAGER_ADDRESS } from '$env/static/public';
 import { getMarketCount, getMarketDetails } from './contracts';
 import { sortMarkets, applyDefaultSort, DEFAULT_ETH_USD_PRICE_FEED } from './utils';
 import { getPredictionManager } from '$generated/types/PredictionManager';
-import type { 
-	MarketPaginationOptions, 
-	PaginatedMarkets, 
-	MarketCreationResult, 
-	PoolOperationResult, 
-	PoolKey 
+import type {
+	MarketPaginationOptions,
+	PaginatedMarkets,
+	MarketCreationResult,
+	PoolOperationResult,
+	PoolKey
 } from './types';
 
 /**
  * Gets the count of active (open) markets
- * 
+ *
  * @returns Promise resolving to the count of open markets
  */
 export async function getActiveMarketsCount(): Promise<number> {
 	try {
 		const allMarkets = await getAllMarkets({ page: 1, pageSize: 1000 });
-		return allMarkets.markets.filter(market => market.status === 'Open').length;
+		return allMarkets.markets.filter((market) => market.status === 'Open').length;
 	} catch (error) {
 		console.error('Failed to get active markets count:', error);
 		return 0;
@@ -37,7 +37,7 @@ export async function getActiveMarketsCount(): Promise<number> {
 
 /**
  * Retrieves all markets with optional pagination and sorting
- * 
+ *
  * @param options - Pagination and sorting configuration
  * @returns Promise resolving to paginated market results
  */
@@ -56,7 +56,7 @@ export async function getAllMarkets(options?: MarketPaginationOptions): Promise<
 
 		// Generate market IDs and fetch details in parallel
 		const marketIds = Array.from({ length: count }, (_, i) => BigInt(i));
-		const markets = await Promise.all(marketIds.map(id => getMarketDetails(id)));
+		const markets = await Promise.all(marketIds.map((id) => getMarketDetails(id)));
 
 		// Apply sorting
 		let sortedMarkets = markets;
@@ -71,7 +71,7 @@ export async function getAllMarkets(options?: MarketPaginationOptions): Promise<
 			const startIndex = (options.page - 1) * options.pageSize;
 			const endIndex = startIndex + options.pageSize;
 			const paginatedMarkets = sortedMarkets.slice(startIndex, endIndex);
-			
+
 			return {
 				markets: paginatedMarkets,
 				totalCount: sortedMarkets.length,
@@ -99,7 +99,7 @@ export async function getAllMarkets(options?: MarketPaginationOptions): Promise<
 
 /**
  * Creates a new prediction market
- * 
+ *
  * @param marketName - Human-readable market name
  * @param priceFeedKey - Price feed identifier (e.g., 'ETH/USD')
  * @param expirationTime - Unix timestamp when market expires
@@ -127,40 +127,32 @@ export async function createMarket(
 		});
 
 		// Simulate transaction first to catch errors early
-		await predictionManager.simulate.createMarket([
-			marketName,
-			priceFeedKey,
-			expirationTimestamp,
-			priceAggregator,
-			priceThreshold,
-			poolKey
-		], {
-			chain: chain,
-			account: appKit.getAccount()?.address as Address,
-		});
+		await predictionManager.simulate.createMarket(
+			[marketName, priceFeedKey, expirationTimestamp, priceAggregator, priceThreshold, poolKey],
+			{
+				chain: chain,
+				account: appKit.getAccount()?.address as Address
+			}
+		);
 
 		// Execute the transaction
-		const hash = await predictionManager.write.createMarket([
-			marketName,
-			priceFeedKey,
-			expirationTimestamp,
-			priceAggregator,
-			priceThreshold,
-			poolKey
-		], {
-			chain: chain,
-			account: appKit.getAccount()?.address as Address,
-		});
+		const hash = await predictionManager.write.createMarket(
+			[marketName, priceFeedKey, expirationTimestamp, priceAggregator, priceThreshold, poolKey],
+			{
+				chain: chain,
+				account: appKit.getAccount()?.address as Address
+			}
+		);
 
 		// Try to get market ID from transaction receipt
 		try {
 			const publicClient = (appKit as any).getPublicClient?.();
 			if (publicClient) {
 				const receipt = await publicClient.waitForTransactionReceipt({ hash });
-				const marketCreatedEvent = receipt.logs.find((log: any) => 
-					log.address.toLowerCase() === PUBLIC_PREDICTIONMANAGER_ADDRESS.toLowerCase()
+				const marketCreatedEvent = receipt.logs.find(
+					(log: any) => log.address.toLowerCase() === PUBLIC_PREDICTIONMANAGER_ADDRESS.toLowerCase()
 				);
-				
+
 				if (marketCreatedEvent?.topics[1]) {
 					const marketId = BigInt(marketCreatedEvent.topics[1]).toString();
 					return {
@@ -192,7 +184,7 @@ export async function createMarket(
 /**
  * Ensures a Uniswap v4 pool exists for the given tokens and fee tier
  * Creates the pool if it doesn't exist
- * 
+ *
  * @param tokenA - Address of first token
  * @param tokenB - Address of second token
  * @param fee - Fee tier (100, 500, 3000, or 10000)
@@ -201,19 +193,19 @@ export async function createMarket(
 export async function getOrCreateMarketPool(
 	tokenA: Address,
 	tokenB: Address,
-	fee: number,
+	fee: number
 ): Promise<PoolOperationResult> {
 	try {
 		const result = await createPool(tokenA, tokenB, fee);
-		
+
 		if (result.success) {
 			return {
 				poolExists: false,
 				poolCreated: true,
 				hash: result.hash
 			};
-		} 
-		
+		}
+
 		if (result.message?.toLowerCase().includes('already exists')) {
 			return {
 				poolExists: true,
@@ -221,17 +213,17 @@ export async function getOrCreateMarketPool(
 				info: 'Pool already exists for this market. Proceeding to create the market only.'
 			};
 		}
-		
+
 		return {
 			poolExists: false,
 			poolCreated: false,
 			error: result.message
 		};
 	} catch (err: any) {
-		return { 
-			poolExists: false, 
-			poolCreated: false, 
-			error: err.message 
+		return {
+			poolExists: false,
+			poolCreated: false,
+			error: err.message
 		};
 	}
 }

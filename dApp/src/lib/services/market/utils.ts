@@ -1,11 +1,17 @@
 /**
  * Market Utilities
- * 
+ *
  * Helper functions for market operations
  */
 
 import type { Address } from 'viem';
-import type { Market, MarketStatus, MarketSortField, SortDirection, MarketDetailsResult } from './types';
+import type {
+	Market,
+	MarketStatus,
+	MarketSortField,
+	SortDirection,
+	MarketDetailsResult
+} from './types';
 
 /**
  * Time constants for calculations
@@ -32,7 +38,7 @@ export const DEFAULT_ETH_USD_PRICE_FEED = '0x5f4eC3Df9cbd43714FE2740f5E3616155c5
 
 /**
  * Determines market status and expiration display based on resolution and time
- * 
+ *
  * @param resolved - Whether the market has been resolved
  * @param timeRemaining - Seconds until expiration (negative if expired)
  * @returns Object with status and human-readable expiration display
@@ -44,14 +50,18 @@ export function getMarketStatus(
 	if (resolved) {
 		return { status: 'Resolved', expirationDisplay: 'Resolved' };
 	}
-	
+
 	if (timeRemaining <= 0) {
 		return { status: 'Expired', expirationDisplay: 'Expired' };
 	}
 
 	const days = Math.floor(timeRemaining / TIME_CONSTANTS.SECONDS_PER_DAY);
-	const hours = Math.floor((timeRemaining % TIME_CONSTANTS.SECONDS_PER_DAY) / TIME_CONSTANTS.SECONDS_PER_HOUR);
-	const minutes = Math.floor((timeRemaining % TIME_CONSTANTS.SECONDS_PER_HOUR) / TIME_CONSTANTS.SECONDS_PER_MINUTE);
+	const hours = Math.floor(
+		(timeRemaining % TIME_CONSTANTS.SECONDS_PER_DAY) / TIME_CONSTANTS.SECONDS_PER_HOUR
+	);
+	const minutes = Math.floor(
+		(timeRemaining % TIME_CONSTANTS.SECONDS_PER_HOUR) / TIME_CONSTANTS.SECONDS_PER_MINUTE
+	);
 
 	let expirationDisplay = `${minutes}m`;
 	if (days > 0) {
@@ -65,13 +75,13 @@ export function getMarketStatus(
 
 /**
  * Creates a default market object for error cases or non-existent markets
- * 
+ *
  * @param id - Market ID
  * @returns Default market with safe values
  */
 export function createDefaultMarket(id: bigint): Market {
 	const { status, expirationDisplay } = getMarketStatus(false, -1);
-	
+
 	return {
 		id: id.toString(),
 		name: `Market ${id}`,
@@ -93,7 +103,7 @@ export function createDefaultMarket(id: bigint): Market {
 
 /**
  * Transforms raw contract data into Market interface
- * 
+ *
  * @param details - Raw market details from contract
  * @returns Properly formatted Market object
  */
@@ -124,16 +134,20 @@ export function transformMarketDetails(details: MarketDetailsResult): Market {
 
 /**
  * Sorts markets based on specified field and direction
- * 
+ *
  * @param markets - Array of markets to sort
  * @param sortField - Field to sort by
  * @param sortDirection - Direction to sort (asc/desc)
  * @returns New sorted array of markets
  */
-export function sortMarkets(markets: Market[], sortField: MarketSortField, sortDirection: SortDirection): Market[] {
+export function sortMarkets(
+	markets: Market[],
+	sortField: MarketSortField,
+	sortDirection: SortDirection
+): Market[] {
 	return [...markets].sort((a, b) => {
 		let comparison = 0;
-		
+
 		switch (sortField) {
 			case 'id':
 				comparison = Number(a.id) - Number(b.id);
@@ -159,14 +173,14 @@ export function sortMarkets(markets: Market[], sortField: MarketSortField, sortD
 			default:
 				comparison = 0;
 		}
-		
+
 		return sortDirection === 'asc' ? comparison : -comparison;
 	});
 }
 
 /**
  * Applies default sorting logic to markets (Open > Expired > Resolved, newest first within each status)
- * 
+ *
  * @param markets - Array of markets to sort
  * @returns Sorted array with default logic applied
  */
@@ -175,7 +189,7 @@ export function applyDefaultSort(markets: Market[]): Market[] {
 		// First sort by status priority
 		const statusComparison = STATUS_PRIORITY[a.status] - STATUS_PRIORITY[b.status];
 		if (statusComparison !== 0) return statusComparison;
-		
+
 		// Within same status, sort by ID descending (newest first)
 		return Number(b.id) - Number(a.id);
 	});

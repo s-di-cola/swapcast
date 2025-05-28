@@ -2,7 +2,7 @@
 	export let marketConsensus: number;
 	export let accuracy: number;
 	export let rank: number;
-    import {Card} from 'flowbite-svelte';
+	import { Card } from 'flowbite-svelte';
 </script>
 
 <div class="flex h-full flex-col gap-8">

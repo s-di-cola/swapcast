@@ -1,6 +1,6 @@
 /**
  * Subgraph Service Types
- * 
+ *
  * Type definitions for The Graph subgraph data structures
  */
 

@@ -1,6 +1,6 @@
 /**
  * Market Contract Interactions
- * 
+ *
  * Direct blockchain interactions for market operations
  */
 
@@ -13,12 +13,12 @@ import { createDefaultMarket, transformMarketDetails } from './utils';
 
 /**
  * Gets the prediction manager contract instance
- * 
+ *
  * @returns Configured prediction manager contract
  */
 function getPredictionManagerContract() {
 	const { rpcUrl, chain } = getCurrentNetworkConfig();
-	
+
 	return getPredictionManager({
 		address: PUBLIC_PREDICTIONMANAGER_ADDRESS,
 		chain: chain,
@@ -28,7 +28,7 @@ function getPredictionManagerContract() {
 
 /**
  * Gets the total number of markets from the contract
- * 
+ *
  * @returns Promise resolving to the total market count
  */
 export async function getMarketCount(): Promise<number> {
@@ -44,7 +44,7 @@ export async function getMarketCount(): Promise<number> {
 
 /**
  * Retrieves detailed information about a specific market
- * 
+ *
  * @param marketId - Market ID (string or bigint)
  * @returns Promise resolving to Market object
  */
@@ -57,12 +57,29 @@ export async function getMarketDetails(marketId: string | bigint) {
 
 		// Destructure the contract response
 		const [
-			_id, description, assetPair, exists, resolved, winningOutcome,
-			totalConvictionBearish, totalConvictionBullish, expirationTimestamp,
-			priceOracle, priceThreshold
+			_id,
+			description,
+			assetPair,
+			exists,
+			resolved,
+			winningOutcome,
+			totalConvictionBearish,
+			totalConvictionBullish,
+			expirationTimestamp,
+			priceOracle,
+			priceThreshold
 		] = result as readonly [
-			bigint, string, string, boolean, boolean, number,
-			bigint, bigint, bigint, Address, bigint
+			bigint,
+			string,
+			string,
+			boolean,
+			boolean,
+			number,
+			bigint,
+			bigint,
+			bigint,
+			Address,
+			bigint
 		];
 
 		const details: MarketDetailsResult = {

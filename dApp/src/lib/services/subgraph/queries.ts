@@ -1,6 +1,6 @@
 /**
  * GraphQL Queries for Subgraph
- * 
+ *
  * Centralized GraphQL query definitions for The Graph subgraph
  */
 
@@ -112,12 +112,7 @@ export const GET_MARKET_STATS = gql`
  */
 export const GET_RECENT_PREDICTIONS = gql`
 	query GetRecentPredictions($limit: Int!, $skip: Int!) {
-		predictions(
-			orderBy: timestamp
-			orderDirection: desc
-			first: $limit
-			skip: $skip
-		) {
+		predictions(orderBy: timestamp, orderDirection: desc, first: $limit, skip: $skip) {
 			id
 			market {
 				id
@@ -141,12 +136,7 @@ export const GET_RECENT_PREDICTIONS = gql`
  */
 export const GET_ALL_MARKETS = gql`
 	query GetAllMarkets($limit: Int!, $skip: Int!) {
-		markets(
-			orderBy: creationTimestamp
-			orderDirection: desc
-			first: $limit
-			skip: $skip
-		) {
+		markets(orderBy: creationTimestamp, orderDirection: desc, first: $limit, skip: $skip) {
 			id
 			marketId
 			description

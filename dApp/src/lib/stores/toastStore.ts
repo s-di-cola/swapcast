@@ -4,93 +4,93 @@ export type ToastType = 'success' | 'error' | 'info' | 'warning';
 export type ToastPosition = 'top-center' | 'top-right' | 'bottom-right' | 'bottom-center';
 
 export interface Toast {
-  id: string;
-  type: ToastType;
-  message: string;
-  duration: number;
-  position?: ToastPosition;
-  dismissible?: boolean;
+	id: string;
+	type: ToastType;
+	message: string;
+	duration: number;
+	position?: ToastPosition;
+	dismissible?: boolean;
 }
 
 function createToastStore() {
-  const { subscribe, update } = writable<Toast[]>([]);
+	const { subscribe, update } = writable<Toast[]>([]);
 
-  interface ToastOptions {
-    duration?: number;
-    position?: ToastPosition;
-    dismissible?: boolean;
-  }
+	interface ToastOptions {
+		duration?: number;
+		position?: ToastPosition;
+		dismissible?: boolean;
+	}
 
-  const defaultOptions: ToastOptions = {
-    duration: 5000,
-    position: 'top-center',
-    dismissible: true
-  };
+	const defaultOptions: ToastOptions = {
+		duration: 5000,
+		position: 'top-center',
+		dismissible: true
+	};
 
-  function addToast(type: ToastType, message: string, options: ToastOptions = {}) {
-    const id = Date.now().toString();
-    const toastOptions = { ...defaultOptions, ...options };
-    
-    const toast: Toast = { 
-      id, 
-      type, 
-      message, 
-      duration: toastOptions.duration!, 
-      position: toastOptions.position,
-      dismissible: toastOptions.dismissible
-    };
-    
-    console.log('Adding new toast:', { type, message, toastOptions });
-    update(toasts => {
-      const newToasts = [...toasts, toast];
-      console.log('Current toasts after add:', newToasts);
-      return newToasts;
-    });
-    
-    // Auto-remove toast after duration
-    if (toast.duration > 0) {
-      setTimeout(() => {
-        removeToast(id);
-      }, toast.duration);
-    }
-    
-    return id;
-  }
+	function addToast(type: ToastType, message: string, options: ToastOptions = {}) {
+		const id = Date.now().toString();
+		const toastOptions = { ...defaultOptions, ...options };
 
-  function removeToast(id: string) {
-    update(toasts => toasts.filter(toast => toast.id !== id));
-  }
+		const toast: Toast = {
+			id,
+			type,
+			message,
+			duration: toastOptions.duration!,
+			position: toastOptions.position,
+			dismissible: toastOptions.dismissible
+		};
 
-  function success(message: string, options: ToastOptions = {}) {
-    return addToast('success', message, options);
-  }
+		console.log('Adding new toast:', { type, message, toastOptions });
+		update((toasts) => {
+			const newToasts = [...toasts, toast];
+			console.log('Current toasts after add:', newToasts);
+			return newToasts;
+		});
 
-  function error(message: string, options: ToastOptions = {}) {
-    return addToast('error', message, options);
-  }
-  
-  function info(message: string, options: ToastOptions = {}) {
-    return addToast('info', message, options);
-  }
-  
-  function warning(message: string, options: ToastOptions = {}) {
-    return addToast('warning', message, options);
-  }
+		// Auto-remove toast after duration
+		if (toast.duration > 0) {
+			setTimeout(() => {
+				removeToast(id);
+			}, toast.duration);
+		}
 
-  function clear() {
-    update(() => []);
-  }
+		return id;
+	}
 
-  return {
-    subscribe,
-    addToast,
-    removeToast,
-    success,
-    error,
-    info,
-    warning,
-    clear
-  };
+	function removeToast(id: string) {
+		update((toasts) => toasts.filter((toast) => toast.id !== id));
+	}
+
+	function success(message: string, options: ToastOptions = {}) {
+		return addToast('success', message, options);
+	}
+
+	function error(message: string, options: ToastOptions = {}) {
+		return addToast('error', message, options);
+	}
+
+	function info(message: string, options: ToastOptions = {}) {
+		return addToast('info', message, options);
+	}
+
+	function warning(message: string, options: ToastOptions = {}) {
+		return addToast('warning', message, options);
+	}
+
+	function clear() {
+		update(() => []);
+	}
+
+	return {
+		subscribe,
+		addToast,
+		removeToast,
+		success,
+		error,
+		info,
+		warning,
+		clear
+	};
 }
 
 export const toastStore = createToastStore();

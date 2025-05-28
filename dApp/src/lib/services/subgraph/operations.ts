@@ -1,6 +1,6 @@
 /**
  * Subgraph Operations
- * 
+ *
  * High-level operations for fetching and processing subgraph data
  */
 
@@ -26,12 +26,12 @@ import type {
 
 /**
  * Fetches predictions (transactions) for a specific market with pagination support
- * 
+ *
  * @param marketId - ID of the market to fetch predictions for
  * @param limit - Maximum number of predictions to fetch (default: 10)
  * @param page - Page number for pagination (default: 1)
  * @returns Promise resolving to an array of predictions
- * 
+ *
  * @example
  * ```typescript
  * const predictions = await getMarketPredictions('123', 20, 1);
@@ -44,19 +44,19 @@ export async function getMarketPredictions(
 	page: number = 1
 ): Promise<SubgraphPrediction[]> {
 	const { skip, limit: validatedLimit } = calculatePagination({ limit, page });
-	
+
 	const variables = {
 		marketId,
 		limit: validatedLimit,
 		skip
 	};
-	
+
 	try {
 		const result = await executeQuery<{ predictions: SubgraphPrediction[] }>(
 			GET_MARKET_PREDICTIONS,
 			variables
 		);
-		
+
 		return result?.predictions || [];
 	} catch (error) {
 		console.error(`Error fetching predictions for market ${marketId}:`, error);
@@ -66,10 +66,10 @@ export async function getMarketPredictions(
 
 /**
  * Fetches a specific market's details from the subgraph
- * 
+ *
  * @param marketId - ID of the market to fetch
  * @returns Promise resolving to the market details or null if not found
- * 
+ *
  * @example
  * ```typescript
  * const market = await getMarketFromSubgraph('123');
@@ -80,11 +80,10 @@ export async function getMarketPredictions(
  */
 export async function getMarketFromSubgraph(marketId: string): Promise<SubgraphMarket | null> {
 	try {
-		const result = await executeQuery<{ market: SubgraphMarket | null }>(
-			GET_MARKET_DETAILS,
-			{ marketId }
-		);
-		
+		const result = await executeQuery<{ market: SubgraphMarket | null }>(GET_MARKET_DETAILS, {
+			marketId
+		});
+
 		return result?.market || null;
 	} catch (error) {
 		console.error(`Error fetching market ${marketId}:`, error);
@@ -94,11 +93,11 @@ export async function getMarketFromSubgraph(marketId: string): Promise<SubgraphM
 
 /**
  * Fetches a user's prediction history with pagination
- * 
+ *
  * @param userAddress - Ethereum address of the user
  * @param options - Pagination options
  * @returns Promise resolving to user's predictions
- * 
+ *
  * @example
  * ```typescript
  * const predictions = await getUserPredictions('0x123...', { limit: 50, page: 1 });
@@ -109,25 +108,25 @@ export async function getUserPredictions(
 	options: SubgraphPaginationOptions = {}
 ): Promise<SubgraphUserPrediction[]> {
 	const { skip, limit } = calculatePagination(options);
-	
+
 	const variables = {
 		userAddress: userAddress.toLowerCase(),
 		limit,
 		skip
 	};
-	
+
 	try {
 		const result = await executeQuery<{ predictions: SubgraphPrediction[] }>(
 			GET_USER_PREDICTIONS,
 			variables
 		);
-		
+
 		if (!result?.predictions) {
 			return [];
 		}
-		
+
 		// Transform to user prediction format with winning status
-		return result.predictions.map(prediction => ({
+		return result.predictions.map((prediction) => ({
 			id: prediction.id,
 			marketId: prediction.market.id,
 			marketDescription: prediction.market.description,
@@ -136,10 +135,7 @@ export async function getUserPredictions(
 			timestamp: prediction.timestamp,
 			claimed: prediction.claimed,
 			reward: prediction.reward,
-			isWinning: isPredictionWinning(
-				prediction.outcome,
-				(prediction.market as any).winningOutcome
-			)
+			isWinning: isPredictionWinning(prediction.outcome, (prediction.market as any).winningOutcome)
 		}));
 	} catch (error) {
 		console.error(`Error fetching predictions for user ${userAddress}:`, error);
@@ -149,10 +145,10 @@ export async function getUserPredictions(
 
 /**
  * Fetches recent predictions across all markets
- * 
+ *
  * @param options - Pagination options
  * @returns Promise resolving to recent predictions
- * 
+ *
  * @example
  * ```typescript
  * const recent = await getRecentPredictions({ limit: 100 });
@@ -162,15 +158,15 @@ export async function getRecentPredictions(
 	options: SubgraphPaginationOptions = {}
 ): Promise<SubgraphPrediction[]> {
 	const { skip, limit } = calculatePagination(options);
-	
+
 	const variables = { limit, skip };
-	
+
 	try {
 		const result = await executeQuery<{ predictions: SubgraphPrediction[] }>(
 			GET_RECENT_PREDICTIONS,
 			variables
 		);
-		
+
 		return result?.predictions || [];
 	} catch (error) {
 		console.error('Error fetching recent predictions:', error);
@@ -180,10 +176,10 @@ export async function getRecentPredictions(
 
 /**
  * Fetches all markets with pagination
- * 
+ *
  * @param options - Pagination options
  * @returns Promise resolving to paginated markets
- * 
+ *
  * @example
  * ```typescript
  * const markets = await getAllMarketsFromSubgraph({ limit: 20, page: 1 });
@@ -193,17 +189,14 @@ export async function getAllMarketsFromSubgraph(
 	options: SubgraphPaginationOptions = {}
 ): Promise<SubgraphPaginatedResponse<SubgraphMarket>> {
 	const { skip, limit } = calculatePagination(options);
-	
+
 	const variables = { limit, skip };
-	
+
 	try {
-		const result = await executeQuery<{ markets: SubgraphMarket[] }>(
-			GET_ALL_MARKETS,
-			variables
-		);
-		
+		const result = await executeQuery<{ markets: SubgraphMarket[] }>(GET_ALL_MARKETS, variables);
+
 		const markets = result?.markets || [];
-		
+
 		return {
 			data: markets,
 			hasMore: markets.length === limit
@@ -216,11 +209,11 @@ export async function getAllMarketsFromSubgraph(
 
 /**
  * Searches markets by description
- * 
+ *
  * @param searchTerm - Search term to match against market descriptions
  * @param limit - Maximum number of results (default: 20)
  * @returns Promise resolving to matching markets
- * 
+ *
  * @example
  * ```typescript
  * const markets = await searchMarkets('ethereum', 10);
@@ -233,18 +226,15 @@ export async function searchMarkets(
 	if (!searchTerm.trim()) {
 		return [];
 	}
-	
+
 	const variables = {
 		searchTerm: searchTerm.trim(),
 		limit
 	};
-	
+
 	try {
-		const result = await executeQuery<{ markets: SubgraphMarket[] }>(
-			SEARCH_MARKETS,
-			variables
-		);
-		
+		const result = await executeQuery<{ markets: SubgraphMarket[] }>(SEARCH_MARKETS, variables);
+
 		return result?.markets || [];
 	} catch (error) {
 		console.error(`Error searching markets with term "${searchTerm}":`, error);
@@ -254,10 +244,10 @@ export async function searchMarkets(
 
 /**
  * Fetches comprehensive market statistics
- * 
+ *
  * @param marketId - ID of the market
  * @returns Promise resolving to market statistics
- * 
+ *
  * @example
  * ```typescript
  * const stats = await getMarketStatistics('123');
@@ -272,13 +262,13 @@ export async function getMarketStatistics(marketId: string): Promise<SubgraphMar
 				totalStakedOutcome0: string;
 				totalStakedOutcome1: string;
 				predictions: SubgraphPrediction[];
-			}
+			};
 		}>(GET_MARKET_STATS, { marketId });
-		
+
 		if (!result?.market) {
 			return null;
 		}
-		
+
 		return calculateMarketStats(result.market.predictions);
 	} catch (error) {
 		console.error(`Error fetching statistics for market ${marketId}:`, error);
@@ -288,10 +278,10 @@ export async function getMarketStatistics(marketId: string): Promise<SubgraphMar
 
 /**
  * Batch fetch multiple markets by IDs
- * 
+ *
  * @param marketIds - Array of market IDs to fetch
  * @returns Promise resolving to array of markets
- * 
+ *
  * @example
  * ```typescript
  * const markets = await batchGetMarkets(['123', '456', '789']);
@@ -301,19 +291,19 @@ export async function batchGetMarkets(marketIds: string[]): Promise<SubgraphMark
 	if (!marketIds.length) {
 		return [];
 	}
-	
+
 	// Execute requests in parallel but limit concurrency
 	const BATCH_SIZE = 10;
 	const results: SubgraphMarket[] = [];
-	
+
 	for (let i = 0; i < marketIds.length; i += BATCH_SIZE) {
 		const batch = marketIds.slice(i, i + BATCH_SIZE);
-		const batchPromises = batch.map(id => getMarketFromSubgraph(id));
+		const batchPromises = batch.map((id) => getMarketFromSubgraph(id));
 		const batchResults = await Promise.all(batchPromises);
-		
+
 		// Filter out null results
 		results.push(...batchResults.filter((market): market is SubgraphMarket => market !== null));
 	}
-	
+
 	return results;
 }
