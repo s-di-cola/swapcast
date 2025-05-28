@@ -1,6 +1,6 @@
 <script lang="ts">
-    import type { Market } from '$lib/services/market/marketService';
-    import type { MarketSortField, SortDirection } from '$lib/services/market/marketService';
+    import type { Market } from '$lib/services/market';
+    import type { MarketSortField, SortDirection } from '$lib/services/market';
     
     interface Props {
         markets?: Market[];

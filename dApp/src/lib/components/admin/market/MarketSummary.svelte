@@ -1,6 +1,6 @@
 <script lang="ts">
     import { ChartPieSolid } from 'flowbite-svelte-icons';
-    import type { Market } from '$lib/services/market/marketService';
+    import type { Market } from '$lib/services/market';
     
     interface Props {
         market: Market;

@@ -1,7 +1,7 @@
 <script lang="ts">
     import { onMount } from 'svelte';
     import { Spinner } from 'flowbite-svelte';
-    import type { Market } from '$lib/services/market/marketService';
+    import type { Market } from '$lib/services/market';
     import { 
         getHistoricalPriceData, 
         getCoinIdFromAssetPair 

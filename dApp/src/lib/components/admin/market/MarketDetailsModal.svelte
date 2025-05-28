@@ -1,7 +1,7 @@
 <script lang="ts">
     import { Button, Modal, Spinner } from 'flowbite-svelte';
     import { ExclamationCircleSolid, XSolid } from 'flowbite-svelte-icons';
-    import { getMarketDetails, type Market } from '$lib/services/market/marketService';
+    import { getMarketDetails, type Market } from '$lib/services/market';
     
     import MarketSummary from './MarketSummary.svelte';
     import MarketFinancials from './MarketFinancials.svelte';

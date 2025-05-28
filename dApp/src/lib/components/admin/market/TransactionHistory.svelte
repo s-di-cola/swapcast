@@ -1,6 +1,6 @@
 <script lang="ts">
     import { onMount } from 'svelte';
-    import type { Market } from '$lib/services/market/marketService';
+    import type { Market } from '$lib/services/market';
     import { 
         getMarketPredictions, 
         formatPredictionOutcome, 

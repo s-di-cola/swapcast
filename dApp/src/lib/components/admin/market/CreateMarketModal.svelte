@@ -2,7 +2,7 @@
 	import { onMount } from 'svelte';
 	import { Button, Helper, Input, Label, Modal, Select, Spinner } from 'flowbite-svelte';
 	import { toastStore } from '$lib/stores/toastStore';
-	import { createMarket, getOrCreateMarketPool } from '$lib/services/market/marketService';
+	import { createMarket, getOrCreateMarketPool } from '$lib/services/market';
 	import type { Address } from 'viem';
 	import { PUBLIC_SWAPCASTHOOK_ADDRESS } from '$env/static/public';
 	import { getTickSpacing } from '$lib/services/market/helpers';

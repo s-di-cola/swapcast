@@ -5,7 +5,7 @@
     import { MarketDetailsModal } from '$lib/components/admin/market';
     import {Spinner} from 'flowbite-svelte';
     import type {PredictionSide, Token} from '$lib/types';
-    import {getAllMarkets} from '$lib/services/market/marketService';
+    import {getAllMarkets} from '$lib/services/market';
 
     // Define Token Objects
 	const ethToken: Token = { symbol: 'ETH', name: 'Ethereum' };

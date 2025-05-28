@@ -6,7 +6,7 @@
         type MarketSortField, 
         type SortDirection,
         type MarketPaginationOptions
-    } from '$lib/services/market/marketService';
+    } from '$lib/services/market';
     import { 
         CreateMarketModal, 
         MarketDetailsModal 
