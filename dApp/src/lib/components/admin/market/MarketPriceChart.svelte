@@ -5,7 +5,7 @@
     import { 
         getHistoricalPriceData, 
         getCoinIdFromAssetPair 
-    } from '$lib/services/price/coinGeckoService';
+    } from '$lib/services/price/operations';
     
     interface Props {
         market: Market;

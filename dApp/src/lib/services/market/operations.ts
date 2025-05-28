@@ -4,12 +4,12 @@
  * High-level market operations and business logic
  */
 
-import { type Address, parseEther } from 'viem';
-import { createPool } from '../poolService';
+import { type Address, parseEther, http } from 'viem';
+import { createPool } from './poolService';
 import { appKit } from '$lib/configs/wallet.config';
 import { getCurrentNetworkConfig } from '$lib/utils/network';
 import { PUBLIC_PREDICTIONMANAGER_ADDRESS } from '$env/static/public';
-import { getMarketCount, getMarketDetails } from './contract';
+import { getMarketCount, getMarketDetails } from './contracts';
 import { sortMarkets, applyDefaultSort, DEFAULT_ETH_USD_PRICE_FEED } from './utils';
 import { getPredictionManager } from '$generated/types/PredictionManager';
 import type { 
