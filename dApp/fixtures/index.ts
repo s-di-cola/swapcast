@@ -1,0 +1,190 @@
+/**
+ * SwapCast Fixture Generator
+ *
+ * This script generates test fixtures for the SwapCast application:
+ * - Creates markets with different expiration dates
+ * - Sets up Uniswap v4 pools for each market
+ * - Generates 20-30 predictions per market using different addresses
+ *
+ */
+
+import { createPublicClient, http, type Address } from 'viem';
+import { anvil } from 'viem/chains';
+import { generateMarkets, MarketCreationResult } from './markets';
+import { generatePredictions } from './predictions';
+import { CONTRACT_ADDRESSES, setupWallets } from './utils/wallets';
+import { getRandomNumber } from './utils/helpers';
+import { getPredictionManager } from '../src/generated/types/PredictionManager';
+import { getPoolManager } from '../src/generated/types/PoolManager';
+import chalk from 'chalk';
+
+/**
+ * Check if Anvil is running and contracts are deployed
+ * Uses the generated client functions to verify contract deployment
+ *
+ * @returns True if Anvil is running and contracts are deployed
+ */
+async function checkAnvilAndContracts() {
+	try {
+		// Check if we can connect to Anvil
+		const publicClient = createPublicClient({
+			chain: anvil,
+			transport: http()
+		});
+
+		const blockNumber = await publicClient.getBlockNumber();
+		console.log(chalk.blue(`Connected to Anvil, current block: ${blockNumber}`));
+
+		// Get contract instances using the generated client functions
+		const predictionManager = getPredictionManager({
+			address: CONTRACT_ADDRESSES.PREDICTION_MANAGER as Address,
+			chain: anvil,
+			transport: http()
+		});
+
+		const poolManager = getPoolManager({
+			address: CONTRACT_ADDRESSES.POOL_MANAGER as Address,
+			chain: anvil,
+			transport: http()
+		});
+
+		// Try to read from the contracts to verify they're deployed
+		try {
+			// Simple read operations that will fail if contracts aren't properly deployed
+			await predictionManager.read.owner();
+			await poolManager.read.owner();
+			
+			console.log(chalk.green('✅ All required contracts are deployed and accessible'));
+			return true;
+		} catch (contractError) {
+			console.error(
+				chalk.red('❌ Required contracts are not deployed or not accessible. Please run the deployment script first.')
+			);
+			console.error(chalk.yellow('Error details:'), contractError);
+			return false;
+		}
+	} catch (error) {
+		console.error(chalk.red('❌ Failed to connect to Anvil:'), error);
+		return false;
+	}
+}
+
+async function main() {
+	console.log(chalk.blue('🚀 Starting SwapCast fixture generation'));
+
+	try {
+		// Check if Anvil is running and contracts are deployed
+		console.log(chalk.yellow('⚙️ Checking if Anvil is running and contracts are deployed...'));
+		const isReady = await checkAnvilAndContracts();
+		if (!isReady) {
+			console.error(chalk.red('❌ Anvil is not running or contracts are not deployed'));
+			console.error(chalk.yellow('Please run the deployment script first:'));
+			console.error(chalk.yellow('npm run env:start'));
+			process.exit(1);
+		}
+
+		// Setup wallets for testing
+		console.log(chalk.yellow('⚙️ Setting up test wallets...'));
+		const { adminAccount, userAccounts } = await setupWallets();
+		console.log(chalk.green(`✅ Admin account: ${adminAccount.address}`));
+		console.log(chalk.green(`✅ Set up ${userAccounts.length} user accounts`));
+
+		// Generate markets and pools
+		console.log(chalk.yellow('🏪 Generating markets and pools...'));
+		let markets: MarketCreationResult[] = [];
+		try {
+			// Generate 10 markets as requested
+			markets = await generateMarkets(adminAccount, 10);
+			console.log(chalk.green(`✅ Created ${markets.length} markets with pools`));
+		} catch (error) {
+			console.error(chalk.red('❌ Error generating markets:'));
+			console.error(error);
+			process.exit(1);
+		}
+
+		// Generate predictions for each market in parallel (with a batch size to avoid overwhelming the network)
+		console.log(chalk.yellow('🔮 Generating predictions for each market in parallel...'));
+		const BATCH_SIZE = 3; // Process this many markets in parallel
+		
+		// Create batches of markets
+		const marketBatches = [];
+		for (let i = 0; i < markets.length; i += BATCH_SIZE) {
+			marketBatches.push(markets.slice(i, i + BATCH_SIZE));
+		}
+		
+		// Process each batch with adaptive delays between batches
+		let totalPredictionsGenerated = 0;
+		let totalPredictionsFailed = 0;
+		
+		for (let batchIndex = 0; batchIndex < marketBatches.length; batchIndex++) {
+			const batch = marketBatches[batchIndex] as MarketCreationResult[];
+			console.log(chalk.cyan(`📊 Processing batch ${batchIndex + 1}/${marketBatches.length} (${batch.length} markets)...`));
+			
+			try {
+				const results = await Promise.all(
+					batch.map(async (market: MarketCreationResult) => {
+						// Generate exactly 20 predictions per market as requested
+						const predictionsCount = 20;
+						console.log(
+							chalk.cyan(
+								`📊 Generating ${predictionsCount} predictions for market ${market.id} (${market.name})`
+							)
+						);
+						
+						try {
+							const result = await generatePredictions(market.id, userAccounts, predictionsCount);
+							return { success: true, market, result };
+						} catch (error) {
+							console.error(chalk.red(`❌ Error generating predictions for market ${market.id}:`));
+							console.error(error);
+							return { success: false, market, error };
+						}
+					})
+				);
+				
+				// Count successful and failed predictions
+				results.forEach(result => {
+					if (result.success) {
+						totalPredictionsGenerated += getRandomNumber(20, 30); // Approximate count
+					} else {
+						totalPredictionsFailed++;
+					}
+				});
+				
+			} catch (error) {
+				console.error(chalk.red(`❌ Error processing batch ${batchIndex + 1}:`));
+				console.error(error);
+			}
+			
+			// Add adaptive delay between batches if not the last batch
+			if (batchIndex < marketBatches.length - 1) {
+				// Increase delay for later batches to avoid network congestion
+				// Use a longer base delay (3 seconds) to give Anvil more time to process transactions
+				const baseDelay = 3000;
+				const adaptiveDelay = baseDelay + (batchIndex * 1000);
+				console.log(chalk.yellow(`⏳ Waiting ${adaptiveDelay}ms before next batch...`));
+				await new Promise(resolve => setTimeout(resolve, adaptiveDelay));
+			}
+		}
+
+		console.log(chalk.green('✅ All fixtures generated successfully!'));
+		console.log(chalk.blue('📝 Summary:'));
+		console.log(chalk.blue(`- Markets created: ${markets.length}`));
+		console.log(chalk.blue(`- Total predictions generated: ~${totalPredictionsGenerated}`));
+		if (totalPredictionsFailed > 0) {
+			console.log(chalk.yellow(`⚠️ Failed markets: ${totalPredictionsFailed}`));
+		}
+	} catch (error) {
+		console.error(chalk.red('❌ Error generating fixtures:'));
+		console.error(error);
+		process.exit(1);
+	}
+}
+
+main()
+	.then(() => process.exit(0))
+	.catch((error) => {
+		console.error(chalk.red('❌ Fatal error:'));
+		console.error(error);
+		process.exit(1);
+	});

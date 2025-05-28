@@ -22,7 +22,8 @@
 		"check:watch": "svelte-kit sync && svelte-check --watch",
 		"format": "prettier --write .",
 		"lint": "prettier --check .",
-		"generate:types": "tsx scripts/generate-contracts.ts"
+		"generate:types": "tsx scripts/generate-contracts.ts",
+		"generate:fixtures": "tsx -r tsconfig-paths/register fixtures/index.ts"
 	},
 	"devDependencies": {
 		"@playwright/test": "^1.52.0",
@@ -33,6 +34,7 @@
 		"@typechain/ethers-v5": "^11.1.2",
 		"@types/node": "^22.15.21",
 		"abitype": "^1.0.8",
+		"chalk": "^5.4.1",
 		"ethers": "^5.8.0",
 		"flowbite-svelte": "^1.4.3",
 		"flowbite-svelte-icons": "^2.2.0",
