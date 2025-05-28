@@ -1,37 +1,51 @@
 <script lang="ts">
-    import WalletConnection from '../common/WalletConnection.svelte';
-    import {goto} from '$app/navigation';
+	import WalletConnection from '../common/WalletConnection.svelte';
 
-    function goToApp() {
-		goto('/app');
+	interface NavItem {
+		href: string;
+		text: string;
 	}
+
+	const BRAND = {
+		name: 'SwapCast',
+		href: '/'
+	} as const;
+
+	const NAV_ITEMS: NavItem[] = [
+		{ href: '#features', text: 'Features' },
+		{ href: '#how-it-works', text: 'How it works' },
+		{ href: '#developers', text: 'Developers' }
+	] as const;
+
+	const STYLES = {
+		header:
+			'bg-opacity-90 fixed top-0 left-0 z-50 w-full border-b border-gray-100 bg-white backdrop-blur-sm',
+		container: 'mx-auto max-w-7xl px-4 sm:px-6 lg:px-8',
+		content: 'flex h-16 items-center justify-between',
+		brand:
+			'bg-gradient-to-r from-indigo-600 to-sky-500 bg-clip-text text-xl font-bold text-transparent transition-colors hover:from-indigo-500 hover:to-sky-400',
+		nav: 'hidden space-x-8 md:flex',
+		navLink: 'px-3 py-2 text-sm font-medium text-gray-500 hover:text-gray-900'
+	} as const;
 </script>
 
-<header
-	class="bg-opacity-90 fixed top-0 left-0 z-50 w-full border-b border-gray-100 bg-white backdrop-blur-sm"
->
-	<div class="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
-		<div class="flex h-16 items-center justify-between">
+<header class={STYLES.header}>
+	<div class={STYLES.container}>
+		<div class={STYLES.content}>
 			<div class="flex items-center">
-				<a
-					href="/"
-					class="bg-gradient-to-r from-indigo-600 to-sky-500 bg-clip-text text-xl font-bold text-transparent transition-colors hover:from-indigo-500 hover:to-sky-400"
-					>SwapCast</a
-				>
+				<a href={BRAND.href} class={STYLES.brand}>
+					{BRAND.name}
+				</a>
 			</div>
-			<nav class="hidden space-x-8 md:flex">
-				<a href="#features" class="px-3 py-2 text-sm font-medium text-gray-500 hover:text-gray-900"
-					>Features</a
-				>
-				<a
-					href="#how-it-works"
-					class="px-3 py-2 text-sm font-medium text-gray-500 hover:text-gray-900">How it works</a
-				>
-				<a
-					href="#developers"
-					class="px-3 py-2 text-sm font-medium text-gray-500 hover:text-gray-900">Developers</a
-				>
+
+			<nav class={STYLES.nav}>
+				{#each NAV_ITEMS as item}
+					<a href={item.href} class={STYLES.navLink}>
+						{item.text}
+					</a>
+				{/each}
 			</nav>
+
 			<div>
 				<WalletConnection />
 			</div>

@@ -1,8 +1,8 @@
 <script lang="ts">
     import {onMount} from 'svelte';
     import {page} from '$app/stores';
-    import SwapPanel from '$lib/components/app/SwapPanel.svelte';
-    import MarketDetailsModal from '$lib/components/admin/MarketDetailsModal.svelte';
+    import { SwapPanel } from '$lib/components/app';
+    import { MarketDetailsModal } from '$lib/components/admin/market';
     import {Spinner} from 'flowbite-svelte';
     import type {PredictionSide, Token} from '$lib/types';
     import {getAllMarkets} from '$lib/services/market/marketService';

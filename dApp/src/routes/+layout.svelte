@@ -1,8 +1,7 @@
 <script lang="ts">
     import {page} from '$app/state';
-    import Footer from '$lib/components/common/Footer.svelte';
-    import ToastContainer from '$lib/components/common/ToastContainer.svelte';
-    import Header from '$lib/components/common/Header.svelte';
+    import { Footer, ToastContainer } from '$lib/components/common';
+    import { Header } from '$lib/components/landing';
     import {goto} from '$app/navigation';
     import {browser} from '$app/environment';
     import '../app.css';

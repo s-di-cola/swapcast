@@ -7,13 +7,17 @@
         type SortDirection,
         type MarketPaginationOptions
     } from '$lib/services/market/marketService';
-    import CreateMarketModal from '$lib/components/admin/market/CreateMarketModal.svelte';
-    import MarketDetailsModal from '$lib/components/admin/market/MarketDetailsModal.svelte';
+    import { 
+        CreateMarketModal, 
+        MarketDetailsModal 
+    } from '$lib/components/admin/market';
+    import { 
+        AdminSummaryCards, 
+        AdminAnalyticsSection, 
+        AdminMarketTable 
+    } from '$lib/components/admin/dashboard';
     import { toastStore } from '$lib/stores/toastStore';
     import { setCreateMarketAction, clearCreateMarketAction } from '$lib/stores/headerStore';
-    import AdminSummaryCards from '$lib/components/admin/dashboard/AdminSummaryCards.svelte';
-    import AdminAnalyticsSection from '$lib/components/admin/dashboard/AdminAnalyticsSection.svelte';
-    import AdminMarketTable from '$lib/components/admin/dashboard/AdminMarketTable.svelte';
     
     interface DashboardState {
         markets: Market[];
