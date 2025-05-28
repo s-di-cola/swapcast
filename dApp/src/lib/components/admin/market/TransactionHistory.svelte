@@ -6,7 +6,7 @@
         formatPredictionOutcome, 
         formatTimestamp, 
         type SubgraphPrediction 
-    } from '$lib/services/subgraph/subgraphService';
+    } from '$lib/services/subgraph';
     
     interface Props {
         market: Market;
