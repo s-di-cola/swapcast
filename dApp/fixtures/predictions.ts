@@ -35,21 +35,27 @@ async function getRandomStakeAmount(userAddress: Address, minStakeAmount: bigint
   // Get user's ETH balance
   const balance = await publicClient.getBalance({ address: userAddress });
   
-  // Make sure the amount is at least the minimum stake amount
-  // but not more than 10% of the user's balance
-  const maxAmount = balance / 10n;
-  const baseAmount = minStakeAmount * 2n;
+  // Since we're using Anvil accounts with 1000 ETH each, we can use much larger amounts
+  // Let's use between 1-5 ETH for predictions to make them more substantial
   
-  // Use the larger of the two as our base
-  const effectiveBase = baseAmount > minStakeAmount ? baseAmount : minStakeAmount;
+  // Convert ETH amounts to Wei
+  const oneEthInWei = parseEther("1");
+  const fiveEthInWei = parseEther("5");
   
-  // Generate a random amount between effectiveBase and maxAmount
-  // but ensure it's at least the minimum stake amount
-  const randomFactor = BigInt(Math.floor(Math.random() * 5) + 1); // 1-5x multiplier
-  const amount = effectiveBase * randomFactor;
+  // Generate a random amount between 1-5 ETH
+  // First, get a random number between 1 and 5
+  const randomEth = 1 + Math.random() * 4;
   
-  // Cap at maxAmount to ensure user has enough funds
-  return amount > maxAmount ? maxAmount : amount;
+  // Convert to Wei with precise decimal places
+  const amount = parseEther(randomEth.toFixed(4));
+  
+  // Ensure it's at least the minimum stake amount
+  if (amount < minStakeAmount) {
+    return minStakeAmount * 10n; // 10x minimum if somehow our random amount is too small
+  }
+  
+  // Cap at 5 ETH to keep it reasonable
+  return amount < fiveEthInWei ? amount : fiveEthInWei;
 }
 
 /**

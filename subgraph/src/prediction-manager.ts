@@ -1,4 +1,4 @@
-import { BigInt, Address } from "@graphprotocol/graph-ts";
+import { BigInt, Address, log, ethereum } from "@graphprotocol/graph-ts";
 import {
   PredictionManager,
   MarketCreated,
@@ -71,17 +71,29 @@ export function handleMarketCreated(event: MarketCreated): void {
 }
 
 export function handlePredictionRecorded(event: StakeRecorded): void {
-  // First check if the market exists
+  // Check if the market exists - it must exist since predictions can only be made for existing markets
   let marketId = event.params.marketId.toString();
   let market = Market.load(marketId);
   
-  // If market doesn't exist, create a placeholder
+  // If market doesn't exist in the subgraph, log an error but continue processing
+  // This should never happen in a properly functioning system
   if (market == null) {
+    // Log the error - this will appear in the Graph Node logs
+    log.error(
+      "Prediction recorded for non-existent market. MarketID: {}, User: {}, TX: {}",
+      [
+        marketId,
+        event.params.user.toHexString(),
+        event.transaction.hash.toHexString()
+      ]
+    );
+    
+    // We still need to process the prediction, so create a minimal market entity
     market = new Market(marketId);
     market.marketId = event.params.marketId;
     market.creationTimestamp = event.block.timestamp;
     market.expirationTimestamp = BigInt.fromI32(0);
-    market.description = "Market #" + marketId;
+    market.description = "MISSING MARKET #" + marketId; // Mark it clearly as missing
     market.isResolved = false;
     market.totalStakedOutcome0 = BigInt.fromI32(0);
     market.totalStakedOutcome1 = BigInt.fromI32(0);
