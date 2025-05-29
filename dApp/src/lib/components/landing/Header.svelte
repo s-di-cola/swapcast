@@ -6,16 +6,26 @@
 		text: string;
 	}
 
+	let { showLandingLinks = true, showAppLinks = false, showAdminLinks = false, title = 'SwapCast' } = $props();
+
 	const BRAND = {
-		name: 'SwapCast',
+		name: title,
 		href: '/'
 	} as const;
 
-	const NAV_ITEMS: NavItem[] = [
+	const LANDING_NAV_ITEMS: NavItem[] = [
 		{ href: '#features', text: 'Features' },
 		{ href: '#how-it-works', text: 'How it works' },
 		{ href: '#developers', text: 'Developers' }
 	] as const;
+
+	const APP_NAV_ITEMS: NavItem[] = [
+		{ href: '/app', text: 'Dashboard' },
+		{ href: '/app/markets', text: 'Markets' },
+		{ href: '/app/history', text: 'History' }
+	] as const;
+
+	const ADMIN_NAV_ITEMS: NavItem[] = [] as const;
 
 	const STYLES = {
 		header:
@@ -39,11 +49,25 @@
 			</div>
 
 			<nav class={STYLES.nav}>
-				{#each NAV_ITEMS as item}
-					<a href={item.href} class={STYLES.navLink}>
-						{item.text}
-					</a>
-				{/each}
+				{#if showLandingLinks}
+					{#each LANDING_NAV_ITEMS as item}
+						<a href={item.href} class={STYLES.navLink}>
+							{item.text}
+						</a>
+					{/each}
+				{:else if showAppLinks}
+					{#each APP_NAV_ITEMS as item}
+						<a href={item.href} class={STYLES.navLink}>
+							{item.text}
+						</a>
+					{/each}
+				{:else if showAdminLinks}
+					{#each ADMIN_NAV_ITEMS as item}
+						<a href={item.href} class={STYLES.navLink}>
+							{item.text}
+						</a>
+					{/each}
+				{/if}
 			</nav>
 
 			<div>
