@@ -1,5 +1,7 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
+	import { executeQuery } from '$lib/services/subgraph';
+	import { GET_ANALYTICS_DATA } from '$lib/services/subgraph/queries'
 
 	interface Props {
 		timeRange?: '7d' | '30d';
@@ -52,36 +54,95 @@
 		skipFactor: 15
 	} as const;
 
-	function generateMockData(days: number): ChartData {
-		const data: DataPoint[] = [];
-		const startDate = new Date();
-		startDate.setDate(startDate.getDate() - days);
+	interface AnalyticsResponse {
+		markets: Array<{
+			id: string;
+			marketId: string;
+			creationTimestamp: string;
+			isResolved: boolean;
+		}>;
+		predictions: Array<{
+			id: string;
+			timestamp: string;
+			market: {
+				id: string;
+			};
+		}>;
+	}
 
-		for (let i = 0; i <= days; i++) {
-			const date = new Date(startDate);
-			date.setDate(date.getDate() + i);
+	let error = $state<string | null>(null);
 
-			const marketBase = 5 + Math.floor(i * (8 / days));
-			const marketRandom = Math.floor(Math.random() * 2);
-			const markets = marketBase + marketRandom;
+	async function fetchData(days: number): Promise<ChartData | null> {
+		try {
+			error = null;
 
-			const predictionBase = 2 + Math.floor(i * (5 / days));
-			const predictionRandom = Math.floor(Math.random() * 3) - 1;
-			const predictions = Math.max(1, predictionBase + predictionRandom);
+			// Calculate start and end timestamps
+			const endDate = new Date();
+			const startDate = new Date();
+			startDate.setDate(startDate.getDate() - days);
 
-			const dateStr = date.toLocaleDateString('en-US', {
-				month: 'short',
-				day: 'numeric'
+			const startTimestamp = Math.floor(startDate.getTime() / 1000).toString();
+			const endTimestamp = Math.floor(endDate.getTime() / 1000).toString();
+
+			// Fetch data from subgraph
+			const response = await executeQuery<AnalyticsResponse>(GET_ANALYTICS_DATA, {
+				startTimestamp,
+				endTimestamp
 			});
 
-			data.push({ date: dateStr, markets, predictions });
-		}
+			if (!response || !response.markets) {
+				throw new Error('Failed to fetch analytics data');
+			}
 
-		return {
-			labels: data.map((d) => d.date),
-			marketsData: data.map((d) => d.markets),
-			predictionsData: data.map((d) => d.predictions)
-		};
+			// Process data into daily buckets
+			const markets = response.markets || [];
+			const predictions = response.predictions || [];
+			const data: DataPoint[] = [];
+
+			for (let i = 0; i <= days; i++) {
+				const currentDate = new Date(startDate);
+				currentDate.setDate(currentDate.getDate() + i);
+
+				const nextDate = new Date(currentDate);
+				nextDate.setDate(nextDate.getDate() + 1);
+
+				const currentDayStart = Math.floor(currentDate.getTime() / 1000);
+				const currentDayEnd = Math.floor(nextDate.getTime() / 1000);
+
+				// Count markets and predictions for this day
+				const marketsCreatedToday = markets.filter((market) => {
+					const timestamp = parseInt(market.creationTimestamp);
+					return timestamp >= currentDayStart && timestamp < currentDayEnd;
+				}).length;
+
+				const predictionsCreatedToday = predictions.filter((prediction) => {
+					const timestamp = parseInt(prediction.timestamp);
+					return timestamp >= currentDayStart && timestamp < currentDayEnd;
+				}).length;
+
+				const dateStr = currentDate.toLocaleDateString('en-US', {
+					month: 'short',
+					day: 'numeric'
+				});
+
+				data.push({
+					date: dateStr,
+					markets: marketsCreatedToday,
+					predictions: predictionsCreatedToday
+				});
+			}
+
+			return {
+				labels: data.map((d) => d.date),
+				marketsData: data.map((d) => d.markets),
+				predictionsData: data.map((d) => d.predictions)
+			};
+		} catch (error) {
+			console.error('Error fetching analytics data:', error);
+			// Set error message to display to user
+			error = 'Failed to load analytics data. Please check your connection to the subgraph.';
+			return null;
+		}
 	}
 
 	function getChartDimensions(canvas: HTMLCanvasElement): ChartDimensions {
@@ -194,7 +255,7 @@
 		});
 	}
 
-	function drawChart(): void {
+	async function drawChart(): Promise<void> {
 		if (!canvas) return;
 
 		ctx = canvas.getContext('2d');
@@ -205,46 +266,71 @@
 
 		context.clearRect(0, 0, canvas.width, canvas.height);
 
-		const days = timeRange === '7d' ? 7 : 30;
-		const { labels, marketsData, predictionsData } = generateMockData(days);
+		// Show loading state
+		isLoading = true;
 
-		const maxValue = Math.max(Math.max(...marketsData), Math.max(...predictionsData));
+		const days = timeRange === '7d' ? 7 : 30;
+		// Fetch data from subgraph
+		const data = await fetchData(days);
+
+		// Hide loading state
+		isLoading = false;
+
+		// If we have an error, don't try to draw the chart
+		if (!data || error) return;
+
+		const maxValue = Math.max(Math.max(...data.marketsData), Math.max(...data.predictionsData));
 		const yScale = dimensions.chartHeight / (maxValue * CHART_CONFIG.yPadding);
 
 		drawAxes(context, dimensions);
 		drawYAxisLabels(context, dimensions, maxValue, yScale);
-		drawXAxisLabels(context, dimensions, labels);
-		drawLine(context, dimensions, marketsData, COLORS.markets, yScale);
-		drawLine(context, dimensions, predictionsData, COLORS.predictions, yScale);
+		drawXAxisLabels(context, dimensions, data.labels);
+		drawLine(context, dimensions, data.marketsData, COLORS.markets, yScale);
+		drawLine(context, dimensions, data.predictionsData, COLORS.predictions, yScale);
 	}
 
-	function handleTimeRangeChange(range: '7d' | '30d'): void {
+	async function handleTimeRangeChange(range: '7d' | '30d'): Promise<void> {
 		timeRange = range;
-		setTimeout(drawChart, 0);
+		await drawChart();
 	}
 
-	function handleResize(): void {
+	async function handleResize(): Promise<void> {
 		if (canvas) {
 			canvas.width = canvas.offsetWidth;
 			canvas.height = canvas.offsetHeight;
-			drawChart();
+			await drawChart();
 		}
 	}
 
 	onMount(() => {
-		setTimeout(drawChart, 0);
+		// Initial chart draw
+		drawChart().catch((err) => console.error('Error drawing initial chart:', err));
 
-		window.addEventListener('resize', handleResize);
-		handleResize();
+		// Handle window resize
+		const resizeHandler = () => {
+			if (canvas) {
+				canvas.width = canvas.offsetWidth;
+				canvas.height = canvas.offsetHeight;
+				drawChart().catch((err) => console.error('Error redrawing chart:', err));
+			}
+		};
+
+		window.addEventListener('resize', resizeHandler);
+
+		// Initial resize
+		if (canvas) {
+			canvas.width = canvas.offsetWidth;
+			canvas.height = canvas.offsetHeight;
+		}
 
 		return () => {
-			window.removeEventListener('resize', handleResize);
+			window.removeEventListener('resize', resizeHandler);
 		};
 	});
 </script>
 
 <div class="relative h-full w-full">
-	<div class="absolute top-0 right-0 z-10 flex space-x-2">
+	<div class="absolute right-0 top-0 z-10 flex space-x-2">
 		<button
 			class="rounded-full px-3 py-1 text-xs font-medium transition-colors"
 			class:bg-emerald-100={timeRange === '7d'}
@@ -270,12 +356,42 @@
 	<canvas bind:this={canvas} class="h-full w-full"></canvas>
 
 	{#if isLoading}
-		<div class="bg-opacity-80 absolute inset-0 flex items-center justify-center bg-white">
+		<div class="absolute inset-0 flex items-center justify-center bg-white bg-opacity-80">
 			<div class="flex items-center">
 				<div
 					class="mr-2 h-5 w-5 animate-spin rounded-full border-2 border-emerald-500 border-t-transparent"
 				></div>
 				<p class="text-sm text-gray-500">Loading chart data...</p>
+			</div>
+		</div>
+	{:else if error}
+		<div class="absolute inset-0 flex items-center justify-center bg-white bg-opacity-80">
+			<div class="max-w-md rounded-md bg-red-50 p-4 text-center">
+				<div class="flex items-center justify-center">
+					<svg class="h-6 w-6 text-red-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+						<path
+							stroke-linecap="round"
+							stroke-linejoin="round"
+							stroke-width="2"
+							d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
+						></path>
+					</svg>
+					<h3 class="ml-2 text-sm font-medium text-red-800">Error</h3>
+				</div>
+				<div class="mt-2 text-sm text-red-700">
+					{error}
+				</div>
+				<div class="mt-4">
+					<button
+						class="rounded-md bg-red-100 px-4 py-2 text-sm font-medium text-red-800 hover:bg-red-200 focus:outline-none focus:ring-2 focus:ring-red-500 focus:ring-offset-2"
+						onclick={() => {
+							error = null;
+							drawChart();
+						}}
+					>
+						Try Again
+					</button>
+				</div>
 			</div>
 		</div>
 	{/if}
