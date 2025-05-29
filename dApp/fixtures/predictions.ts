@@ -18,20 +18,27 @@ export const OUTCOME_BULLISH = 1;
 // We'll use the contract ABI from the generated types
 
 /**
- * Generates a random conviction stake amount
+ * Generates a random swap amount (the base amount for the transaction)
  *
- * @returns Random conviction stake amount in wei
+ * @returns Random swap amount in wei
  */
-function getRandomConvictionStake(): bigint {
-	// Generate a random amount between 0.1 and 1 ETH
-	const ethAmount = 0.1 + Math.random() * 0.9;
+function getRandomSwapAmount(): bigint {
+	// Generate a random amount between 0.5 and 2.5 ETH for larger transactions
+	const ethAmount = 0.5 + Math.random() * 2.0;
 	return parseEther(ethAmount.toFixed(6));
 }
 
 /**
- * Alias for getRandomConvictionStake for backward compatibility
+ * Calculates the conviction stake based on the swap amount
+ * According to the SwapCast protocol, conviction stake is 1% of the swap amount
+ *
+ * @param swapAmount The swap amount in wei
+ * @returns Conviction stake amount in wei
  */
-const generateRandomConvictionStake = getRandomConvictionStake;
+function calculateConvictionStake(swapAmount: bigint): bigint {
+	// Conviction stake is 1% of the swap amount as per SwapCast protocol design
+	return swapAmount / BigInt(100);
+}
 
 /**
  * Calculates the protocol fee for a conviction stake
@@ -126,10 +133,13 @@ export async function generatePredictions(
 		// Generate random outcome (0 for Bearish, 1 for Bullish)
 		const outcome = getRandomBoolean() ? OUTCOME_BULLISH : OUTCOME_BEARISH;
 		
-		// Generate random conviction stake
-		const convictionStake = generateRandomConvictionStake();
+		// Generate random swap amount (this would be the amount the user is swapping in a real scenario)
+		const swapAmount = getRandomSwapAmount();
 		
-		// Calculate total amount (conviction stake + protocol fee)
+		// Calculate conviction stake (1% of swap amount)
+		const convictionStake = calculateConvictionStake(swapAmount);
+		
+		// Calculate protocol fee (5% of conviction stake)
 		const protocolFee = calculateProtocolFee(convictionStake);
 		const totalAmount = convictionStake + protocolFee;
 		
@@ -170,7 +180,7 @@ export async function generatePredictions(
 						
 						console.log(
 							chalk.cyan(
-								`User ${address.slice(0, 8)}... predicting ${outcome === OUTCOME_BULLISH ? 'BULLISH' : 'BEARISH'} on market ${marketId} with stake ${totalAmount} (nonce: ${nonce})`
+								`User ${address.slice(0, 8)}... predicting ${outcome === OUTCOME_BULLISH ? 'BULLISH' : 'BEARISH'} on market ${marketId} with stake ${convictionStake} ETH (total: ${totalAmount} ETH, nonce: ${nonce})`
 							)
 						);
 						
@@ -199,7 +209,20 @@ export async function generatePredictions(
 						// Wait for transaction confirmation
 						const receipt = await publicClient.waitForTransactionReceipt({ hash });
 						
-						console.log(chalk.green(`✅ Prediction recorded with hash: ${hash} (status: ${receipt.status})`));
+						// Verify that the transaction was actually successful by checking logs
+						if (receipt.status === 'success') {
+							// Check if the transaction has the expected event logs
+							const logs = receipt.logs || [];
+							if (logs.length > 0) {
+								console.log(chalk.green(`✅ Prediction recorded with hash: ${hash} (status: ${receipt.status}, with ${logs.length} logs)`));
+							} else {
+								console.log(chalk.yellow(`⚠️ Transaction succeeded but no logs found. This might indicate a silent failure: ${hash}`));
+								throw new Error('Transaction succeeded but no logs found');
+							}
+						} else {
+							console.log(chalk.red(`❌ Transaction failed with status: ${receipt.status}`));
+							throw new Error(`Transaction failed with status: ${receipt.status}`);
+						}
 						successfulPredictions++;
 						success = true;
 					} catch (error: any) {

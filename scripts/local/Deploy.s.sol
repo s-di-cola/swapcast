@@ -163,52 +163,6 @@ contract DeploySwapCast is Script, StdCheats {
         console2.log("\nNote: Pool initialization should be done in a separate transaction");
         console2.log("after ensuring the tokens are properly sorted and the hook is valid.");
 
-        // 8. Create a sample ETH/USDC market directly without using the Feed Registry
-        // This is a simplified approach for local development
-        bool createSampleMarket = vm.envOr("CREATE_SAMPLE_MARKET", true);
-        
-        if (createSampleMarket) {
-            console2.log("Attempting to create a sample ETH/USDC market...");
-            
-            // Use the actual ETH/USD Chainlink Price Feed on mainnet
-            address ethUsdPriceFeed = 0x5f4eC3Df9cbd43714FE2740f5E3616155c5b8419; // ETH/USD on mainnet
-            
-            uint256 marketId = 1;
-            uint256 expirationTime = block.timestamp + 1 days;
-            // ETH/USD price threshold of $2000 with 8 decimals (Chainlink ETH/USD has 8 decimals)
-            uint256 priceThreshold = 2000 * 10**8;
-            
-            // First, try to create the market directly without oracle registration
-            // Reuse the existing poolKey that was defined earlier
-            try predictionManager.createMarket(
-                "ETH/USDC Market",
-                "ETH/USDC",
-                expirationTime,
-                ethUsdPriceFeed,
-                priceThreshold,
-                poolKey
-            ) {
-                console2.log("Created sample ETH/USD market with ID:", marketId);
-                
-                // Skip oracle registration for local development
-                // The Feed Registry call is failing in the forked environment
-                console2.log("Skipping oracle registration for local development.");
-                console2.log("This is acceptable as we're using a direct price feed address.");
-                console2.log("Sample market setup complete!");
-            } catch Error(string memory reason) {
-                console2.log("Failed to create market:", reason);
-                console2.log("Skipping sample market creation for local development.");
-                console2.log("Markets can be created through the admin interface after deployment.");
-            } catch {
-                console2.log("Failed to create market with unknown error.");
-                console2.log("Skipping sample market creation for local development.");
-                console2.log("Markets can be created through the admin interface after deployment.");
-            }
-        } else {
-            console2.log("Skipping sample market creation as CREATE_SAMPLE_MARKET is not set.");
-            console2.log("Markets can be created through the admin interface after deployment.");
-        }
-
         // Stop broadcasting transactions
         vm.stopBroadcast();
 

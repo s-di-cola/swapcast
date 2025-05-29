@@ -93,8 +93,7 @@ async function main() {
 		console.log(chalk.yellow('🏪 Generating markets and pools...'));
 		let markets: MarketCreationResult[] = [];
 		try {
-			// Generate 10 markets as requested
-			markets = await generateMarkets(adminAccount, 10);
+			markets = await generateMarkets(adminAccount, 1);
 			console.log(chalk.green(`✅ Created ${markets.length} markets with pools`));
 		} catch (error) {
 			console.error(chalk.red('❌ Error generating markets:'));
@@ -104,7 +103,7 @@ async function main() {
 
 		// Generate predictions for each market in parallel (with a batch size to avoid overwhelming the network)
 		console.log(chalk.yellow('🔮 Generating predictions for each market in parallel...'));
-		const BATCH_SIZE = 3; // Process this many markets in parallel
+		const BATCH_SIZE = 2; // Process this many markets in parallel
 		
 		// Create batches of markets
 		const marketBatches = [];
@@ -123,7 +122,6 @@ async function main() {
 			try {
 				const results = await Promise.all(
 					batch.map(async (market: MarketCreationResult) => {
-						// Generate exactly 20 predictions per market as requested
 						const predictionsCount = 20;
 						console.log(
 							chalk.cyan(

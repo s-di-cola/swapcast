@@ -4,17 +4,11 @@
  * Creates markets and associated Uniswap v4 pools for testing
  */
 
-import {
-	parseEther,
-	type Address,
-	type Hash,
-	createWalletClient,
-	createPublicClient,
-	http
-} from 'viem';
+import { parseEther, parseUnits, type Address, type Hash, createWalletClient, createPublicClient, http } from 'viem';
 import { anvil } from 'viem/chains';
 import { CONTRACT_ADDRESSES, TOKEN_ADDRESSES } from './utils/wallets';
 import { getTickSpacing, sleep } from './utils/helpers';
+import { getCurrentPrice, calculateRealisticPriceThreshold } from './utils/currentPrice';
 import { getPoolManager } from '../src/generated/types/PoolManager';
 import { getPredictionManager } from '../src/generated/types/PredictionManager';
 import chalk from 'chalk';
@@ -387,7 +381,7 @@ async function createMarket(
  * @param count Number of markets to create
  * @returns Array of created markets
  */
-export async function generateMarkets(adminAccount: any, count: number = 8) {
+export async function generateMarkets(adminAccount: any, count: number = 5) {
 	console.log(chalk.blue(`Generating ${count} markets...`));
 
 	const markets: MarketCreationResult[] = [];
@@ -416,9 +410,25 @@ export async function generateMarkets(adminAccount: any, count: number = 8) {
 				const expirationDays = EXPIRATION_TIMES[Math.floor(Math.random() * EXPIRATION_TIMES.length)];
 				const expirationTime = BigInt(Math.floor(Date.now() / 1000) + expirationDays * 24 * 60 * 60);
 
-				// Set price threshold (random between 1-5%)
-				const priceThresholdPercent = Math.floor(Math.random() * 5) + 1;
-				const priceThreshold = parseEther(`0.0${priceThresholdPercent}`);
+				// Get current price and calculate a realistic price threshold
+				let priceThreshold;
+				try {
+					// Get the current price of the asset
+					const currentPrice = await getCurrentPrice(symbol);
+					console.log(chalk.blue(`Current price for ${symbol}: $${currentPrice.toFixed(2)}`));
+					
+					// Calculate a realistic threshold based on the asset's volatility
+					const thresholdPercent = calculateRealisticPriceThreshold(currentPrice);
+					console.log(chalk.blue(`Using price threshold of ${(thresholdPercent * 100).toFixed(2)}% for ${symbol}`));
+					
+					// Convert the threshold to the format expected by the contract (18 decimals)
+					priceThreshold = parseUnits(thresholdPercent.toFixed(6), 18);
+				} catch (error) {
+					// Fallback to a random threshold between 1-5% if price fetch fails
+					console.log(chalk.yellow(`Failed to get current price for ${symbol}, using fallback threshold`));
+					const priceThresholdPercent = Math.floor(Math.random() * 5) + 1;
+					priceThreshold = parseEther(`0.0${priceThresholdPercent}`);
+				}
 
 				// Create the market with timeout
 				console.log(chalk.yellow(`Creating market for ${name}...`));
