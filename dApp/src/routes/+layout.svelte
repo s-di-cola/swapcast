@@ -65,12 +65,12 @@
 	}
 
 	/**
-	 * Redirects authenticated users from the home page to their appropriate dashboard
+	 * Redirects authenticated users to their appropriate dashboard
 	 */
 	function handleAuthenticatedHomeRedirect() {
 		const isHomePage = pathname === '/';
-
-		if (isConnected && isHomePage) {
+		const isLoginPage = pathname.includes('/login') || pathname.includes('/connect');
+		if (isConnected && (isHomePage || isLoginPage)) {
 			const userDashboard = isAdmin() ? '/admin' : '/app';
 			goto(userDashboard);
 		}
