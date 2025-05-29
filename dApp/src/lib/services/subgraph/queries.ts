@@ -175,3 +175,51 @@ export const SEARCH_MARKETS = gql`
 		}
 	}
 `;
+
+/**
+ * Query to fetch global platform statistics
+ */
+export const GET_GLOBAL_STATS = gql`
+	query GetGlobalStats {
+		globalStat(id: "global") {
+			id
+			totalMarkets
+			totalPredictions
+			totalStaked
+			totalUsers
+			totalClaimed
+		}
+	}
+`;
+
+/**
+ * Query to fetch analytics data for the dashboard chart
+ */
+export const GET_ANALYTICS_DATA = gql`
+	query GetAnalyticsData($startTimestamp: String!, $endTimestamp: String!) {
+		# Get markets created within the time range
+		markets(
+			where: { creationTimestamp_gte: $startTimestamp, creationTimestamp_lte: $endTimestamp }
+			orderBy: creationTimestamp
+			orderDirection: asc
+		) {
+			id
+			marketId
+			creationTimestamp
+			isResolved
+		}
+
+		# Get predictions made within the time range
+		predictions(
+			where: { timestamp_gte: $startTimestamp, timestamp_lte: $endTimestamp }
+			orderBy: timestamp
+			orderDirection: asc
+		) {
+			id
+			timestamp
+			market {
+				id
+			}
+		}
+	}
+`;

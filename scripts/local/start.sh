@@ -410,40 +410,6 @@ setup_subgraph() {
     # Add the script to package.json
     node -e "const fs = require('fs'); const pkg = JSON.parse(fs.readFileSync('package.json')); pkg.scripts['update-address'] = 'node scripts/update-contract-address.js'; fs.writeFileSync('package.json', JSON.stringify(pkg, null, 2));" > /dev/null 2>&1
 
-    # js-yaml dependency should already be installed in prerequisites
-
-    # Create the script if it doesn't exist
-    if [ ! -f "scripts/update-contract-address.js" ]; then
-      mkdir -p scripts
-      cat > scripts/update-contract-address.js << 'EOF'
-const fs = require('fs');
-const yaml = require('js-yaml');
-
-// Get command line arguments
-const contractAddress = process.argv[2];
-const startBlock = process.argv[3] || '0';
-const network = process.argv[4] || 'mainnet';
-
-if (!contractAddress) {
-  console.error('Error: Contract address is required');
-  process.exit(1);
-}
-
-// Read the subgraph.yaml file
-const subgraphYaml = yaml.load(fs.readFileSync('./subgraph.yaml', 'utf8'));
-
-// Update the contract address and start block
-subgraphYaml.dataSources.forEach(dataSource => {
-  dataSource.network = network;
-  dataSource.source.address = contractAddress;
-  dataSource.source.startBlock = parseInt(startBlock);
-});
-
-// Write the updated subgraph.yaml file
-fs.writeFileSync('./subgraph.yaml', yaml.dump(subgraphYaml, { lineWidth: 120 }));
-EOF
-    fi
-
     # Run the script directly
     node scripts/update-contract-address.js $PREDICTION_MANAGER_ADDRESS $DEPLOY_BLOCK "mainnet-fork" > /dev/null 2>&1
   fi
