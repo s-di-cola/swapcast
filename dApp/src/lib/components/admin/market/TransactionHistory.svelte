@@ -99,10 +99,36 @@
 		if (!market?.id) return;
 
 		console.log('Fetching transactions for market:', market.id);
+		console.log('Market object:', market);
 		transactionState.isLoading = true;
 		transactionState.error = null;
 
+		// Try different ID formats to find the right one
+		const possibleIds = [
+			market.id,
+			market.id.toString(),
+			String(market.id),
+			// If market.id is a hex string, try converting to decimal
+			market.id.startsWith('0x') ? parseInt(market.id, 16).toString() : market.id,
+			// If market.id is a number, try it directly
+			typeof market.id === 'number' ? market.id.toString() : market.id
+		];
+
+		console.log('Trying these possible market IDs:', possibleIds);
+
 		try {
+			// First, try to query all markets to see what's available
+			const allMarketsQuery = await fetch('http://localhost:8000/subgraphs/name/swapcast-subgraph', {
+				method: 'POST',
+				headers: { 'Content-Type': 'application/json' },
+				body: JSON.stringify({
+					query: `{ markets { id marketId description } }`
+				})
+			});
+			const allMarketsData = await allMarketsQuery.json();
+			console.log('All available markets in subgraph:', allMarketsData);
+
+			// Now try with the original ID
 			console.log('Calling getMarketPredictions with:', {
 				marketId: market.id,
 				pageSize: transactionState.pageSize,

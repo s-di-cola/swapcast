@@ -4,7 +4,15 @@
  * Configuration constants and utilities for the CoinGecko API service
  */
 
-import { PUBLIC_COINGECKO_API_URL } from '$env/static/public';
+// Try to import from $env, but fall back to process.env if it fails
+let PUBLIC_COINGECKO_API_URL: string | undefined;
+try {
+	// This will work in SvelteKit context
+	PUBLIC_COINGECKO_API_URL = (await import('$env/static/public')).PUBLIC_COINGECKO_API_URL;
+} catch (e) {
+	// Fall back to process.env when running outside SvelteKit context (e.g., fixtures)
+	PUBLIC_COINGECKO_API_URL = process.env.PUBLIC_COINGECKO_API_URL;
+}
 import type { CoinGeckoConfig, RateLimitConfig, ApiEndpoints } from './types';
 
 /**

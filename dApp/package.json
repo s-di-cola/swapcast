@@ -7,8 +7,8 @@
 		"dev": "vite dev",
 		"env:start": "../scripts/local/start.sh",
 		"env:stop": "../scripts/local/stop.sh",
-		"dev:local": "npm run env:start && vite dev",
-		"dev:debug": "node --inspect node_modules/.bin/vite dev",
+		"dev:local": "npm run env:start && npm run generate:fixtures && vite dev",
+		"dev:debug": "node --inspect dev:local",
 		"test": "playwright test",
 		"test:headed": "playwright test --headed",
 		"test:ui": "playwright test --ui",
@@ -24,7 +24,7 @@
 		"format": "prettier --write .",
 		"lint": "prettier --check .",
 		"generate:types": "tsx scripts/generate-contracts.ts",
-		"generate:fixtures": "tsx -r tsconfig-paths/register fixtures/index.ts"
+		"generate:fixtures": "PUBLIC_COINGECKO_API_URL=https://api.coingecko.com/api/v3 tsx -r tsconfig-paths/register fixtures/index.ts"
 	},
 	"devDependencies": {
 		"@playwright/test": "^1.52.0",

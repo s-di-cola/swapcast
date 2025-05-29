@@ -56,19 +56,11 @@ export function handleMarketCreated(event: MarketCreated): void {
   
   market.marketId = event.params.marketId;
   market.creationTimestamp = event.block.timestamp;
-  
-  // Get market details from the contract
-  let predictionManager = PredictionManager.bind(event.address);
-  
-  // Set default values since we can't easily get all market details
-  market.expirationTimestamp = BigInt.fromI32(0); // Will be updated later if available
+  market.expirationTimestamp = BigInt.fromI32(0); // Default value
   market.description = "Market #" + event.params.marketId.toString();
   market.isResolved = false;
   market.totalStakedOutcome0 = BigInt.fromI32(0);
   market.totalStakedOutcome1 = BigInt.fromI32(0);
-  
-  // Try to get oracle details if available
-  let oracleResolverAddress = predictionManager.oracleResolverAddress();
   
   market.save();
   
@@ -79,33 +71,43 @@ export function handleMarketCreated(event: MarketCreated): void {
 }
 
 export function handlePredictionRecorded(event: StakeRecorded): void {
-  let predictionId = event.params.marketId.toString() + "-" + event.params.user.toHexString() + "-" + event.params.outcome.toString();
+  // First check if the market exists
+  let marketId = event.params.marketId.toString();
+  let market = Market.load(marketId);
+  
+  // If market doesn't exist, create a placeholder
+  if (market == null) {
+    market = new Market(marketId);
+    market.marketId = event.params.marketId;
+    market.creationTimestamp = event.block.timestamp;
+    market.expirationTimestamp = BigInt.fromI32(0);
+    market.description = "Market #" + marketId;
+    market.isResolved = false;
+    market.totalStakedOutcome0 = BigInt.fromI32(0);
+    market.totalStakedOutcome1 = BigInt.fromI32(0);
+    market.save();
+  }
+  
+  // Create the prediction with reference to the market
+  let predictionId = marketId + "-" + event.params.user.toHexString() + "-" + event.params.outcome.toString();
   let prediction = new Prediction(predictionId);
   
-  prediction.market = event.params.marketId.toString();
+  prediction.market = marketId;
   prediction.user = event.params.user.toHexString();
   prediction.outcome = event.params.outcome;
   prediction.amount = event.params.stakeAmount;
   prediction.timestamp = event.block.timestamp;
-  
-  // Get the token ID from the prediction manager if available
-  let predictionManager = PredictionManager.bind(event.address);
-  // We can't easily get the token ID from the event, so we'll leave it null for now
-  
   prediction.claimed = false;
   
   prediction.save();
   
   // Update market stats
-  let market = Market.load(event.params.marketId.toString());
-  if (market != null) {
-    if (event.params.outcome == 0) {
-      market.totalStakedOutcome0 = market.totalStakedOutcome0.plus(event.params.stakeAmount);
-    } else if (event.params.outcome == 1) {
-      market.totalStakedOutcome1 = market.totalStakedOutcome1.plus(event.params.stakeAmount);
-    }
-    market.save();
+  if (event.params.outcome == 0) {
+    market.totalStakedOutcome0 = market.totalStakedOutcome0.plus(event.params.stakeAmount);
+  } else if (event.params.outcome == 1) {
+    market.totalStakedOutcome1 = market.totalStakedOutcome1.plus(event.params.stakeAmount);
   }
+  market.save();
   
   // Update user stats
   let user = getOrCreateUser(event.params.user.toHexString());

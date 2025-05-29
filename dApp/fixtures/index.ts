@@ -4,8 +4,6 @@
  * This script generates test fixtures for the SwapCast application:
  * - Creates markets with different expiration dates
  * - Sets up Uniswap v4 pools for each market
- * - Generates 20-30 predictions per market using different addresses
- *
  */
 
 import { createPublicClient, http, type Address } from 'viem';
@@ -13,10 +11,20 @@ import { anvil } from 'viem/chains';
 import { generateMarkets, MarketCreationResult } from './markets';
 import { generatePredictions } from './predictions';
 import { CONTRACT_ADDRESSES, setupWallets } from './utils/wallets';
-import { getRandomNumber } from './utils/helpers';
 import { getPredictionManager } from '../src/generated/types/PredictionManager';
 import { getPoolManager } from '../src/generated/types/PoolManager';
 import chalk from 'chalk';
+
+/**
+ * Configuration constants for fixtures generation
+ * Adjust these values to control the behavior of the script
+ */
+const CONFIG = {
+	MARKETS_COUNT: 10,
+	PREDICTIONS_PER_MARKET: 9, // Maximum 9 users available from test wallets
+	BATCH_SIZE: 3, // Process 3 markets in parallel
+	ADMIN_ACCOUNT_INDEX: 0 // Use the first account as admin
+};
 
 /**
  * Check if Anvil is running and contracts are deployed
@@ -93,7 +101,7 @@ async function main() {
 		console.log(chalk.yellow('🏪 Generating markets and pools...'));
 		let markets: MarketCreationResult[] = [];
 		try {
-			markets = await generateMarkets(adminAccount, 1);
+			markets = await generateMarkets(adminAccount, CONFIG.MARKETS_COUNT);
 			console.log(chalk.green(`✅ Created ${markets.length} markets with pools`));
 		} catch (error) {
 			console.error(chalk.red('❌ Error generating markets:'));
@@ -108,6 +116,7 @@ async function main() {
 		// Create batches of markets
 		const marketBatches = [];
 		for (let i = 0; i < markets.length; i += BATCH_SIZE) {
+			//@ts-ignore
 			marketBatches.push(markets.slice(i, i + BATCH_SIZE));
 		}
 		
@@ -122,7 +131,8 @@ async function main() {
 			try {
 				const results = await Promise.all(
 					batch.map(async (market: MarketCreationResult) => {
-						const predictionsCount = 20;
+						// Use all available user accounts to create predictions
+						const predictionsCount = CONFIG.PREDICTIONS_PER_MARKET;
 						console.log(
 							chalk.cyan(
 								`📊 Generating ${predictionsCount} predictions for market ${market.id} (${market.name})`
@@ -130,7 +140,7 @@ async function main() {
 						);
 						
 						try {
-							const result = await generatePredictions(market.id, userAccounts, predictionsCount);
+							const result = await generatePredictions(market, userAccounts, predictionsCount);
 							return { success: true, market, result };
 						} catch (error) {
 							console.error(chalk.red(`❌ Error generating predictions for market ${market.id}:`));
@@ -140,11 +150,16 @@ async function main() {
 					})
 				);
 				
-				// Count successful and failed predictions
+				// Count successful and failed predictions using actual results
 				results.forEach(result => {
-					if (result.success) {
-						totalPredictionsGenerated += getRandomNumber(20, 30); // Approximate count
+					if (result.success && result.result !== undefined) {
+						// Our simplified implementation returns the number of successful predictions directly
+						totalPredictionsGenerated += result.result;
+						// Calculate failed predictions as the difference between attempted and successful
+						const attempted = 1; // We're only generating 1 prediction per market
+						totalPredictionsFailed += (attempted - result.result);
 					} else {
+						// If the entire market failed, count it as one failed prediction
 						totalPredictionsFailed++;
 					}
 				});
