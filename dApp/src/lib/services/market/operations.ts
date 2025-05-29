@@ -56,7 +56,10 @@ export async function getAllMarkets(options?: MarketPaginationOptions): Promise<
 
 		// Generate market IDs and fetch details in parallel
 		const marketIds = Array.from({ length: count }, (_, i) => BigInt(i));
-		const markets = await Promise.all(marketIds.map((id) => getMarketDetails(id)));
+		const allMarkets = await Promise.all(marketIds.map((id) => getMarketDetails(id)));
+		
+		// Filter out invalid markets (those that don't exist or have invalid data)
+		const markets = allMarkets.filter(market => market.exists && market.name !== `Market ${market.id}` && market.assetPair !== 'Unknown');
 
 		// Apply sorting
 		let sortedMarkets = markets;

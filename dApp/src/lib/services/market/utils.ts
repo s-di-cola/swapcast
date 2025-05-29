@@ -118,11 +118,18 @@ export function transformMarketDetails(details: MarketDetailsResult): Market {
 	const bullishStake = Number(details.totalConvictionBullish) / 1e18;
 	const totalStakeValue = bearishStake + bullishStake;
 	
+	// Format asset pair to ensure it shows the complete pair (e.g., "ETH/USD")
+	let formattedAssetPair = details.assetPair;
+	if (formattedAssetPair && !formattedAssetPair.includes('/')) {
+		// If we only have a symbol without the pair format, append the standard pair
+		formattedAssetPair = `${formattedAssetPair}/USD`;
+	}
+	
 	return {
 		id: details.marketId.toString(),
 		name: details.description || `Market ${details.marketId}`,
 		assetSymbol: details.assetPair,
-		assetPair: details.assetPair,
+		assetPair: formattedAssetPair,
 		exists: details.exists,
 		resolved: details.resolved,
 		winningOutcome: details.winningOutcome,
