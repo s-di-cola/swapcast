@@ -74,6 +74,7 @@
 
 	function handleClose(): void {
 		marketState = { data: null, isLoading: false, error: '' };
+		showModal = false;
 		onClose();
 	}
 
@@ -84,12 +85,21 @@
 	// Reactive effect to fetch data when modal opens with valid marketId
 	$effect(() => {
 		if (showModal && marketId) {
+			console.log('Modal opened for market ID:', marketId);
 			fetchMarketData();
+		}
+	});
+	
+	// Reset state when modal is closed
+	$effect(() => {
+		if (!showModal) {
+			console.log('Modal closed, resetting state');
+			marketState = { data: null, isLoading: false, error: '' };
 		}
 	});
 </script>
 
-<Modal bind:open={showModal} size="xl" autoclose={false} class="w-full max-w-4xl" outsideclose>
+<Modal bind:open={showModal} size="xl" autoclose={false} class="w-full max-w-4xl" outsideclose={false}>
 	<div class="mb-4 flex items-center justify-between border-b pb-4">
 		<h3 class="text-xl font-semibold text-gray-900">
 			{getModalTitle()}

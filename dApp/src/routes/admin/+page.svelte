@@ -190,8 +190,23 @@
 	}
 
 	function handleMarketClick(marketId: string): void {
-		modalState.selectedMarketId = marketId;
-		modalState.showMarketDetails = true;
+		if (modalState.showMarketDetails) {
+			modalState.showMarketDetails = false;
+			modalState.selectedMarketId = null;
+			
+			setTimeout(() => {
+				modalState.selectedMarketId = marketId;
+				modalState.showMarketDetails = true;
+			}, 100);
+			setTimeout(() => {
+				modalState.selectedMarketId = marketId;
+				modalState.showMarketDetails = true;
+			}, 100);
+		} else {
+			// If modal is not open, just set the state directly
+			modalState.selectedMarketId = marketId;
+			modalState.showMarketDetails = true;
+		}
 	}
 
 	function handleRefresh(): void {
