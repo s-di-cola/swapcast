@@ -15,14 +15,30 @@
 	const isAdminRoute = $derived(page.url.pathname.startsWith('/admin'));
 	const isProtectedRoute = $derived(isAppRoute || isAdminRoute);
 	const pathname = $derived(page.url.pathname);
-	let isConnected = $state(appKit.getIsConnectedState());
+	let isConnected = $state(false);
+	let userAddress = $state<string | null>(null);
 
 	$effect(() => {
 		if (!browser) return;
-		const unsubscribe = appKit.subscribeState((state) => {
-			isConnected = state.open || appKit.getIsConnectedState();
-		});
+		
+		// Initial state
 		isConnected = appKit.getIsConnectedState();
+		userAddress = appKit.getAccount()?.address || null;
+		
+		// Subscribe to wallet state changes
+		const unsubscribe = appKit.subscribeState((state) => {
+			const newIsConnected = state.open || appKit.getIsConnectedState();
+			const newAddress = appKit.getAccount()?.address || null;
+			
+			// Only update if there's an actual change
+			if (isConnected !== newIsConnected || userAddress !== newAddress) {
+				isConnected = newIsConnected;
+				userAddress = newAddress;
+				
+				// Trigger route handling on connection state change
+				handleRouteBasedOnConnectionState();
+			}
+		});
 
 		// Add global event listener to prevent page refreshes
 		const handleClick = (e: MouseEvent) => {
@@ -49,11 +65,21 @@
 	 */
 	$effect(() => {
 		if (!browser) return;
-
-		handleUnauthenticatedAccess();
-		handleAuthenticatedHomeRedirect();
-		handleUnauthorizedAdminAccess();
+		
+		// Initial route handling when the page loads
+		handleRouteBasedOnConnectionState();
 	});
+	
+	/**
+	 * Central function to handle all routing logic based on connection state
+	 */
+	function handleRouteBasedOnConnectionState() {
+		if (isConnected) {
+			handleAuthenticatedRoutes();
+		} else {
+			handleUnauthenticatedAccess();
+		}
+	}
 
 	/**
 	 * Redirects unauthenticated users away from protected routes
@@ -65,14 +91,30 @@
 	}
 
 	/**
-	 * Redirects authenticated users to their appropriate dashboard
+	 * Handles routing for authenticated users
 	 */
-	function handleAuthenticatedHomeRedirect() {
+	function handleAuthenticatedRoutes() {
+		// First check if user is on a page they shouldn't be on when authenticated
 		const isHomePage = pathname === '/';
 		const isLoginPage = pathname.includes('/login') || pathname.includes('/connect');
-		if (isConnected && (isHomePage || isLoginPage)) {
+		
+		if (isHomePage || isLoginPage) {
+			// Redirect to appropriate dashboard
 			const userDashboard = isAdmin() ? '/admin' : '/app';
 			goto(userDashboard);
+			return;
+		}
+		
+		// Then check if admin user is trying to access non-admin routes
+		if (isAdmin() && isAppRoute) {
+			goto('/admin');
+			return;
+		}
+		
+		// Finally check if non-admin user is trying to access admin routes
+		if (!isAdmin() && isAdminRoute) {
+			goto('/app');
+			return;
 		}
 	}
 
