@@ -1,7 +1,7 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
 	import { executeQuery } from '$lib/services/subgraph';
-	import { GET_ANALYTICS_DATA } from '$lib/services/subgraph/queries'
+	import { GET_ANALYTICS_DATA } from '$lib/services/subgraph/queries';
 
 	interface Props {
 		timeRange?: '7d' | '30d';
@@ -32,28 +32,6 @@
 		chartHeight: number;
 	}
 
-	let { timeRange = '7d' }: Props = $props();
-
-	let canvas = $state<HTMLCanvasElement | null>(null);
-	let ctx = $state<CanvasRenderingContext2D | null>(null);
-	let isLoading = $state(false);
-
-	const COLORS = {
-		markets: '#6366f1',
-		predictions: '#10b981',
-		axis: '#e2e8f0',
-		grid: '#f1f5f9',
-		text: '#64748b'
-	} as const;
-
-	const CHART_CONFIG = {
-		lineWidth: 2,
-		pointRadius: 3,
-		yPadding: 1.1,
-		gridLines: 5,
-		skipFactor: 15
-	} as const;
-
 	interface AnalyticsResponse {
 		markets: Array<{
 			id: string;
@@ -70,7 +48,28 @@
 		}>;
 	}
 
+	let { timeRange = '7d' }: Props = $props();
+
+	let canvas = $state<HTMLCanvasElement | null>(null);
+	let ctx = $state<CanvasRenderingContext2D | null>(null);
+	let isLoading = $state(true);
 	let error = $state<string | null>(null);
+
+	const COLORS = {
+		markets: '#6366f1',
+		predictions: '#10b981',
+		axis: '#e2e8f0',
+		grid: '#f1f5f9',
+		text: '#64748b'
+	} as const;
+
+	const CHART_CONFIG = {
+		lineWidth: 2,
+		pointRadius: 3,
+		yPadding: 1.1,
+		gridLines: 5,
+		skipFactor: 15
+	} as const;
 
 	async function fetchData(days: number): Promise<ChartData | null> {
 		try {
@@ -137,8 +136,8 @@
 				marketsData: data.map((d) => d.markets),
 				predictionsData: data.map((d) => d.predictions)
 			};
-		} catch (error) {
-			console.error('Error fetching analytics data:', error);
+		} catch (err) {
+			console.error('Error fetching analytics data:', err);
 			// Set error message to display to user
 			error = 'Failed to load analytics data. Please check your connection to the subgraph.';
 			return null;
@@ -177,7 +176,7 @@
 		maxValue: number,
 		yScale: number
 	): void {
-		const { height, padding, chartHeight } = dimensions;
+		const { height, padding } = dimensions;
 
 		context.textAlign = 'right';
 		context.textBaseline = 'middle';
@@ -279,8 +278,11 @@
 		// If we have an error, don't try to draw the chart
 		if (!data || error) return;
 
-		const maxValue = Math.max(Math.max(...data.marketsData), Math.max(...data.predictionsData));
-		const yScale = dimensions.chartHeight / (maxValue * CHART_CONFIG.yPadding);
+		const maxValue = Math.max(
+			Math.max(...data.marketsData, 0), 
+			Math.max(...data.predictionsData, 0)
+		);
+		const yScale = dimensions.chartHeight / (maxValue * CHART_CONFIG.yPadding || 1);
 
 		drawAxes(context, dimensions);
 		drawYAxisLabels(context, dimensions, maxValue, yScale);
@@ -294,37 +296,29 @@
 		await drawChart();
 	}
 
-	async function handleResize(): Promise<void> {
+	function handleResize(): void {
 		if (canvas) {
-			canvas.width = canvas.offsetWidth;
-			canvas.height = canvas.offsetHeight;
-			await drawChart();
+			canvas.width = canvas.offsetWidth || 300;
+			canvas.height = canvas.offsetHeight || 200;
+			drawChart().catch((err) => console.error('Error redrawing chart:', err));
 		}
 	}
 
 	onMount(() => {
-		// Initial chart draw
-		drawChart().catch((err) => console.error('Error drawing initial chart:', err));
+		// Set a small timeout to ensure the canvas is properly mounted and sized
+		setTimeout(() => {
+			if (canvas) {
+				canvas.width = canvas.offsetWidth || 300;
+				canvas.height = canvas.offsetHeight || 200;
+				drawChart().catch((err) => console.error('Error drawing initial chart:', err));
+			}
+		}, 50);
 
 		// Handle window resize
-		const resizeHandler = () => {
-			if (canvas) {
-				canvas.width = canvas.offsetWidth;
-				canvas.height = canvas.offsetHeight;
-				drawChart().catch((err) => console.error('Error redrawing chart:', err));
-			}
-		};
-
-		window.addEventListener('resize', resizeHandler);
-
-		// Initial resize
-		if (canvas) {
-			canvas.width = canvas.offsetWidth;
-			canvas.height = canvas.offsetHeight;
-		}
+		window.addEventListener('resize', handleResize);
 
 		return () => {
-			window.removeEventListener('resize', resizeHandler);
+			window.removeEventListener('resize', handleResize);
 		};
 	});
 </script>

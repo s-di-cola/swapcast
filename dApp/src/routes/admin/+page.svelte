@@ -248,7 +248,7 @@
 	});
 </script>
 
-<div class="mx-auto min-h-screen max-w-7xl bg-gray-50 p-6 md:p-10">
+<div class="mx-auto min-h-screen max-w-7xl bg-gray-50 p-6 pt-16 md:p-10 md:pt-20">
 	<div class="mb-6 flex items-center justify-between">
 		<h1 class="text-4xl font-bold text-gray-800">SwapCast Admin</h1>
 		<button
