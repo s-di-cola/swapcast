@@ -64,6 +64,8 @@ export async function getMarketPredictions(
 	}
 }
 
+
+
 /**
  * Fetches a specific market's details from the subgraph
  *

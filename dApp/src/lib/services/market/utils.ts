@@ -111,8 +111,13 @@ export function transformMarketDetails(details: MarketDetailsResult): Market {
 	const now = Math.floor(Date.now() / 1000);
 	const timeRemaining = Number(details.expirationTimestamp) - now;
 	const { status, expirationDisplay } = getMarketStatus(details.resolved, timeRemaining);
-	const totalStake = (details.totalConvictionBearish + details.totalConvictionBullish).toString();
-
+	
+	// Convert bigint values to proper number format for display
+	// Using formatEther would be better but we'll use simple division for now
+	const bearishStake = Number(details.totalConvictionBearish) / 1e18;
+	const bullishStake = Number(details.totalConvictionBullish) / 1e18;
+	const totalStakeValue = bearishStake + bullishStake;
+	
 	return {
 		id: details.marketId.toString(),
 		name: details.description || `Market ${details.marketId}`,
@@ -125,10 +130,12 @@ export function transformMarketDetails(details: MarketDetailsResult): Market {
 		totalStake1: details.totalConvictionBullish,
 		expirationTime: Number(details.expirationTimestamp),
 		priceAggregator: details.priceOracle,
+		// Ensure price threshold is properly formatted
 		priceThreshold: Number(details.priceThreshold) / 1e18, // Convert from wei
 		status,
 		expirationDisplay,
-		totalStake
+		// Format totalStake as a string with proper decimal representation
+		totalStake: totalStakeValue.toString()
 	};
 }
 

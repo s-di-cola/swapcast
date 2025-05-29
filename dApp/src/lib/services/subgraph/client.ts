@@ -11,8 +11,8 @@ import type { QueryVariables, GraphQLResponse } from './types';
  * Environment configuration
  */
 const CONFIG = {
-	// Default subgraph URL - should be overridden in production
-	defaultUrl: 'https://api.thegraph.com/subgraphs/name/yourusername/swapcast',
+	// Default to local subgraph endpoint for development
+	defaultUrl: 'http://localhost:8000/subgraphs/name/swapcast-subgraph',
 	// Request timeout in milliseconds
 	timeout: 10000,
 	// Retry configuration
@@ -42,8 +42,8 @@ function getSubgraphUrl(): string {
 function createGraphQLClient(): GraphQLClient {
 	const url = getSubgraphUrl();
 
+	// Create a simple client with just headers to avoid TypeScript errors
 	return new GraphQLClient(url, {
-		timeout: CONFIG.timeout,
 		headers: {
 			'Content-Type': 'application/json',
 			'User-Agent': 'SwapCast-Frontend/1.0'

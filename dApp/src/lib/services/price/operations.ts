@@ -38,8 +38,9 @@ export async function getHistoricalPriceData(
 	const endpoint = buildEndpoint('/coins/{id}/market_chart', { id: coinId });
 	const queryParams = {
 		vs_currency: vsCurrency,
-		days: days.toString(),
-		interval: days > 90 ? 'daily' : 'hourly'
+		days: days.toString()
+		// Note: interval parameter removed as it's only available for Enterprise plan
+		// CoinGecko will automatically use hourly data for 1-90 days
 	};
 	const url = `${endpoint}?${buildQueryString(queryParams)}`;
 
@@ -58,6 +59,8 @@ export async function getHistoricalPriceData(
 		CACHE_CONFIG.TTL_BY_TYPE.historical
 	);
 }
+
+
 
 /**
  * Searches for cryptocurrencies by name or symbol

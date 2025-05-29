@@ -76,7 +76,7 @@
 		tryAgain: 'Try Again',
 		noData: 'No price data available',
 		noAssetPair: 'No asset pair specified',
-		fetchFailed: 'Failed to fetch price data',
+		fetchFailed: 'Failed to fetch price data - check your CoinGecko API configuration',
 		threshold: 'Threshold:'
 	} as const;
 

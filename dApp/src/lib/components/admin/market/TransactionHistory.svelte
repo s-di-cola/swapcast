@@ -98,16 +98,25 @@
 	async function fetchTransactions(): Promise<void> {
 		if (!market?.id) return;
 
+		console.log('Fetching transactions for market:', market.id);
 		transactionState.isLoading = true;
 		transactionState.error = null;
 
 		try {
-			transactionState.data = await getMarketPredictions(
+			console.log('Calling getMarketPredictions with:', {
+				marketId: market.id,
+				pageSize: transactionState.pageSize,
+				page: transactionState.page
+			});
+			const data = await getMarketPredictions(
 				market.id,
 				transactionState.pageSize,
 				transactionState.page
 			);
+			console.log('Received transaction data:', data);
+			transactionState.data = data;
 		} catch (err) {
+			console.error('Failed to fetch transactions:', err);
 			transactionState.error =
 				err instanceof Error ? err.message : 'Failed to fetch transaction data';
 		} finally {

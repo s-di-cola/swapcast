@@ -23,10 +23,7 @@
 		expired: 'Expired'
 	} as const;
 
-	const STAKE_RATIOS = {
-		bullish: 0.6,
-		bearish: 0.4
-	} as const;
+	// We'll use actual stake values from the contract instead of arbitrary ratios
 
 	const DATE_FORMAT_OPTIONS: Intl.DateTimeFormatOptions = {
 		year: 'numeric',
@@ -62,9 +59,10 @@
 		return new Date(expirationTime * 1000).toLocaleString(undefined, DATE_FORMAT_OPTIONS);
 	}
 
-	function calculateStakeValue(totalStake: string | number, ratio: number): string {
-		const total = typeof totalStake === 'string' ? parseFloat(totalStake) : totalStake;
-		return formatCurrency(total * ratio);
+	// Convert wei values to ETH for display
+	function formatWeiToEth(weiValue: bigint): string {
+		const ethValue = Number(weiValue) / 1e18;
+		return formatCurrency(ethValue);
 	}
 
 	const financialItems: FinancialItem[] = $derived([
@@ -74,11 +72,11 @@
 		},
 		{
 			label: UI_TEXT.bullishStake,
-			value: `$${calculateStakeValue(market.totalStake, STAKE_RATIOS.bullish)}`
+			value: `$${formatWeiToEth(market.totalStake1)}`
 		},
 		{
 			label: UI_TEXT.bearishStake,
-			value: `$${calculateStakeValue(market.totalStake, STAKE_RATIOS.bearish)}`
+			value: `$${formatWeiToEth(market.totalStake0)}`
 		},
 		{
 			label: UI_TEXT.expirationTime,
