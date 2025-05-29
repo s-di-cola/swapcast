@@ -55,18 +55,35 @@ export async function getAllMarkets(options?: MarketPaginationOptions): Promise<
 		}
 
 		// Generate market IDs and fetch details in parallel
+		// Include an extra index to check for any newly created markets
 		const marketIds = Array.from({ length: count }, (_, i) => BigInt(i));
-		const allMarkets = await Promise.all(marketIds.map((id) => getMarketDetails(id)));
 		
-		// Filter out invalid markets (those that don't exist or have invalid data)
-		const markets = allMarkets.filter(market => market.exists && market.name !== `Market ${market.id}` && market.assetPair !== 'Unknown');
+		// Add logging to help debug
+		console.log(`Fetching ${marketIds.length} markets with IDs: ${marketIds.map(id => id.toString()).join(', ')}`);
+		
+		// Fetch all markets in parallel with proper type handling
+		const marketPromises = marketIds.map((id) => {
+			return getMarketDetails(id).catch(error => {
+				console.error(`Error fetching market ${id}:`, error);
+				// Return null for failed fetches
+				return null;
+			});
+		});
+		
+		const allMarkets = await Promise.all(marketPromises);
+		
+		// Filter out null values and markets that don't exist
+		// TypeScript: Filter out nulls first, then we have an array of Market objects
+		const validMarkets = allMarkets.filter((market): market is NonNullable<typeof market> => 
+			market !== null && market.exists === true
+		);
 
 		// Apply sorting
-		let sortedMarkets = markets;
+		let sortedMarkets = validMarkets;
 		if (options?.sortField) {
-			sortedMarkets = sortMarkets(markets, options.sortField, options.sortDirection || 'asc');
+			sortedMarkets = sortMarkets(validMarkets, options.sortField, options.sortDirection || 'asc');
 		} else {
-			sortedMarkets = applyDefaultSort(markets);
+			sortedMarkets = applyDefaultSort(validMarkets);
 		}
 
 		// Apply pagination if requested

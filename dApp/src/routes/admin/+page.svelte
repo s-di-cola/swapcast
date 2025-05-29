@@ -215,9 +215,31 @@
 		});
 	}
 
-	function handleMarketCreated(marketId: string, name: string): void {
+	async function handleMarketCreated(marketId: string, name: string): Promise<void> {
 		modalState.showCreateMarket = false;
-		fetchMarketData();
+		
+		// Force a delay to ensure the blockchain has time to update
+		await new Promise(resolve => setTimeout(resolve, 1000));
+		
+		// Reset to page 1 to ensure the new market is visible
+		paginationState.currentPage = 1;
+		paginationState.sortField = 'id';
+		paginationState.sortDirection = 'desc';
+		
+		// Fetch market data with a retry mechanism
+		let retryCount = 0;
+		const maxRetries = 3;
+		
+		const attemptFetch = async () => {
+			const success = await fetchMarketDataBase(false);
+			if (!success && retryCount < maxRetries) {
+				retryCount++;
+				await new Promise(resolve => setTimeout(resolve, 2000));
+				return attemptFetch();
+			}
+		};
+		
+		await attemptFetch();
 		showToast('success', TOAST_CONFIG.successMessages.marketCreated);
 	}
 
