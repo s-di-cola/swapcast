@@ -14,7 +14,7 @@ PROJECT_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 DEPLOY_SCRIPT="${PROJECT_ROOT}/scripts/local/Deploy.s.sol"
 SUBGRAPH_DIR="${PROJECT_ROOT}/subgraph"
 DATA_DIR="${PROJECT_ROOT}/data"
-DOCKER_COMPOSE_FILE="${PROJECT_ROOT}/scripts/local/docker-compose.yml"
+DOCKER_COMPOSE_FILE="${SUBGRAPH_DIR}/docker/docker-compose.yml"
 LOG_DIR="${PROJECT_ROOT}/logs"
 DAPP_ENV_FILE="${PROJECT_ROOT}/dApp/.env.local"
 
@@ -106,7 +106,7 @@ setup_environment() {
   export DEPLOY_SCRIPT="${PROJECT_ROOT}/scripts/local/Deploy.s.sol"
   export SUBGRAPH_DIR="${PROJECT_ROOT}/subgraph"
   export DAPP_ENV_FILE="${PROJECT_ROOT}/dApp/.env.local"
-  export DOCKER_COMPOSE_FILE="${PROJECT_ROOT}/scripts/local/docker-compose.yml"
+  export DOCKER_COMPOSE_FILE="${SUBGRAPH_DIR}/docker/docker-compose.yml"
   export LOG_DIR="${PROJECT_ROOT}/logs"
   export DATA_DIR="${PROJECT_ROOT}/data"
 

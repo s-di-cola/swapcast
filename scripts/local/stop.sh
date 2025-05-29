@@ -12,7 +12,7 @@ NC='\033[0m' # No Color
 # Project paths
 PROJECT_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 LOG_DIR="${PROJECT_ROOT}/logs"
-DOCKER_COMPOSE_FILE="${PROJECT_ROOT}/scripts/local/docker-compose.yml"
+DOCKER_COMPOSE_FILE="${PROJECT_ROOT}/subgraph/docker/docker-compose.yml"
 
 echo -e "${GREEN}========== Stopping SwapCast Local Development Environment ==========${NC}"
 
