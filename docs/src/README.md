@@ -126,12 +126,12 @@ SwapCast is composed of several modular contracts that together provide a secure
 
 ### Key Components
 
-- **SwapCast Hook Contract:** Intercepts Uniswap v4 swap transactions, extracts prediction data, and creates positions.
-- **PredictionPool:** Manages prediction markets, positions, stakes, and NFT issuance, and pays rewards.
+- **SwapCastHook:** Intercepts Uniswap v4 swap transactions, extracts prediction data, and forwards them to the PredictionManager.
+- **PredictionManager:** Manages prediction markets, positions, stakes, and NFT issuance, and pays rewards.
 - **SwapCastNFT:** ERC721 NFT representing prediction positions, with full on-chain metadata.
 - **OracleResolver:** Registers and resolves prediction markets using Chainlink Automation and price feeds.
-- **RewardDistributor:** Handles reward claim logic and validates claims, interacting with the PredictionPool for reward payouts.
-- **Treasury:** Collects and holds all protocol fees from predictions made in the PredictionPool.
+- **RewardDistributor:** Handles reward claim logic and validates claims, interacting with the PredictionManager for reward payouts.
+- **Treasury:** Collects and holds all protocol fees from predictions made in the PredictionManager.
 - **Chainlink Automation:** Triggers market resolution at the due date.
 
 ---
@@ -140,15 +140,17 @@ SwapCast is composed of several modular contracts that together provide a secure
 
 1. **Prediction Creation:**
     - User pays a prediction fee (e.g., 1% of swap) during swap.
-    - **PredictionPool** receives the user's total stake (which includes the implicit protocol fee). It then transfers the calculated protocol fee to the **Treasury** contract. The remaining net stake is held within the **PredictionPool** for potential reward payouts.
+    - **SwapCastHook** calculates the total amount (stake + protocol fee) and forwards it to the **PredictionManager**.
+    - **PredictionManager** receives the user's total stake, transfers the calculated protocol fee to the **Treasury** contract, and holds the remaining net stake for potential reward payouts.
 
 2. **Market Resolution:**
     - **OracleResolver** (triggered by Chainlink Automation or Admin) determines the winning outcome.
-    - **PredictionPool** updates the market status (e.g., "Bullish Wins").
+    - **OracleResolver** calls **PredictionManager** to update the market status (e.g., "Bullish Wins").
 
 3. **Reward Claim:**
     - Winner calls `claimReward` via the **RewardDistributor** (or dApp).
-    - **RewardDistributor** verifies the claim with the **PredictionPool**. The **PredictionPool**, holding the stakes, then executes the reward transfer directly to the winner and burns the associated NFT.
+    - **RewardDistributor** forwards the claim to the **PredictionManager**.
+    - **PredictionManager** verifies the claim, executes the reward transfer directly to the winner, and burns the associated NFT.
 
 ---
 
@@ -209,23 +211,105 @@ Complete architecture documentation can be found in the [c4_architecture](docs/c
 1. **Alice swaps 1000 USDC for ETH**
     - She predicts ETH will exceed $5000 by June 30.
     - Her conviction weight is calculated as 10 USDC (1% of swap).
-    - She receives ETH (from swap) and a SwapCast NFT with her prediction details.
+    - The SwapCastHook forwards her prediction data and ETH stake to the PredictionManager.
+    - The PredictionManager mints a SwapCastNFT with her prediction details.
+    - She receives ETH (from swap) and the SwapCastNFT representing her prediction position.
 
 2. **Bob swaps 2000 USDC for ETH**
     - He predicts ETH will NOT exceed $5000 by June 30.
     - His conviction weight is calculated as 20 USDC (1% of swap).
-    - He receives ETH (from swap) and a SwapCast NFT with his prediction details.
+    - The SwapCastHook forwards his prediction data and ETH stake to the PredictionManager.
+    - The PredictionManager mints a SwapCastNFT with his prediction details.
+    - He receives ETH (from swap) and the SwapCastNFT representing his prediction position.
 
 3. **June 30 arrives**
-    - Chainlink Automation triggers resolution.
-    - Oracle Resolver checks current ETH price via Chainlink.
-    - If ETH > $5000, Bull outcome wins; if ETH < $5000, Bear outcome wins.
+    - Chainlink Automation triggers the OracleResolver.
+    - OracleResolver checks current ETH price via Chainlink Feed Registry.
+    - OracleResolver determines the outcome: If ETH > $5000, Bullish outcome wins; if ETH < $5000, Bearish outcome wins.
+    - OracleResolver calls the PredictionManager to update the market status.
 
 4. **Rewards are claimed**
-    - Winners must visit the SwapCast dApp or directly call the contract.
-    - They must own the SwapCast NFT representing their prediction.
-    - NFT is burned upon successful claim.
-    - Rewards are transferred to the winner's address.
+    - Winners call the RewardDistributor's claimReward function.
+    - RewardDistributor forwards the claim to the PredictionManager.
+    - PredictionManager verifies the user owns the SwapCastNFT representing their prediction.
+    - PredictionManager burns the NFT upon successful claim.
+    - PredictionManager transfers the reward ETH to the winner's address.
+
+---
+
+## 🔒 Security Features
+
+SwapCast implements several security features across its contracts to ensure the safety of user funds and the integrity of the prediction markets:
+
+### Contract-Level Security
+
+- **Immutable References**: Critical contract addresses like the PredictionManager in SwapCastHook and RewardDistributor are set as immutable, preventing changes after deployment.
+- **Reentrancy Protection**: Treasury and RewardDistributor use OpenZeppelin's ReentrancyGuard to prevent reentrancy attacks during fund transfers.
+- **Emergency Controls**: RewardDistributor includes pausable functionality that can be activated by the owner in case of emergencies.
+- **ETH Recovery**: SwapCastHook includes an ETH recovery function to allow the owner to recover stuck ETH in case of emergency.
+
+### Access Control
+
+- **Role-Based Access**: Contracts use OpenZeppelin's Ownable for administrative functions.
+- **Function-Level Permissions**: Functions are restricted to appropriate callers (e.g., only the PredictionManager can mint/burn NFTs).
+
+### Data Validation
+
+- **Comprehensive Input Validation**: All user inputs and external data are validated before processing.
+- **Oracle Data Verification**: OracleResolver performs extensive validation of Chainlink price feed data, including freshness checks.
+
+### Error Handling
+
+- **Detailed Error Messages**: All contracts use custom errors with descriptive messages for better debugging.
+- **Graceful Failure**: Contracts handle errors gracefully, providing clear information about what went wrong.
+
+## 🤔 Current Considerations & Challenges
+
+As with any innovative DeFi project, we've identified several areas that deserve careful consideration:
+
+### Gas Efficiency
+
+The `_afterSwap` hook in SwapCastHook performs several operations that add to the base gas cost of swaps. We've optimized where possible (using assembly for data extraction, minimizing storage operations), but there's an inherent trade-off between functionality and gas costs. Our preliminary benchmarks show the additional gas cost is reasonable given the added utility, but we're continuing to optimize.
+
+### Hook Data Format
+
+We've implemented a fixed-length hookData format (69 bytes) for efficiency, but this creates limitations for future extensions. We're exploring versioning mechanisms that would allow for backward compatibility while enabling more complex prediction parameters in the future.
+
+### Oracle Dependency
+
+The system relies on Chainlink for price data and market resolution. While Chainlink is the gold standard for on-chain oracles, this does introduce a dependency. We've implemented extensive validation of oracle data (freshness checks, round verification) and are considering a governance mechanism that could resolve markets in edge cases where oracle data is unavailable or disputed.
+
+### Market Creation
+
+Currently, markets are created by the contract owner, which introduces some centralization. A more decentralized approach would allow users to propose markets (potentially with a deposit requirement) that could be automatically created based on predefined criteria.
+
+### Incentive Alignment
+
+The current fee structure (5% protocol fee) balances revenue generation with user incentives, but we're exploring dynamic fee models that could adjust based on market liquidity, prediction volume, or other factors to optimize participation.
+
+## 🚀 Future Extensions
+
+While the current implementation provides a solid foundation, we're excited about several potential extensions that could further enhance SwapCast:
+
+### Multi-Asset Staking
+
+As mentioned in our hackathon scope limitations, a natural evolution would be to allow users to stake with the asset they're receiving from the swap, rather than just ETH. This would create an even tighter connection between the swap and the prediction, as users would be putting their newly acquired tokens behind their market conviction.
+
+### Automated Market Making Integration
+
+An exciting possibility is using aggregated prediction data to influence the AMM parameters of the pool itself. This could create a powerful feedback loop where market sentiment directly impacts trading conditions, potentially reducing impermanent loss and improving capital efficiency.
+
+### Cross-Protocol Integration
+
+The market sentiment data generated by SwapCast could be valuable input for other DeFi protocols. For example, lending platforms could adjust interest rates based on market predictions, or options protocols could use prediction data to inform pricing models. We're exploring partnerships that would allow for such integrations.
+
+### Reputation System
+
+Implementing a reputation system for predictors based on their historical accuracy could create additional incentives for thoughtful predictions. High-reputation predictors might receive benefits like reduced fees, earlier access to new markets, or weighted voting rights in a future DAO governance structure.
+
+### Conditional Markets
+
+Expanding beyond simple price predictions, we could implement conditional markets that allow for more complex predictions (e.g., "Token A will outperform Token B if Event C occurs"). This would enable more sophisticated market intelligence gathering and potentially attract more advanced traders.
 
 ---
 
