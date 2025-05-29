@@ -19,13 +19,40 @@ export const OUTCOME_BULLISH = 1;
 
 /**
  * Generates a random swap amount (the base amount for the transaction)
+ * Uses different tiers of swap amounts to simulate different types of traders
  *
  * @returns Random swap amount in wei
  */
 function getRandomSwapAmount(): bigint {
-	// Generate a random amount between 0.5 and 2.5 ETH for larger transactions
-	const ethAmount = 0.5 + Math.random() * 2.0;
-	return parseEther(ethAmount.toFixed(6));
+	// Determine which tier of trader this is
+	const traderType = Math.random();
+	
+	// Whale traders (10% chance): $1M to $10M in ETH equivalent
+	if (traderType < 0.1) {
+		// At ~$3500 per ETH, this is roughly 285-2850 ETH
+		const ethAmount = 285 + Math.random() * 2565;
+		console.log(`🐋 WHALE transaction: ${ethAmount.toFixed(2)} ETH`);
+		return parseEther(ethAmount.toFixed(6));
+	}
+	// Large traders (20% chance): $100k to $1M in ETH equivalent
+	else if (traderType < 0.3) {
+		// At ~$3500 per ETH, this is roughly 28-285 ETH
+		const ethAmount = 28 + Math.random() * 257;
+		console.log(`🐬 Large transaction: ${ethAmount.toFixed(2)} ETH`);
+		return parseEther(ethAmount.toFixed(6));
+	}
+	// Medium traders (30% chance): $10k to $100k in ETH equivalent
+	else if (traderType < 0.6) {
+		// At ~$3500 per ETH, this is roughly 2.8-28 ETH
+		const ethAmount = 2.8 + Math.random() * 25.2;
+		return parseEther(ethAmount.toFixed(6));
+	}
+	// Regular traders (40% chance): $1k to $10k in ETH equivalent
+	else {
+		// At ~$3500 per ETH, this is roughly 0.3-2.8 ETH
+		const ethAmount = 0.3 + Math.random() * 2.5;
+		return parseEther(ethAmount.toFixed(6));
+	}
 }
 
 /**
