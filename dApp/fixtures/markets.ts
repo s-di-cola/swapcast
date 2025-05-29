@@ -212,9 +212,9 @@ export async function generateMarkets(adminAccount: any, count: number = 5): Pro
       const currentPrice = await getCurrentPrice(ASSET_PAIRS[i].symbol);
       console.log(chalk.blue(`Current price for ${ASSET_PAIRS[i].symbol}: $${currentPrice}`));
       
-      // Calculate a realistic price threshold (percentage deviation from current price)
+      // Calculate a realistic price threshold (absolute price value)
       const priceThreshold = calculateRealisticPriceThreshold(currentPrice);
-      console.log(chalk.blue(`Using price threshold of ${priceThreshold}% for ${ASSET_PAIRS[i].symbol}`));
+      console.log(chalk.blue(`Using price threshold of $${priceThreshold.toFixed(2)} for ${ASSET_PAIRS[i].symbol}`));
       
       // Create the market
       console.log(chalk.yellow(`Creating market for ${ASSET_PAIRS[i].name}...`));
@@ -228,7 +228,7 @@ export async function generateMarkets(adminAccount: any, count: number = 5): Pro
         ASSET_PAIRS[i].symbol,
         expirationTime,
         CONTRACT_ADDRESSES.ORACLE_RESOLVER as Address,
-        BigInt(Math.floor(priceThreshold * 100)), // Convert to basis points as integer
+        BigInt(Math.floor(priceThreshold * 1e18)), // Convert to wei format for the contract
         poolKey
       );
       

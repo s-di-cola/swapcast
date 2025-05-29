@@ -124,7 +124,7 @@ async function getCoinIdForSymbol(symbol: string): Promise<string | null> {
  * 
  * @param currentPrice - Current price of the asset
  * @param volatilityPercent - Volatility percentage (default: 2-5%)
- * @returns Price threshold as a decimal (e.g., 0.02 for 2%)
+ * @returns Absolute price value to use as threshold
  */
 export function calculateRealisticPriceThreshold(currentPrice: number, volatilityPercent?: number): number {
     // If volatility is not provided, use a random value between 2-5%
@@ -132,9 +132,11 @@ export function calculateRealisticPriceThreshold(currentPrice: number, volatilit
     
     // For stablecoins (price around $1), use a smaller threshold
     if (currentPrice >= 0.95 && currentPrice <= 1.05) {
-        return 0.002; // 0.2% for stablecoins
+        // For stablecoins, use a very small absolute difference (e.g., $0.002)
+        return 1.002;
     }
     
-    // For high-value assets, use the specified volatility
-    return volatility / 100;
+    // For high-value assets, calculate a realistic price near the current price
+    // Slightly above current price (by the volatility percentage)
+    return currentPrice * (1 + volatility / 100);
 }

@@ -137,8 +137,9 @@ export function transformMarketDetails(details: MarketDetailsResult): Market {
 		totalStake1: details.totalConvictionBullish,
 		expirationTime: Number(details.expirationTimestamp),
 		priceAggregator: details.priceOracle,
-		// Ensure price threshold is properly formatted
-		priceThreshold: Number(details.priceThreshold) / 1e18, // Convert from wei
+		// Price threshold is stored in wei format in the contract (like other currency values)
+		// So we need to convert it to a decimal representation for display
+		priceThreshold: Number(details.priceThreshold) / 1e18,
 		status,
 		expirationDisplay,
 		// Format totalStake as a string with proper decimal representation
