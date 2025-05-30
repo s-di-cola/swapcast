@@ -6,8 +6,9 @@
 # Configuration
 ANVIL_PORT=8545
 SKIP_SUBGRAPH=false  # Set to true to skip subgraph setup
-FORK_RPC_URL=""  # Will be set during execution
 QUIET_MODE=true    # Reduce verbose output
+DEPLOYMENT_SUCCESS=false
+SUBGRAPH_DEPLOYED=false
 
 # Project paths
 PROJECT_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
@@ -85,7 +86,7 @@ setup_environment() {
   # Create log directory
   mkdir -p "$LOG_DIR"
 
-    # Set project paths
+  # Set project paths
   if [[ "${BASH_SOURCE[0]}" == "" ]]; then
     echo "Error: Script must be run in Bash" >&2
     exit 1
@@ -193,60 +194,6 @@ check_prerequisites() {
     npm install -g @graphprotocol/graph-cli > /dev/null 2>&1
   fi
 
-  # Set up Ethereum RPC URL
-  # Default to Anvil's built-in fork
-  FORK_RPC_URL=""
-
-  # Only ask for RPC URL if running interactively
-  if [ -t 0 ]; then
-    log_info "Ethereum RPC URL is needed to fork mainnet"
-    echo "Options:"
-    echo "  1. Enter an Alchemy/Infura URL"
-    echo "  2. Enter a custom RPC URL"
-    read -r -p "Enter your choice (1-2) [1]: " RPC_CHOICE
-    RPC_CHOICE=${RPC_CHOICE:-1} # Default to 1 if user provides no input
-
-    case $RPC_CHOICE in
-      1)
-        read -r -p "Enter your Alchemy/Infura API key: " API_KEY
-        read -r -p "Provider (alchemy/infura) [alchemy]: " PROVIDER
-        PROVIDER=${PROVIDER:-alchemy}
-
-        if [ "$PROVIDER" = "alchemy" ]; then
-          FORK_RPC_URL="https://eth-mainnet.g.alchemy.com/v2/$API_KEY"
-        elif [ "$PROVIDER" = "infura" ]; then
-          FORK_RPC_URL="https://mainnet.infura.io/v3/$API_KEY"
-        else
-          log_error "Unknown provider $PROVIDER"
-          return 1
-        fi
-        ;;
-      2)
-        read -r -p "Enter your custom RPC URL: " FORK_RPC_URL
-        ;;
-      *)
-        log_error "Invalid choice $RPC_CHOICE"
-        return 1
-        ;;
-    esac
-  fi
-
-  # Install subgraph dependencies if needed
-  if [ "$SKIP_SUBGRAPH" = false ] && [ -d "$SUBGRAPH_DIR" ]; then
-    log_info "Checking subgraph dependencies..."
-    if [ ! -d "$SUBGRAPH_DIR/node_modules/js-yaml" ]; then
-      log_info "Installing subgraph dependencies..."
-      (cd "$SUBGRAPH_DIR" && npm install --save-dev js-yaml)
-      if [ $? -ne 0 ]; then
-        log_error "Failed to install subgraph dependencies"
-        return 1
-      fi
-      log_success "Subgraph dependencies installed"
-    else
-      log_info "Subgraph dependencies already installed"
-    fi
-  fi
-
   log_success "Prerequisites check completed"
   return 0
 }
@@ -259,7 +206,7 @@ start_anvil() {
   pkill -f anvil > /dev/null 2>&1 || true
 
   # Start anvil with mainnet fork in the background
-    anvil --fork-url "$FORK_RPC_URL" --port $ANVIL_PORT --chain-id 31337 > "$LOG_DIR"/anvil.log 2>&1 &
+  anvil --fork-url "$FORK_RPC_URL" --port $ANVIL_PORT --chain-id 31337 > "$LOG_DIR"/anvil.log 2>&1 &
   ANVIL_PID=$!
 
   # Save PID immediately
@@ -372,14 +319,6 @@ deploy_contracts() {
     http://localhost:$ANVIL_PORT | grep -o '"result":"0x[^"]*"' | \
     grep -o '0x[^"]*' | xargs printf "%d\n" 2>/dev/null)
 
-  if [ -z "$DEPLOY_BLOCK" ]; then
-    log_warning "Could not determine deployment block, using 0 as fallback"
-    DEPLOY_BLOCK=0
-  fi
-
-  # Add the deployment block to the file
-  echo "PUBLIC_DEPLOY_BLOCK=$DEPLOY_BLOCK" >> "$DAPP_ENV_FILE"
-
   log_success "Contracts deployed successfully"
   DEPLOYMENT_SUCCESS=true
   return 0
@@ -391,6 +330,11 @@ setup_subgraph() {
     log_warning "Skipping subgraph setup"
     return 0
   fi
+  
+  # Clean up data directories to ensure a fresh start
+  log_info "Cleaning up data directories"
+  rm -rf "$SUBGRAPH_DIR/docker/data/ipfs" "$SUBGRAPH_DIR/docker/data/postgres"
+  mkdir -p "$SUBGRAPH_DIR/docker/data/ipfs" "$SUBGRAPH_DIR/docker/data/postgres"
 
   log_info "Setting up the subgraph"
 
@@ -415,269 +359,217 @@ setup_subgraph() {
   fi
 
   # Generate code and build the subgraph
-  log_info "Building the subgraph"
+  log_info "Generating code and building the subgraph"
   if [ "$QUIET_MODE" = true ]; then
     npm run codegen > /dev/null 2>&1 && npm run build > /dev/null 2>&1
   else
     npm run codegen && npm run build
   fi
 
-  # Check Docker requirements
-  if ! command_exists docker || ! docker info > /dev/null 2>&1; then
-    log_warning "Docker is not available, skipping subgraph deployment"
-    SUBGRAPH_DEPLOYED=false
-    cd "$PROJECT_ROOT" || return 1
-    return 0
+  if [ $? -ne 0 ]; then
+    log_error "Failed to build the subgraph"
+    return 1
   fi
 
   # Create data directories and start Docker services
   log_info "Starting Graph Node services"
-  mkdir -p "$PROJECT_ROOT/data/ipfs" "$PROJECT_ROOT/data/postgres"
-  cd "$PROJECT_ROOT" || return 1
+  cd "$SUBGRAPH_DIR/docker" || return 1
 
-  # Update docker-compose with correct port in the correct file
-  if [ -f "$DOCKER_COMPOSE_FILE" ]; then
-    sed -i '' "s|ethereum: 'mainnet-fork:http://host.docker.internal:8545'|ethereum: 'mainnet-fork:http://host.docker.internal:$ANVIL_PORT'|" "$DOCKER_COMPOSE_FILE" 2>/dev/null
+  if [ "$QUIET_MODE" = true ]; then
+    docker-compose up -d > /dev/null 2>&1
   else
-    log_error "Docker compose file not found at $DOCKER_COMPOSE_FILE"
-    SUBGRAPH_DEPLOYED=false
+    docker-compose up -d
+  fi
+
+  if [ $? -ne 0 ]; then
+    log_error "Failed to start Graph Node services"
     return 1
   fi
 
-  # Start Docker services with the correct file
-  log_info "Running docker-compose up -d with file: $DOCKER_COMPOSE_FILE"
-  if [ "$QUIET_MODE" = true ]; then
-    docker-compose -f "$DOCKER_COMPOSE_FILE" up -d > "$LOG_DIR/docker.log" 2>&1
-  else
-    docker-compose -f "$DOCKER_COMPOSE_FILE" up -d
-  fi
-
-  # Wait for services
-  log_info "Waiting for Graph Node to start"
+  # Wait for services to be ready
+  log_info "Waiting for Graph Node services to be ready"
   sleep 10
 
-  # Check if graph node is running (with retry)
-  local retry_count=0
-  local max_retries=5
-  while ! curl -s http://localhost:8020/ > /dev/null && [ $retry_count -lt $max_retries ]; do
-    log_info "Waiting for Graph Node to be ready (attempt $(($retry_count + 1))/$max_retries)"
-    sleep 5
-    retry_count=$((retry_count + 1))
-  done
-
-  if ! curl -s http://localhost:8020/ > /dev/null; then
-    log_warning "Graph node is not running after $max_retries attempts, skipping subgraph deployment"
-    log_info "Check Docker logs with: docker logs local-graph-node-1"
-    SUBGRAPH_DEPLOYED=false
-    return 0
-  fi
-
-  log_success "Graph node is running successfully"
-
-  # Deploy the subgraph
-  log_info "Deploying the subgraph"
+  # Create and deploy the subgraph
+  log_info "Creating and deploying the subgraph"
   cd "$SUBGRAPH_DIR" || return 1
 
-  # Create and deploy
-  npm run create-local > $LOG_DIR/subgraph_create.log 2>&1 || true
-  npm run deploy-local-auto > $LOG_DIR/subgraph_deploy.log 2>&1
-  DEPLOY_RESULT=$?
-
-  cd "$PROJECT_ROOT" || return 1
-
-  if [ $DEPLOY_RESULT -eq 0 ]; then
-    log_success "Subgraph deployed successfully"
-    SUBGRAPH_DEPLOYED=true
+  if [ "$QUIET_MODE" = true ]; then
+    npm run create-local > /dev/null 2>&1 && npm run deploy-local > /dev/null 2>&1
   else
-    log_warning "Failed to deploy the subgraph"
-    SUBGRAPH_DEPLOYED=false
+    npm run create-local && npm run deploy-local
   fi
 
+  if [ $? -ne 0 ]; then
+    log_error "Failed to deploy the subgraph"
+    return 1
+  fi
+
+  log_success "Subgraph deployed successfully"
   return 0
 }
 
-# Function to print summary information
+# Function to print a summary of the setup
 print_summary() {
-  # Clear the screen for better readability
-  clear
-
-  echo -e "\n${BOLD}${GREEN}========== SwapCast Local Development Setup Summary ===========${NC}\n"
-
-  # Print deployment status with appropriate icon
+  echo -e "\n${BOLD}========== Setup Summary ==========${NC}"
+  
   if [ "$DEPLOYMENT_SUCCESS" = true ]; then
-    echo -e "${BOLD}${GREEN}✓ Contract Deployment: SUCCESS${NC}"
+    echo -e "${GREEN}✓ Contracts deployed successfully${NC}"
+    echo -e "  PredictionManager: $PREDICTION_MANAGER_ADDRESS"
+    echo -e "  Environment file: $DAPP_ENV_FILE"
   else
-    echo -e "${BOLD}${RED}✗ Contract Deployment: FAILED${NC}"
-    echo -e "Check logs at: $LOG_DIR/deploy.log"
-    return 1
+    echo -e "${RED}✗ Contract deployment failed${NC}"
   fi
 
-  # Print subgraph status
   if [ "$SKIP_SUBGRAPH" = false ]; then
     if [ "$SUBGRAPH_DEPLOYED" = true ]; then
-      echo -e "${BOLD}${GREEN}✓ Subgraph Deployment: SUCCESS${NC}"
+      echo -e "${GREEN}✓ Subgraph deployed successfully${NC}"
+      echo -e "  Subgraph URL: http://localhost:8000/subgraphs/name/swapcast/mainnet-fork"
+      echo -e "  GraphQL Playground: http://localhost:8000/graphql"
     else
-      echo -e "${BOLD}${YELLOW}⚠ Subgraph Deployment: FAILED${NC}"
+      echo -e "${RED}✗ Subgraph deployment had issues${NC}"
     fi
   else
-    echo -e "${BOLD}${YELLOW}⚠ Subgraph Setup: SKIPPED${NC}"
-  fi
-  echo
-
-  # Print contract addresses in a table format
-  echo -e "${BOLD}${BLUE}CONTRACT ADDRESSES:${NC}"
-  echo -e "${BOLD}┌───────────────────┬──────────────────────────────────────────────┐${NC}"
-  echo -e "${BOLD}│ Contract          │ Address                                    │${NC}"
-  echo -e "${BOLD}├───────────────────┼──────────────────────────────────────────────┤${NC}"
-
-  # Read the .env file and extract contract addresses
-  while IFS='=' read -r key value; do
-    if [[ $key =~ ^VITE_(.*)_ADDRESS$ ]]; then
-      contract_name=${BASH_REMATCH[1]}
-      # Format the contract name and address for the table
-      printf "${BOLD}│ %-17s │ %-46s │${NC}\n" "$contract_name" "$value"
-    fi
-  done < "$DAPP_ENV_FILE"
-
-  echo -e "${BOLD}└───────────────────┴──────────────────────────────────────────────┘${NC}\n"
-
-  # Print deployment info
-  echo -e "${BOLD}${BLUE}DEPLOYMENT INFO:${NC}"
-  echo -e "${BOLD}┌───────────────────┬──────────────────────────────────────────────┐${NC}"
-  echo -e "${BOLD}│ Item              │ Value                                      │${NC}"
-  echo -e "${BOLD}├───────────────────┼──────────────────────────────────────────────┤${NC}"
-  printf "${BOLD}│ %-17s │ %-46s │${NC}\n" "Deployment Block" "$(grep "VITE_DEPLOY_BLOCK=" "$DAPP_ENV_FILE" | cut -d'=' -f2)"
-  printf "${BOLD}│ %-17s │ %-46s │${NC}\n" "Ethereum RPC" "http://localhost:$ANVIL_PORT"
-  printf "${BOLD}│ %-17s │ %-46s │${NC}\n" "Environment File" $DAPP_ENV_FILE
-  echo -e "${BOLD}└───────────────────┴──────────────────────────────────────────────┘${NC}\n"
-
-  # Print subgraph info if deployed
-  if [ "$SKIP_SUBGRAPH" = false ]; then
-    if [ "$SUBGRAPH_DEPLOYED" = true ]; then
-      echo -e "${BOLD}${BLUE}SUBGRAPH INFO:${NC}"
-      echo -e "${BOLD}┌───────────────────┬──────────────────────────────────────────────┐${NC}"
-      echo -e "${BOLD}│ Item              │ Value                                      │${NC}"
-      echo -e "${BOLD}├───────────────────┼──────────────────────────────────────────────┤${NC}"
-      printf "${BOLD}│ %-17s │ %-46s │${NC}\n" "GraphQL Endpoint" "http://localhost:8000/subgraphs/name/swapcast-subgraph"
-      printf "${BOLD}│ %-17s │ %-46s │${NC}\n" "Contract Address" "$PREDICTION_MANAGER_ADDRESS"
-      printf "${BOLD}│ %-17s │ %-46s │${NC}\n" "Start Block" "$(grep "VITE_DEPLOY_BLOCK=" "$DAPP_ENV_FILE" | cut -d'=' -f2)"
-      echo -e "${BOLD}└───────────────────┴──────────────────────────────────────────────┘${NC}\n"
-    else
-      echo -e "${BOLD}${YELLOW}⚠ SUBGRAPH DEPLOYMENT FAILED${NC}\n"
-      echo -e "Check setup logs at: $LOG_DIR/setup.log\n"
-      echo -e "Make sure Docker is running and ports 8000, 8001, 8020, 8030, 5001, and 5432 are available.\n"
-    fi
-  else
-    echo -e "${BOLD}${YELLOW}⚠ SUBGRAPH SETUP WAS SKIPPED${NC}\n"
+    echo -e "${YELLOW}! Subgraph setup was skipped${NC}"
   fi
 
-  # Print next steps
-  echo -e "${BOLD}${BLUE}NEXT STEPS:${NC}"
-  echo -e "1. Start the frontend development server:\n   ${BOLD}cd dApp && npm run dev${NC}"
-  echo -e "2. Access the application at: ${BOLD}http://localhost:5173${NC}\n"
-
-  # Print cleanup instructions
-  echo -e "${BOLD}${BLUE}TO STOP SERVICES:${NC}"
-  echo -e "1. Use the stop script: ${BOLD}./scripts/local/stop.sh${NC}"
-  echo -e "2. Or manually:\n   - Kill Anvil: ${BOLD}kill \$(cat "$LOG_DIR/anvil.pid")${NC}"
-  if [ "$SKIP_SUBGRAPH" = false ]; then
-    echo -e "   - Stop Docker services: ${BOLD}docker-compose -f ""$DOCKER_COMPOSE_FILE"" down${NC}"
-  fi
-  echo
-
-  echo -e "${BOLD}${GREEN}Setup completed successfully!${NC}\n"
+  echo -e "\n${BOLD}Anvil RPC:${NC} http://localhost:$ANVIL_PORT"
+  echo -e "${BOLD}Chain ID:${NC} 31337"
+  
+  echo -e "\n${BOLD}To stop all services:${NC}"
+  echo -e "  ./scripts/local/stop.sh"
+  
+  echo -e "\n${BOLD}========== Cleanup Complete ==========${NC}"
 }
 
-# Function to handle errors and cleanup
+# Function to clean up resources on exit
 cleanup_and_exit() {
   local exit_code=$1
-  local error_message=$2
-
-  echo -e "\n${RED}ERROR: $error_message${NC}"
-  echo -e "${YELLOW}Cleaning up resources...${NC}"
-
+  local message=$2
+  
   # Kill anvil if it's running
   if [ -f "$LOG_DIR/anvil.pid" ]; then
-    kill "$(cat "$LOG_DIR"/anvil.pid)" 2>/dev/null || true
-    echo "Anvil process terminated."
+    ANVIL_PID=$(cat "$LOG_DIR/anvil.pid")
+    if ps -p $ANVIL_PID > /dev/null; then
+      kill $ANVIL_PID
+      log_info "Anvil process killed"
+    fi
   fi
-
+  
   # Stop Docker services if they're running
-  if docker ps | grep -q "graph-node"; then
-    docker-compose -f "${DOCKER_COMPOSE_FILE}" down
-    echo "Docker services stopped."
+  if [ "$SKIP_SUBGRAPH" = false ] && [ -f "$SUBGRAPH_DIR/docker/docker-compose.yml" ]; then
+    log_info "Stopping Docker services"
+    (cd "$SUBGRAPH_DIR/docker" && docker-compose down > /dev/null 2>&1)
   fi
-
-  echo -e "${RED}Setup failed. Please check the logs for more information.${NC}"
+  
+  if [ -n "$message" ]; then
+    log_error "$message"
+  fi
+  
   exit $exit_code
 }
 
-# Function to show usage
-show_usage() {
-  echo "Usage: $0 [OPTIONS]"
-  echo "Options:"
-  echo "  --skip-subgraph    Skip the subgraph setup"
-  echo "  --help             Show this help message"
-}
-
-# Initialize argument flags
-SKIP_SUBGRAPH=false
-SHOW_HELP=false
-UNKNOWN_OPTION_FOUND=false
-
 # Parse command line arguments
 while [[ $# -gt 0 ]]; do
-  arg="$1"
-  if [[ "$arg" == "--help" ]]; then
-    SHOW_HELP=true
-    shift # Consume --help
-    # No need to break immediately, process all args in case of mixed order or future additions
-  elif [[ "$arg" == "--skip-subgraph" ]]; then
-    SKIP_SUBGRAPH=true
-    shift # Consume --skip-subgraph
-  elif [[ "$arg" == --* ]]; then # Check for any other unknown options starting with --
-    echo "Unknown option: $arg"
-    UNKNOWN_OPTION_FOUND=true
-    shift # Consume unknown option
-  else
-    # Store positional arguments if any, or handle as error if none are expected
-    # For this script, we don't expect positional args beyond options
-    echo "Unexpected argument: $arg"
-    UNKNOWN_OPTION_FOUND=true
-    shift # Consume unexpected argument
-  fi
+  case $1 in
+    --skip-subgraph)
+      SKIP_SUBGRAPH=true
+      shift
+      ;;
+    --verbose)
+      QUIET_MODE=false
+      shift
+      ;;
+    --help)
+      echo "Usage: $0 [options]"
+      echo ""
+      echo "Options:"
+      echo "  --skip-subgraph    Skip subgraph setup"
+      echo "  --verbose          Show verbose output"
+      echo "  --help             Show this help message"
+      echo ""
+      echo "Environment variables:"
+      echo "  FORK_RPC_URL       Ethereum RPC URL for forking (if set, skips the prompt)"
+      exit 0
+      ;;
+    *)
+      echo "Unknown option: $1"
+      echo "Use --help to see available options"
+      exit 1
+      ;;
+  esac
 done
 
-# Handle help or unknown option after parsing
-if [[ "$SHOW_HELP" == true ]]; then
-  show_usage
-  exit 0
-fi
+# Set up trap to clean up on exit
+trap 'cleanup_and_exit 1 "Script interrupted"' INT TERM
 
-if [[ "$UNKNOWN_OPTION_FOUND" == true ]]; then
-  show_usage
-  exit 1
-fi
-
-# Main execution
-main() {
-  # Stop any running services first
-  log_info "Stopping any running services..."
-  "${PROJECT_ROOT}/scripts/local/stop.sh"
-
-  # Initialize variables
-  DEPLOYMENT_SUCCESS=false
-  SUBGRAPH_DEPLOYED=false
-
-  # Setup environment
-  setup_environment || cleanup_and_exit 1 "Environment setup failed"
-
+# Main function to orchestrate the setup process
+function main() {
   # Check prerequisites
-  log_info "Checking prerequisites..."
-  check_prerequisites || cleanup_and_exit 1 "Prerequisites check failed"
+  check_prerequisites || return 1
 
-  # Start Anvil
-  log_info "Starting Anvil..."
+  # Create log directory
+  mkdir -p "$LOG_DIR"
+  
+  # Check if FORK_RPC_URL is already set in the environment
+  if [ -z "$FORK_RPC_URL" ]; then
+    # Only ask for RPC URL if running interactively
+    if [ -t 0 ]; then
+      log_info "Ethereum RPC URL is needed to fork mainnet"
+      echo "Options:"
+      echo "  1. Enter an Alchemy/Infura URL"
+      echo "  2. Enter a custom RPC URL"
+      read -r -p "Enter your choice (1-2) [1]: " RPC_CHOICE
+      RPC_CHOICE=${RPC_CHOICE:-1} # Default to 1 if user provides no input
+
+      case $RPC_CHOICE in
+        1)
+          read -r -p "Enter your Alchemy/Infura API key: " API_KEY
+          read -r -p "Provider (alchemy/infura) [alchemy]: " PROVIDER
+          PROVIDER=${PROVIDER:-alchemy}
+
+          if [ "$PROVIDER" = "alchemy" ]; then
+            FORK_RPC_URL="https://eth-mainnet.g.alchemy.com/v2/$API_KEY"
+          elif [ "$PROVIDER" = "infura" ]; then
+            FORK_RPC_URL="https://mainnet.infura.io/v3/$API_KEY"
+          else
+            log_error "Unknown provider $PROVIDER"
+            return 1
+          fi
+          ;;
+        2)
+          read -r -p "Enter your custom RPC URL: " FORK_RPC_URL
+          ;;
+        *)
+          log_error "Invalid choice $RPC_CHOICE"
+          return 1
+          ;;
+      esac
+    else
+      log_error "FORK_RPC_URL environment variable is required in non-interactive mode"
+      return 1
+    fi
+  else
+    log_info "Using FORK_RPC_URL from environment: ${FORK_RPC_URL:0:30}..."
+  fi
+
+  # Install subgraph dependencies if needed
+  if [ "$SKIP_SUBGRAPH" = false ] && [ -d "$SUBGRAPH_DIR" ]; then
+    log_info "Checking subgraph dependencies..."
+    if [ ! -d "$SUBGRAPH_DIR/node_modules/js-yaml" ]; then
+      log_info "Installing subgraph dependencies..."
+      (cd "$SUBGRAPH_DIR" && npm install --save-dev js-yaml)
+      if [ $? -ne 0 ]; then
+        log_error "Failed to install subgraph dependencies"
+        return 1
+      fi
+      log_success "Subgraph dependencies installed"
+    else
+      log_info "Subgraph dependencies already installed"
+    fi
+  fi
+
+  # Start anvil
   start_anvil || cleanup_and_exit 2 "Failed to start Anvil"
 
   # Deploy contracts
