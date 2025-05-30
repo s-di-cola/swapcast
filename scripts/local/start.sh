@@ -62,61 +62,7 @@ cleanup_and_exit() {
 # CORE FUNCTIONS
 #######################################
 
-<<<<<<< HEAD
-log_success() {
-  log "SUCCESS" "$1"
-}
-
-log_warning() {
-  log "WARNING" "$1"
-}
-
-log_error() {
-  log "ERROR" "$1"
-}
-
-# Function to check if a command exists
-command_exists() {
-  command -v "$1" >/dev/null 2>&1
-}
-
-# Function to set up the environment
-setup_environment() {
-  # Create log directory
-  mkdir -p "$LOG_DIR"
-
-  # Set project paths
-  if [[ "${BASH_SOURCE[0]}" == "" ]]; then
-    echo "Error: Script must be run in Bash" >&2
-    exit 1
-  fi
-
-  script_dir="$(dirname "${BASH_SOURCE[0]}")"
-  if ! project_path="$(cd "${script_dir}/../.." && pwd)"; then
-    echo "Error: Failed to determine project root directory" >&2
-    exit 1
-  fi
-
-  if [ ! -d "${project_path}" ]; then
-    echo "Error: Project root directory doesn't exist: ${project_path}" >&2
-    exit 1
-  fi
-
-  export PROJECT_ROOT="${project_path}"
-  export DEPLOY_SCRIPT="${PROJECT_ROOT}/scripts/local/Deploy.s.sol"
-  export SUBGRAPH_DIR="${PROJECT_ROOT}/subgraph"
-  export DAPP_ENV_FILE="${PROJECT_ROOT}/dApp/.env.local"
-  export DOCKER_COMPOSE_FILE="${SUBGRAPH_DIR}/docker/docker-compose.yml"
-  export LOG_DIR="${PROJECT_ROOT}/logs"
-  export DATA_DIR="${PROJECT_ROOT}/data"
-
-  return 0
-}
-
-# Function to check prerequisites
-=======
 # Check prerequisites
->>>>>>> temp-script-fixes
 check_prerequisites() {
   log_info "Checking prerequisites..."
 
@@ -162,10 +108,6 @@ check_prerequisites() {
     npm install -g @graphprotocol/graph-cli > /dev/null 2>&1
   fi
 
-<<<<<<< HEAD
-  log_success "Prerequisites check completed"
-=======
->>>>>>> temp-script-fixes
   return 0
 }
 
@@ -242,10 +184,7 @@ start_anvil() {
     return 1
   fi
   # Start anvil with mainnet fork in the background
-<<<<<<< HEAD
-=======
   log_info "Starting Anvil with fork URL: ${FORK_RPC_URL:0:30}..."
->>>>>>> temp-script-fixes
   anvil --fork-url "$FORK_RPC_URL" --port $ANVIL_PORT --chain-id 31337 > "$LOG_DIR"/anvil.log 2>&1 &
   ANVIL_PID=$!
 
@@ -415,24 +354,6 @@ setup_subgraph() {
   log_info "Creating and deploying the subgraph"
   cd "$SUBGRAPH_DIR" || return 1
 
-<<<<<<< HEAD
-  if [ "$QUIET_MODE" = true ]; then
-    npm run create-local > /dev/null 2>&1 && npm run deploy-local > /dev/null 2>&1
-  else
-    npm run create-local && npm run deploy-local
-  fi
-
-  if [ $? -ne 0 ]; then
-    log_error "Failed to deploy the subgraph"
-    return 1
-  fi
-
-  log_success "Subgraph deployed successfully"
-  return 0
-}
-
-# Function to print a summary of the setup
-=======
   # Run create-local (don't wait for it to finish)
   log_info "Creating local subgraph..."
   if [ "$QUIET_MODE" = true ]; then
@@ -456,7 +377,6 @@ setup_subgraph() {
 }
 
 # Print a summary of the setup
->>>>>>> temp-script-fixes
 print_summary() {
   echo -e "\n${BOLD}========== Setup Summary ==========${NC}"
   
@@ -486,44 +406,12 @@ print_summary() {
   echo -e "\n${BOLD}To stop all services:${NC}"
   echo -e "  ./scripts/local/stop.sh"
   
-<<<<<<< HEAD
-  echo -e "\n${BOLD}========== Cleanup Complete ==========${NC}"
-}
-
-# Function to clean up resources on exit
-cleanup_and_exit() {
-  local exit_code=$1
-  local message=$2
-  
-  # Kill anvil if it's running
-  if [ -f "$LOG_DIR/anvil.pid" ]; then
-    ANVIL_PID=$(cat "$LOG_DIR/anvil.pid")
-    if ps -p $ANVIL_PID > /dev/null; then
-      kill $ANVIL_PID
-      log_info "Anvil process killed"
-    fi
-  fi
-  
-  # Stop Docker services if they're running
-  if [ "$SKIP_SUBGRAPH" = false ] && [ -f "$SUBGRAPH_DIR/docker/docker-compose.yml" ]; then
-    log_info "Stopping Docker services"
-    (cd "$SUBGRAPH_DIR/docker" && docker-compose down > /dev/null 2>&1)
-  fi
-  
-  if [ -n "$message" ]; then
-    log_error "$message"
-  fi
-  
-  exit $exit_code
-}
-=======
   echo -e "\n${BOLD}========== Setup Complete ==========${NC}"
 }
 
 #######################################
 # MAIN SCRIPT
 #######################################
->>>>>>> temp-script-fixes
 
 # Parse command line arguments
 while [[ $# -gt 0 ]]; do
@@ -561,75 +449,6 @@ trap 'cleanup_and_exit 1 "Script interrupted"' INT TERM
 
 # Main function to orchestrate the setup process
 function main() {
-<<<<<<< HEAD
-  # Check prerequisites
-  check_prerequisites || return 1
-
-  # Create log directory
-  mkdir -p "$LOG_DIR"
-  
-  # Check if FORK_RPC_URL is already set in the environment
-  if [ -z "$FORK_RPC_URL" ]; then
-    # Only ask for RPC URL if running interactively
-    if [ -t 0 ]; then
-      log_info "Ethereum RPC URL is needed to fork mainnet"
-      echo "Options:"
-      echo "  1. Enter an Alchemy/Infura URL"
-      echo "  2. Enter a custom RPC URL"
-      read -r -p "Enter your choice (1-2) [1]: " RPC_CHOICE
-      RPC_CHOICE=${RPC_CHOICE:-1} # Default to 1 if user provides no input
-
-      case $RPC_CHOICE in
-        1)
-          read -r -p "Enter your Alchemy/Infura API key: " API_KEY
-          read -r -p "Provider (alchemy/infura) [alchemy]: " PROVIDER
-          PROVIDER=${PROVIDER:-alchemy}
-
-          if [ "$PROVIDER" = "alchemy" ]; then
-            FORK_RPC_URL="https://eth-mainnet.g.alchemy.com/v2/$API_KEY"
-          elif [ "$PROVIDER" = "infura" ]; then
-            FORK_RPC_URL="https://mainnet.infura.io/v3/$API_KEY"
-          else
-            log_error "Unknown provider $PROVIDER"
-            return 1
-          fi
-          ;;
-        2)
-          read -r -p "Enter your custom RPC URL: " FORK_RPC_URL
-          ;;
-        *)
-          log_error "Invalid choice $RPC_CHOICE"
-          return 1
-          ;;
-      esac
-    else
-      log_error "FORK_RPC_URL environment variable is required in non-interactive mode"
-      return 1
-    fi
-  else
-    log_info "Using FORK_RPC_URL from environment: ${FORK_RPC_URL:0:30}..."
-  fi
-
-  # Install subgraph dependencies if needed
-  if [ "$SKIP_SUBGRAPH" = false ] && [ -d "$SUBGRAPH_DIR" ]; then
-    log_info "Checking subgraph dependencies..."
-    if [ ! -d "$SUBGRAPH_DIR/node_modules/js-yaml" ]; then
-      log_info "Installing subgraph dependencies..."
-      (cd "$SUBGRAPH_DIR" && npm install --save-dev js-yaml)
-      if [ $? -ne 0 ]; then
-        log_error "Failed to install subgraph dependencies"
-        return 1
-      fi
-      log_success "Subgraph dependencies installed"
-    else
-      log_info "Subgraph dependencies already installed"
-    fi
-  fi
-
-  # Start anvil
-  start_anvil || cleanup_and_exit 2 "Failed to start Anvil"
-
-=======
   # First thing: clean up any existing resources
   log_info "Cleaning up any existing resources"
   "${PROJECT_ROOT}/scripts/local/stop.sh" > /dev/null 2>&1
@@ -648,7 +467,6 @@ function main() {
   # Start anvil
   start_anvil || cleanup_and_exit 1 "Failed to start Anvil"
   
->>>>>>> temp-script-fixes
   # Deploy contracts
   if deploy_contracts; then
     DEPLOYMENT_SUCCESS=true
