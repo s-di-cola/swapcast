@@ -202,15 +202,7 @@ async function main() {
 				console.error(error);
 			}
 			
-			// Add adaptive delay between batches if not the last batch
-			if (batchIndex < marketBatches.length - 1) {
-				// Increase delay for later batches to avoid network congestion
-				// Use a longer base delay (3 seconds) to give Anvil more time to process transactions
-				const baseDelay = 3000;
-				const adaptiveDelay = baseDelay + (batchIndex * 1000);
-				console.log(chalk.yellow(`⏳ Waiting ${adaptiveDelay}ms before next batch...`));
-				await new Promise(resolve => setTimeout(resolve, adaptiveDelay));
-			}
+			// Process batches without delay to speed up fixture generation
 		}
 
 		console.log(chalk.green('✅ All fixtures generated successfully!'));
