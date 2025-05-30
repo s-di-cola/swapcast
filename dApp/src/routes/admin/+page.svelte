@@ -114,12 +114,45 @@
 		}
 	}
 
+	/**
+	 * Calculate total stake for the markets provided
+	 */
 	function calculateTotalStake(markets: Market[]): number {
 		return markets.reduce((sum: number, market: Market) => {
-			const stake0 = Number(market.totalStake0) / 1e18;
-			const stake1 = Number(market.totalStake1) / 1e18;
+			// Convert bigint values to number if necessary and ensure we have numbers
+			const stake0 = typeof market.totalStake0 === 'bigint' 
+				? Number(market.totalStake0) / 1e18 
+				: (Number(market.totalStake0 || 0) / 1e18);
+			
+			const stake1 = typeof market.totalStake1 === 'bigint' 
+				? Number(market.totalStake1) / 1e18 
+				: (Number(market.totalStake1 || 0) / 1e18);
+			
 			return sum + stake0 + stake1;
 		}, 0);
+	}
+
+	/**
+	 * Calculate total stake across ALL markets, not just the paginated ones
+	 */
+	async function calculateTotalStakeAcrossAllMarkets(): Promise<number> {
+		try {
+			// Get the total market count first
+			const count = dashboardState.marketCount || 0;
+			
+			// Use a page size that will fit all markets (or 100 as a reasonable maximum)
+			const pageSize = count > 0 ? Math.min(count, 100) : 50;
+			
+			// Get all markets in a single request
+			const allMarketsResult = await getAllMarkets({ 
+				page: 1,
+				pageSize
+			}); 
+			return calculateTotalStake(allMarketsResult.markets);
+		} catch (error) {
+			console.error('Error calculating total stake across all markets:', error);
+			return 0;
+		}
 	}
 
 	async function fetchMarketDataBase(showToastNotification: boolean = false): Promise<boolean> {
@@ -134,15 +167,18 @@
 				sortDirection: paginationState.sortDirection
 			};
 
-			const [paginatedResult, activeCount] = await Promise.all([
+			// Get paginated markets, active count, and total stake across all markets
+			const [paginatedResult, activeCount, totalStakeAcrossAll] = await Promise.all([
 				getAllMarkets(paginationOptions),
-				getActiveMarketsCount()
+				getActiveMarketsCount(),
+				calculateTotalStakeAcrossAllMarkets()
 			]);
 
 			dashboardState.markets = paginatedResult.markets;
 			dashboardState.marketCount = paginatedResult.totalCount;
 			dashboardState.openMarketsCount = activeCount;
-			dashboardState.totalStake = calculateTotalStake(paginatedResult.markets);
+			// Use the total stake across all markets, not just the current page
+			dashboardState.totalStake = totalStakeAcrossAll;
 
 			paginationState.totalPages = Math.ceil(paginatedResult.totalCount / paginationState.pageSize);
 			paginationState.currentPage = paginatedResult.currentPage;
@@ -210,6 +246,10 @@
 	}
 
 	function handleRefresh(): void {
+		// Reset to page 1 to ensure we get fresh data from the beginning
+		paginationState.currentPage = 1;
+		
+		// Fetch market data with the updated pagination state
 		fetchMarketData().catch(() => {
 			showToast('error', TOAST_CONFIG.errorMessages.refreshFailed);
 		});
