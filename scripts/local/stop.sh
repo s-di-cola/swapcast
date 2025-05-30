@@ -33,7 +33,17 @@ fi
 
 # Check if Docker is running and stop services using docker-compose
 if command -v docker >/dev/null 2>&1 && docker info >/dev/null 2>&1; then
+  echo -e "${YELLOW}Stopping Docker services...${NC}"
   docker-compose -f "$DOCKER_COMPOSE_FILE" down
+  echo -e "${GREEN}Docker services stopped.${NC}"
+fi
+
+# Clean up subgraph data directory
+SUBGRAPH_DATA_DIR="${PROJECT_ROOT}/subgraph/data"
+if [ -d "$SUBGRAPH_DATA_DIR" ]; then
+  echo -e "${YELLOW}Cleaning up subgraph data directory...${NC}"
+  rm -rf "$SUBGRAPH_DATA_DIR"
+  echo -e "${GREEN}Subgraph data directory cleaned.${NC}"
 fi
 
 echo -e "${GREEN}========== Cleanup Complete ==========${NC}"
