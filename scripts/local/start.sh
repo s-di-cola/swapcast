@@ -362,13 +362,12 @@ setup_subgraph() {
     npm run create-local || true
   fi
   
-  # Run deploy-local with version automatically provided
+  # Run deploy-local with automatic version flag
   log_info "Deploying local subgraph..."
-  VERSION="v0.0.1"
   if [ "$QUIET_MODE" = true ]; then
-    echo "$VERSION" | npm run deploy-local > /dev/null 2>&1 || true
+    npm run deploy-local-auto > /dev/null 2>&1 || true
   else
-    echo "$VERSION" | npm run deploy-local || true
+    npm run deploy-local-auto || true
   fi
   
   # Mark as deployed and continue
