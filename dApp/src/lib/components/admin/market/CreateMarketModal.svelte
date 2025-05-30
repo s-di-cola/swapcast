@@ -388,7 +388,7 @@
 			
 			<div class="flex justify-between border-t pt-6">
 				<Button color="alternative" onclick={onClose} disabled={isSubmitting}>Cancel</Button>
-				<Button type="submit" disabled={isSubmitting}>
+				<Button type="submit" disabled={isSubmitting} color="green">
 					{#if isSubmitting}
 						<Spinner class="mr-2" size="4" />
 					{/if}
