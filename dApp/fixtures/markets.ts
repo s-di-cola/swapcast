@@ -13,17 +13,17 @@ import { getPoolManager } from '../src/generated/types/PoolManager';
 import { getPredictionManager } from '../src/generated/types/PredictionManager';
 import chalk from 'chalk';
 
-// Asset pairs for markets
+// Asset pairs for markets - token1 is always a stablecoin (DAI, USDT, or USDC)
 const ASSET_PAIRS = [
   {
-    name: 'ETH/USD',
+    name: 'ETH/USDC',
     symbol: 'ETH',
     token0: TOKEN_ADDRESSES.WETH,
     token1: TOKEN_ADDRESSES.USDC,
     fee: 3000
   },
   {
-    name: 'BTC/USD',
+    name: 'BTC/USDC',
     symbol: 'BTC',
     token0: TOKEN_ADDRESSES.WBTC,
     token1: TOKEN_ADDRESSES.USDC,
@@ -41,6 +41,20 @@ const ASSET_PAIRS = [
     symbol: 'BTC',
     token0: TOKEN_ADDRESSES.WBTC,
     token1: TOKEN_ADDRESSES.DAI,
+    fee: 3000
+  },
+  {
+    name: 'ETH/USDT',
+    symbol: 'ETH',
+    token0: TOKEN_ADDRESSES.WETH,
+    token1: TOKEN_ADDRESSES.USDT,
+    fee: 3000
+  },
+  {
+    name: 'BTC/USDT',
+    symbol: 'BTC',
+    token0: TOKEN_ADDRESSES.WBTC,
+    token1: TOKEN_ADDRESSES.USDT,
     fee: 3000
   }
 ];
