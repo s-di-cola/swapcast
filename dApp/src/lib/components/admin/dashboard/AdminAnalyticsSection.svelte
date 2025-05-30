@@ -1,23 +1,59 @@
 <script lang="ts">
+	import { onMount } from 'svelte';
 	import AdminAnalyticsChart from './AdminAnalyticsChart.svelte';
-
-	interface Props {
-		activeMarketsCount?: number;
-	}
+	import { executeQuery } from '$lib/services/subgraph';
+	import { GET_ANALYTICS_DATA } from '$lib/services/subgraph/queries';
+	import { getDateRangeForAnalytics } from '$lib/utils/analytics';
 
 	interface LegendItem {
 		color: string;
 		label: string;
 	}
 
-	let { activeMarketsCount = 0 }: Props = $props();
-
+	let treasuryBalance = $state(0);
 	let selectedTimeRange = $state<'7d' | '30d'>('7d');
 
 	const LEGEND_ITEMS: LegendItem[] = [
 		{ color: 'bg-indigo-500', label: 'Markets Created' },
 		{ color: 'bg-emerald-500', label: 'Active Predictions' }
 	] as const;
+
+	onMount(async () => {
+		await fetchTreasuryBalance();
+	});
+
+	interface AnalyticsResponse {
+		globalStats: Array<{
+			totalMarkets: string;
+			totalPredictions: string;
+			totalStaked: string;
+		}>;
+		markets: any[];
+		predictions: any[];
+	}
+
+	async function fetchTreasuryBalance() {
+		try {
+			// Get date range for query
+			const { startTimestamp, endTimestamp } = getDateRangeForAnalytics(30); // Last 30 days
+
+			// Fetch data from subgraph
+			const response = await executeQuery<AnalyticsResponse>(GET_ANALYTICS_DATA, {
+				startTimestamp,
+				endTimestamp
+			});
+
+			console.log('Treasury data:', response);
+
+			if (response?.globalStats?.[0]?.totalStaked) {
+				// Convert from wei to ETH and format to 2 decimal places
+				const totalStaked = parseFloat(response.globalStats[0].totalStaked) / 1e18;
+				treasuryBalance = parseFloat(totalStaked.toFixed(2));
+			}
+		} catch (error) {
+			console.error('Error fetching treasury balance:', error);
+		}
+	}
 
 	function setTimeRange(range: '7d' | '30d'): void {
 		selectedTimeRange = range;
@@ -43,8 +79,8 @@
 			</div>
 
 			<div class="text-right">
-				<h3 class="text-2xl font-bold text-gray-900">{activeMarketsCount}</h3>
-				<p class="text-sm text-gray-500">Active Markets</p>
+				<h3 class="text-2xl font-bold text-gray-900">{treasuryBalance} ETH</h3>
+				<p class="text-sm text-gray-500">Treasury Balance</p>
 			</div>
 		</div>
 

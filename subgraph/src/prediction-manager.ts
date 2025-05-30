@@ -56,8 +56,10 @@ export function handleMarketCreated(event: MarketCreated): void {
   
   market.marketId = event.params.marketId;
   market.creationTimestamp = event.block.timestamp;
-  market.expirationTimestamp = BigInt.fromI32(0); // Default value
+  
+  // Set default values that will be used if we can't get market details
   market.description = "Market #" + event.params.marketId.toString();
+  market.expirationTimestamp = BigInt.fromI32(0);
   market.isResolved = false;
   market.totalStakedOutcome0 = BigInt.fromI32(0);
   market.totalStakedOutcome1 = BigInt.fromI32(0);
@@ -68,6 +70,8 @@ export function handleMarketCreated(event: MarketCreated): void {
   let stats = getGlobalStats();
   stats.totalMarkets = stats.totalMarkets.plus(BigInt.fromI32(1));
   stats.save();
+  
+  log.info("Market created: ID {}", [marketId]);
 }
 
 export function handlePredictionRecorded(event: StakeRecorded): void {
@@ -78,9 +82,8 @@ export function handlePredictionRecorded(event: StakeRecorded): void {
   // If market doesn't exist in the subgraph, log an error but continue processing
   // This should never happen in a properly functioning system
   if (market == null) {
-    // Log the error - this will appear in the Graph Node logs
-    log.error(
-      "Prediction recorded for non-existent market. MarketID: {}, User: {}, TX: {}",
+    log.warning(
+      "Prediction recorded for market not yet indexed. MarketID: {}, User: {}, TX: {}",
       [
         marketId,
         event.params.user.toHexString(),
@@ -88,16 +91,27 @@ export function handlePredictionRecorded(event: StakeRecorded): void {
       ]
     );
     
-    // We still need to process the prediction, so create a minimal market entity
+    // Create a new market entity
     market = new Market(marketId);
     market.marketId = event.params.marketId;
     market.creationTimestamp = event.block.timestamp;
+    
+    // Set reasonable defaults for the market
+    market.description = "Market #" + marketId;
     market.expirationTimestamp = BigInt.fromI32(0);
-    market.description = "MISSING MARKET #" + marketId; // Mark it clearly as missing
+    
+    // Log that we're creating a placeholder market
+    log.warning("Created placeholder market with ID {} for prediction recording", [marketId]);
+    
     market.isResolved = false;
     market.totalStakedOutcome0 = BigInt.fromI32(0);
     market.totalStakedOutcome1 = BigInt.fromI32(0);
     market.save();
+    
+    // Update global stats for this market
+    let stats = getGlobalStats();
+    stats.totalMarkets = stats.totalMarkets.plus(BigInt.fromI32(1));
+    stats.save();
   }
   
   // Create the prediction with reference to the market

@@ -89,8 +89,8 @@ export async function getMarketDetails(marketId: string | bigint) {
 			bigint
 		];
 
-		// Debug log to see what values we're getting from the contract
-		console.log('Market details from contract:', {
+		// Prepare market details object
+		const marketDetails = {
 			id: _id.toString(),
 			description,
 			assetPair,
@@ -101,7 +101,7 @@ export async function getMarketDetails(marketId: string | bigint) {
 			totalConvictionBullish: totalConvictionBullish.toString(),
 			expirationTimestamp: expirationTimestamp.toString(),
 			priceThreshold: priceThreshold.toString()
-		});
+		};
 
 		// If we're getting zeros for stake values, let's add some test values for development
 		const testBearishStake = totalConvictionBearish > 0n ? totalConvictionBearish : 2500000000000000000n; // 2.5 ETH

@@ -205,8 +205,11 @@ export const GET_ANALYTICS_DATA = gql`
 		) {
 			id
 			marketId
+			description
 			creationTimestamp
 			isResolved
+			totalStakedOutcome0
+			totalStakedOutcome1
 		}
 
 		# Get predictions made within the time range
@@ -214,12 +217,34 @@ export const GET_ANALYTICS_DATA = gql`
 			where: { timestamp_gte: $startTimestamp, timestamp_lte: $endTimestamp }
 			orderBy: timestamp
 			orderDirection: asc
+			first: 1000 # Increased limit to ensure we get all predictions
 		) {
 			id
 			timestamp
+			outcome
+			amount
 			market {
 				id
+				description
 			}
+		}
+
+		# Get global stats
+		globalStats(first: 1) {
+			totalMarkets
+			totalPredictions
+			totalStaked
+		}
+	}
+`;
+
+/**
+ * Query to fetch the Treasury balance
+ */
+export const GET_TREASURY_BALANCE = gql`
+	query GetTreasuryBalance {
+		treasury {
+			balance
 		}
 	}
 `;
