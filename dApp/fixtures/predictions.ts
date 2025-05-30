@@ -4,9 +4,9 @@
  * Creates predictions for markets
  */
 
-import { type Address, formatEther, parseEther, createPublicClient, http } from 'viem';
+import { type Address, formatEther, parseEther, createPublicClient, http, encodeFunctionData } from 'viem';
 import { anvil } from 'viem/chains';
-import { CONTRACT_ADDRESSES } from './utils/wallets';
+import { CONTRACT_ADDRESSES, WHALE_ADDRESSES } from './utils/wallets';
 import { getPredictionManager } from '../src/generated/types/PredictionManager';
 import chalk from 'chalk';
 import { type MarketCreationResult } from './markets';
@@ -23,7 +23,20 @@ function getRandomBoolean(): boolean {
 }
 
 /**
+ * Determines if an address is a whale account
+ */
+function isWhaleAccount(address: Address): boolean {
+  // Check if the address is in the WHALE_ADDRESSES object
+  // Convert both to lowercase strings for comparison to avoid type issues
+  const addressLower = address.toLowerCase();
+  return Object.values(WHALE_ADDRESSES)
+    .map(addr => addr.toLowerCase())
+    .includes(addressLower as any);
+}
+
+/**
  * Generates a random stake amount that meets minimum requirements
+ * Whale accounts will make much larger stakes (millions of dollars worth)
  */
 async function getRandomStakeAmount(userAddress: Address, minStakeAmount: bigint): Promise<bigint> {
   // Create a public client for reading from the blockchain
@@ -35,27 +48,47 @@ async function getRandomStakeAmount(userAddress: Address, minStakeAmount: bigint
   // Get user's ETH balance
   const balance = await publicClient.getBalance({ address: userAddress });
   
-  // Since we're using Anvil accounts with 1000 ETH each, we can use much larger amounts
-  // Let's use between 1-5 ETH for predictions to make them more substantial
+  // Check if this is a whale account
+  const isWhale = isWhaleAccount(userAddress);
   
-  // Convert ETH amounts to Wei
-  const oneEthInWei = parseEther("1");
-  const fiveEthInWei = parseEther("5");
-  
-  // Generate a random amount between 1-5 ETH
-  // First, get a random number between 1 and 5
-  const randomEth = 1 + Math.random() * 4;
-  
-  // Convert to Wei with precise decimal places
-  const amount = parseEther(randomEth.toFixed(4));
-  
-  // Ensure it's at least the minimum stake amount
-  if (amount < minStakeAmount) {
-    return minStakeAmount * 10n; // 10x minimum if somehow our random amount is too small
+  if (isWhale) {
+    // Whales make massive predictions in the order of millions of dollars
+    // Generate between 100-500 ETH for whale accounts (worth millions at current ETH prices)
+    const minWhaleEth = 100;
+    const maxWhaleEth = 500;
+    const randomWhaleEth = minWhaleEth + Math.random() * (maxWhaleEth - minWhaleEth);
+    
+    // Convert to Wei with precise decimal places
+    const whaleAmount = parseEther(randomWhaleEth.toFixed(4));
+    console.log(chalk.magenta(`🐋 Whale account ${userAddress} making a massive prediction of ${formatEther(whaleAmount)} ETH!`));
+    return whaleAmount;
+  } else if (balance >= parseEther("500")) {
+    // For regular Anvil accounts with lots of ETH (1000 ETH each), use larger amounts too
+    // Generate between 10-50 ETH for regular accounts
+    const minRegularEth = 10;
+    const maxRegularEth = 50;
+    const randomRegularEth = minRegularEth + Math.random() * (maxRegularEth - minRegularEth);
+    
+    // Convert to Wei with precise decimal places
+    const regularAmount = parseEther(randomRegularEth.toFixed(4));
+    return regularAmount;
+  } else {
+    // For accounts with less balance, use more modest amounts
+    // Generate between 1-5 ETH
+    const minEth = 1;
+    const maxEth = 5;
+    const randomEth = minEth + Math.random() * (maxEth - minEth);
+    
+    // Convert to Wei with precise decimal places
+    const amount = parseEther(randomEth.toFixed(4));
+    
+    // Ensure it's at least the minimum stake amount
+    if (amount < minStakeAmount) {
+      return minStakeAmount * 10n; // 10x minimum if somehow our random amount is too small
+    }
+    
+    return amount;
   }
-  
-  // Cap at 5 ETH to keep it reasonable
-  return amount < fiveEthInWei ? amount : fiveEthInWei;
 }
 
 /**
@@ -150,14 +183,111 @@ export async function generatePredictions(
       console.log(chalk.blue(`Total amount: ${formatEther(totalAmount)} ETH`));
       
       // Record the prediction
-      const hash = await predictionManager.write.recordPrediction(
-        [userAccount.address, BigInt(market.id), outcome, convictionStake],
-        {
-          account: userAccount.address,
+      // Check if this is a regular account or an impersonated whale account
+      // For impersonated accounts, we need to use a different approach
+      let hash;
+      
+      // If the account has a privateKey, it's a regular account
+      if ('privateKey' in userAccount && userAccount.privateKey) {
+        // Regular account - use standard approach
+        hash = await predictionManager.write.recordPrediction(
+          [userAccount.address, BigInt(market.id), outcome, convictionStake],
+          {
+            account: userAccount.address,
+            chain: anvil,
+            value: totalAmount
+          }
+        );
+      } else {
+        // This is likely an impersonated account - use a different approach
+        // First, create a public client to send the transaction
+        const publicClient = createPublicClient({
           chain: anvil,
-          value: totalAmount
+          transport: http(anvil.rpcUrls.default.http[0])
+        });
+        
+        // Ensure the account is impersonated and has enough funds
+        await publicClient.request({
+          method: 'anvil_impersonateAccount' as any,
+          params: [userAccount.address]
+        });
+        
+        // Check balance and fund if needed
+        const balance = await publicClient.getBalance({ address: userAccount.address });
+        const requiredBalance = totalAmount + BigInt(1e17); // Add 0.1 ETH for gas
+        
+        if (balance < requiredBalance) {
+          console.log(chalk.yellow(`Whale account ${userAccount.address} has insufficient funds. Adding more ETH...`));
+          await publicClient.request({
+            method: 'anvil_setBalance' as any,
+            params: [userAccount.address, ('0x' + (BigInt(1000) * BigInt(1e18)).toString(16)) as any] // 1000 ETH
+          });
+          console.log(chalk.green(`Funded whale account ${userAccount.address} with 1000 ETH`));
         }
-      );
+        
+        // Get the contract ABI and function data
+        const abi = predictionManager.abi;
+        const functionName = 'recordPrediction';
+        // Explicitly define the args with correct types
+        const args = [
+          userAccount.address as `0x${string}`, 
+          BigInt(market.id), 
+          outcome as number, 
+          convictionStake as bigint
+        ] as const;
+        
+        // Encode the function data
+        const data = encodeFunctionData({
+          abi,
+          functionName,
+          args
+        });
+        
+        // Try to send the transaction with retry logic
+        let attempts = 0;
+        const maxAttempts = 3;
+        let error;
+        
+        while (attempts < maxAttempts) {
+          try {
+            attempts++;
+            // Send the transaction directly
+            hash = await publicClient.request({
+              method: 'eth_sendTransaction' as any,
+              params: [{
+                from: userAccount.address,
+                to: CONTRACT_ADDRESSES.PREDICTION_MANAGER as `0x${string}`,
+                data,
+                value: `0x${totalAmount.toString(16)}` as `0x${string}`
+              }]
+            });
+            // If successful, break the retry loop
+            break;
+          } catch (err: any) {
+            error = err;
+            console.log(chalk.yellow(`Attempt ${attempts}/${maxAttempts} failed for ${userAccount.address}. Retrying...`));
+            
+            // If this is an insufficient funds error, add more funds and try again
+            if (err.message && err.message.includes('Insufficient funds')) {
+              console.log(chalk.yellow(`Adding more funds to ${userAccount.address}...`));
+              await publicClient.request({
+                method: 'anvil_setBalance' as any,
+                params: [userAccount.address, ('0x' + (BigInt(2000) * BigInt(1e18)).toString(16)) as any] // 2000 ETH
+              });
+            }
+            
+            // Wait a bit before retrying
+            if (attempts < maxAttempts) {
+              await new Promise(resolve => setTimeout(resolve, 500));
+            }
+          }
+        }
+        
+        // If we've tried all attempts and still failed, throw the error
+        if (!hash && error) {
+          throw error;
+        }
+      }
       
       console.log(chalk.green(`Prediction recorded successfully with hash: ${hash}`));
       successfulPredictions++;

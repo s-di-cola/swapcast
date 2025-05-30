@@ -4,3 +4,5 @@ export { default as MarketFinancials } from './MarketFinancials.svelte';
 export { default as MarketPriceChart } from './MarketPriceChart.svelte';
 export { default as MarketSummary } from './MarketSummary.svelte';
 export { default as TransactionHistory } from './TransactionHistory.svelte';
+export { default as TokenSelector } from './TokenSelector.svelte';
+

@@ -188,10 +188,18 @@ export async function generateMarkets(adminAccount: any, count: number = 5): Pro
   console.log(chalk.yellow(`Generating ${count} markets...`));
   
   const markets: MarketCreationResult[] = [];
-  const actualCount = Math.min(count, ASSET_PAIRS.length);
   
-  for (let i = 0; i < actualCount; i++) {
-    console.log(chalk.yellow(`Processing market ${i+1}/${actualCount}: ${ASSET_PAIRS[i].name}`));
+  // Allow creating more markets than asset pairs by cycling through them
+  for (let i = 0; i < count; i++) {
+    // Use modulo to cycle through asset pairs if we need more markets than available pairs
+    const assetPairIndex = i % ASSET_PAIRS.length;
+    const assetPair = ASSET_PAIRS[assetPairIndex];
+    
+    // Add a suffix to market name if we're cycling through the pairs more than once
+    const marketSuffix = i >= ASSET_PAIRS.length ? ` #${Math.floor(i / ASSET_PAIRS.length) + 1}` : '';
+    const marketName = `${assetPair.name}${marketSuffix}`;
+    
+    console.log(chalk.yellow(`Processing market ${i+1}/${count}: ${marketName}`));
     
     try {
       // Create pool for the market
@@ -201,14 +209,14 @@ export async function generateMarkets(adminAccount: any, count: number = 5): Pro
       
       while (!poolCreated && attempts < 3) {
         attempts++;
-        console.log(chalk.yellow(`Attempt ${attempts}/3 to create pool for ${ASSET_PAIRS[i].name}`));
+        console.log(chalk.yellow(`Attempt ${attempts}/3 to create pool for ${marketName}`));
         
         try {
           poolKey = await createPool(
             adminAccount,
-            ASSET_PAIRS[i].token0,
-            ASSET_PAIRS[i].token1,
-            ASSET_PAIRS[i].fee
+            assetPair.token0,
+            assetPair.token1,
+            assetPair.fee
           );
           poolCreated = true;
         } catch (poolError: any) {
@@ -222,37 +230,39 @@ export async function generateMarkets(adminAccount: any, count: number = 5): Pro
       }
       
       // Fetch current price for the asset
-      console.log(chalk.yellow(`Fetching current price for ${ASSET_PAIRS[i].symbol}...`));
-      const currentPrice = await getCurrentPrice(ASSET_PAIRS[i].symbol);
-      console.log(chalk.blue(`Current price for ${ASSET_PAIRS[i].symbol}: $${currentPrice}`));
+      console.log(chalk.yellow(`Fetching current price for ${assetPair.symbol}...`));
+      const currentPrice = await getCurrentPrice(assetPair.symbol);
+      console.log(chalk.blue(`Current price for ${assetPair.symbol}: $${currentPrice}`));
       
       // Calculate a realistic price threshold (absolute price value)
       const priceThreshold = calculateRealisticPriceThreshold(currentPrice);
-      console.log(chalk.blue(`Using price threshold of $${priceThreshold.toFixed(2)} for ${ASSET_PAIRS[i].symbol}`));
+      console.log(chalk.blue(`Using price threshold of $${priceThreshold.toFixed(2)} for ${assetPair.symbol}`));
       
       // Create the market
-      console.log(chalk.yellow(`Creating market for ${ASSET_PAIRS[i].name}...`));
+      console.log(chalk.yellow(`Creating market for ${marketName}...`));
       
-      // Set expiration time to 30 days from now
-      const expirationTime = BigInt(Math.floor(Date.now() / 1000) + 30 * 24 * 60 * 60);
+      // Set expiration times with some variety
+      // Some markets expire sooner, some later (between 7 and 60 days)
+      const daysToExpiration = 7 + Math.floor(Math.random() * 53); // 7 to 60 days
+      const expirationTime = BigInt(Math.floor(Date.now() / 1000) + daysToExpiration * 24 * 60 * 60);
       
       const market = await createMarket(
         adminAccount,
-        `${ASSET_PAIRS[i].name} Market`,
-        ASSET_PAIRS[i].symbol,
+        `${marketName} Market`,
+        assetPair.symbol,
         expirationTime,
         CONTRACT_ADDRESSES.ORACLE_RESOLVER as Address,
         BigInt(Math.floor(priceThreshold * 1e18)), // Convert to wei format for the contract
         poolKey
       );
       
-      console.log(chalk.green(`Successfully created market for ${ASSET_PAIRS[i].name}`));
+      console.log(chalk.green(`Successfully created market for ${marketName}`));
       markets.push(market);
     } catch (error: any) {
-      console.error(chalk.red(`Failed to generate market ${i+1}: ${error.message}`));
+      console.error(chalk.red(`Failed to create market for ${marketName}:`), error);
     }
   }
   
-  console.log(chalk.green(`Generated ${markets.length}/${actualCount} markets successfully`));
+  console.log(chalk.green(`Successfully created ${markets.length}/${count} markets`));
   return markets;
 }

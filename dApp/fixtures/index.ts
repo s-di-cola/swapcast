@@ -10,7 +10,7 @@ import { createPublicClient, http, type Address } from 'viem';
 import { anvil } from 'viem/chains';
 import { generateMarkets, MarketCreationResult } from './markets';
 import { generatePredictions } from './predictions';
-import { CONTRACT_ADDRESSES, setupWallets } from './utils/wallets';
+import { CONTRACT_ADDRESSES, WHALE_ADDRESSES, setupWallets } from './utils/wallets';
 import { getPredictionManager } from '../src/generated/types/PredictionManager';
 import { getPoolManager } from '../src/generated/types/PoolManager';
 import chalk from 'chalk';
@@ -20,8 +20,8 @@ import chalk from 'chalk';
  * Adjust these values to control the behavior of the script
  */
 const CONFIG = {
-	MARKETS_COUNT: 10,
-	PREDICTIONS_PER_MARKET: 9, // Maximum 9 users available from test wallets
+	MARKETS_COUNT: 20, // Generate 20 markets
+	PREDICTIONS_PER_MARKET: 8, // Number of predictions per market
 	BATCH_SIZE: 3, // Process 3 markets in parallel
 	ADMIN_ACCOUNT_INDEX: 0 // Use the first account as admin
 };
@@ -93,9 +93,36 @@ async function main() {
 
 		// Setup wallets for testing
 		console.log(chalk.yellow('⚙️ Setting up test wallets...'));
-		const { adminAccount, userAccounts } = await setupWallets();
+		const { publicClient, adminAccount, userAccounts } = await setupWallets();
 		console.log(chalk.green(`✅ Admin account: ${adminAccount.address}`));
 		console.log(chalk.green(`✅ Set up ${userAccounts.length} user accounts`));
+		
+		// Setup all accounts for predictions (regular accounts + whale accounts)
+		console.log(chalk.yellow('⚙️ Setting up additional whale accounts...'));
+		
+		// Create prediction accounts array with regular user accounts
+		const allPredictionAccounts = [...userAccounts];
+		
+		// Add whale accounts directly - no need for explicit impersonation with Viem
+		// Viem will handle impersonation when we use these addresses in the 'account' parameter
+		for (const [key, address] of Object.entries(WHALE_ADDRESSES)) {
+			// Fund the whale account with a large amount of ETH to ensure sufficient funds
+			// We need enough for both transaction value and gas costs
+			const balance = await publicClient.getBalance({ address });
+			if (balance < BigInt(100) * BigInt(1e18)) { // Less than 100 ETH
+				await publicClient.request({
+					method: 'anvil_setBalance' as any,
+					params: [address, ('0x' + (BigInt(1000) * BigInt(1e18)).toString(16)) as any] // 1000 ETH
+				});
+				console.log(chalk.blue(`Funded whale account ${address} with 1000 ETH`));
+			}
+			
+			// Add the whale account to our accounts list using type assertion
+			(allPredictionAccounts as any).push({ address });
+			console.log(chalk.green(`✅ Added whale account ${key} at address ${address}`));
+		}
+		
+		console.log(chalk.green(`✅ Total accounts available for predictions: ${allPredictionAccounts.length}`));
 
 		// Generate markets and pools
 		console.log(chalk.yellow('🏪 Generating markets and pools...'));
@@ -131,22 +158,28 @@ async function main() {
 			try {
 				const results = await Promise.all(
 					batch.map(async (market: MarketCreationResult) => {
-						// Use all available user accounts to create predictions
-						const predictionsCount = CONFIG.PREDICTIONS_PER_MARKET;
-						console.log(
-							chalk.cyan(
-								`📊 Generating ${predictionsCount} predictions for market ${market.id} (${market.name})`
-							)
-						);
-						
-						try {
-							const result = await generatePredictions(market, userAccounts, predictionsCount);
-							return { success: true, market, result };
-						} catch (error) {
-							console.error(chalk.red(`❌ Error generating predictions for market ${market.id}:`));
-							console.error(error);
-							return { success: false, market, error };
-						}
+							// Use all available accounts to create predictions
+							const predictionsCount = CONFIG.PREDICTIONS_PER_MARKET;
+							console.log(
+								chalk.cyan(
+									`📊 Generating ${predictionsCount} predictions for market ${market.id} (${market.name})`
+								)
+							);
+							
+							try {
+								// Shuffle the accounts for each market to ensure different accounts make predictions
+								const shuffledAccounts = [...allPredictionAccounts].sort(() => Math.random() - 0.5);
+								
+								// Use a subset of accounts for this market (limited by predictionsCount)
+								const accountsForThisMarket = shuffledAccounts.slice(0, predictionsCount);
+								
+								const result = await generatePredictions(market, accountsForThisMarket, predictionsCount);
+								return { success: true, market, result };
+							} catch (error) {
+								console.error(chalk.red(`❌ Error generating predictions for market ${market.id}:`));
+								console.error(error);
+								return { success: false, market, error };
+							}
 					})
 				);
 				
