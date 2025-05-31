@@ -20,6 +20,10 @@
 		bearishStake?: number;
 		bullishPercentage: number;
 		bearishPercentage: number;
+		// Optional properties for SwapPanel compatibility
+		baseToken?: { symbol: string; name: string };
+		quoteToken?: { symbol: string; name: string };
+		priceChange24h?: number;
 	}
 
 	// Type for the selected market
@@ -141,12 +145,23 @@
 
 	// Function to handle market selection
 	function handleMarketSelect(market: Market): void {
-		selectedMarket = market;
+		console.log('handleMarketSelect called with:', market);
+		
+		// Transform market data to match SwapPanel expectations
+		const transformedMarket = {
+			...market,
+			baseToken: { symbol: market.description.split('/')[0], name: market.description.split('/')[0] },
+			quoteToken: { symbol: market.description.split('/')[1], name: market.description.split('/')[1] },
+			priceChange24h: market.change24h
+		};
+		
+		selectedMarket = transformedMarket;
 		isMarketSelectionView = false;
 		// Update URL with market ID
 		const url = new URL(window.location.href);
 		url.searchParams.set('market', market.id);
 		window.history.replaceState({}, '', url);
+		console.log('Market selected, switching to swap view');
 	}
 	
 	// Simplified function to handle viewing market details

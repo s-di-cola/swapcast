@@ -34,24 +34,10 @@
 	
 	// Format expiration date - already formatted from the parent component
 	const formattedDate = $derived(market.expirationDate || '');
-	
-	// Function to handle viewing market details
-	function viewDetails() {
-		// Call the onViewDetails function provided by the parent with hardcoded ID "1"
-		onViewDetails("1");
-	}
 </script>
 
-<div 
-	class="market-card-wrapper cursor-pointer" 
-	onclick={() => {
-		// Explicitly call onViewDetails with the hardcoded ID
-		onViewDetails("1");
-	}}
-	onkeydown={(e) => e.key === 'Enter' && onViewDetails("1")}
-	role="button"
-	tabindex="0"
-	aria-label="View market details for {market.description}">
+<!-- Remove the clickable wrapper and events -->
+<div class="market-card-wrapper">
 	<div class="relative overflow-hidden rounded-xl border border-gray-100 bg-white shadow-lg transition-all duration-300 hover:shadow-xl hover:border-indigo-200 p-5">
 		<!-- Market header with pair name and status -->
 		<div class="flex justify-between items-center mb-3">
@@ -142,15 +128,30 @@
 			<div class="text-gray-500">Bearish</div>
 		</div>
 		
-		<!-- Select button -->
-		<button 
-			class="w-full py-2 px-4 bg-indigo-600 hover:bg-indigo-700 text-white font-medium rounded-lg transition-colors"
-			onclick={(e) => {
-				e.stopPropagation(); // Stop event propagation
-				onSelect("1");
-			}}
-		>
-			Select Market
-		</button>
+		<!-- Action buttons - side by side -->
+		<div class="flex space-x-3">
+			<!-- View Details button -->
+			<button 
+				class="flex-1 py-2 px-4 bg-gray-100 hover:bg-gray-200 text-gray-700 font-medium rounded-lg transition-colors border border-gray-300"
+				onclick={() => onViewDetails(market.id)}
+			>
+				<svg class="w-4 h-4 inline mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+					<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"></path>
+					<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"></path>
+				</svg>
+				View Details
+			</button>
+			
+			<!-- Select Market button -->
+			<button 
+				class="flex-1 py-2 px-4 bg-indigo-600 hover:bg-indigo-700 text-white font-medium rounded-lg transition-colors"
+				onclick={() => onSelect(market.id)}
+			>
+				<svg class="w-4 h-4 inline mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+					<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 7l5 5m0 0l-5 5m5-5H6"></path>
+				</svg>
+				Select Market
+			</button>
+		</div>
 	</div>
 </div>
