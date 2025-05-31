@@ -3,10 +3,10 @@
 	import { ExclamationCircleSolid, XSolid } from 'flowbite-svelte-icons';
 	import { getMarketDetails, type Market } from '$lib/services/market';
 
-	import MarketSummary from './MarketSummary.svelte';
-	import MarketFinancials from './MarketFinancials.svelte';
-	import MarketPriceChart from './MarketPriceChart.svelte';
-	import TransactionHistory from './TransactionHistory.svelte';
+	import MarketSummary from '$lib/components/admin/market/MarketSummary.svelte';
+	import MarketFinancials from '$lib/components/admin/market/MarketFinancials.svelte';
+	import MarketPriceChart from '$lib/components/admin/market/MarketPriceChart.svelte';
+	import TransactionHistory from '$lib/components/admin/market/TransactionHistory.svelte';
 
 	interface Props {
 		showModal?: boolean;
@@ -20,7 +20,7 @@
 		error: string;
 	}
 
-	let { showModal = false, marketId = null, onClose = () => {} }: Props = $props();
+	let { showModal = $bindable(false), marketId = null, onClose = () => {} }: Props = $props();
 
 	let marketState = $state<MarketState>({
 		data: null,
@@ -72,41 +72,31 @@
 		return UI_TEXT.detailsTitle;
 	}
 
-	function handleClose(): void {
-		marketState = { data: null, isLoading: false, error: '' };
-		showModal = false;
-		onClose();
-	}
-
 	function handleRefresh(): void {
 		fetchMarketData();
 	}
 
-	// Reactive effect to fetch data when modal opens with valid marketId
-	$effect(() => {
-		if (showModal && marketId) {
-			console.log('Modal opened for market ID:', marketId);
-			fetchMarketData();
-		}
-	});
-	
-	// Reset state when modal is closed
+	// Reset state when modal closes
 	$effect(() => {
 		if (!showModal) {
-			console.log('Modal closed, resetting state');
 			marketState = { data: null, isLoading: false, error: '' };
+			onClose();
+		}
+	});
+
+	// Fetch data when modal opens with valid marketId
+	$effect(() => {
+		if (showModal && marketId) {
+			fetchMarketData();
 		}
 	});
 </script>
 
-<Modal bind:open={showModal} size="xl" autoclose={false} class="w-full max-w-4xl" outsideclose={false}>
+<Modal bind:open={showModal} size="xl" autoclose={true} class="w-full max-w-4xl" outsideclose={true}>
 	<div class="mb-4 flex items-center justify-between border-b pb-4">
 		<h3 class="text-xl font-semibold text-gray-900">
 			{getModalTitle()}
 		</h3>
-		<Button onclick={handleClose}>
-			<XSolid class="h-5 w-5" />
-		</Button>
 	</div>
 
 	{#if marketState.isLoading}
@@ -135,7 +125,6 @@
 	{/if}
 
 	<svelte:fragment slot="footer">
-		<Button color="alternative" onclick={handleClose}>{UI_TEXT.close}</Button>
 		{#if marketState.data}
 			<Button color="blue" onclick={handleRefresh}>{UI_TEXT.refresh}</Button>
 		{/if}

@@ -5,25 +5,7 @@
 	import MarketCard from '$lib/components/app/MarketCard.svelte';
 	import MarketDetailsModal from '$lib/components/admin/market/MarketDetailsModal.svelte';
 	import type { PredictionSide, Token } from '$lib/types';
-	
-	// Define custom event types
-	type MarketCardEvents = {
-		viewDetails: CustomEvent<{ marketId: string }>
-	};
 
-	// Define formatNumber and formatPercentage functions directly
-	function formatNumber(value: number | undefined, decimals: number = 2): string {
-		if (value === undefined || value === null) return '0';
-		return value.toLocaleString('en-US', {
-			minimumFractionDigits: decimals,
-			maximumFractionDigits: decimals
-		});
-	}
-	
-	function formatPercentage(value: number | undefined): string {
-		if (value === undefined || value === null) return '0%';
-		return `${value}%`;
-	}
 
 	interface Market {
 		id: string;
@@ -167,16 +149,10 @@
 		window.history.replaceState({}, '', url);
 	}
 	
-	// Function to handle viewing market details
+	// Simplified function to handle viewing market details
 	function handleViewMarketDetails(marketId: string): void {
 		selectedMarketId = marketId;
 		showDetailsModal = true;
-	}
-	
-	// Function to close market details modal
-	function closeMarketDetailsModal(): void {
-		showDetailsModal = false;
-		selectedMarketId = null;
 	}
 	
 	// Function to change market (go back to market selection view)
@@ -214,8 +190,6 @@
 	<title>SwapCast App</title>
 	<meta name="description" content="SwapCast Decentralized Prediction Market" />
 </svelte:head>
-
-<!-- No modals needed for the Uniswap-like interface -->
 
 <div class="min-h-screen bg-gray-50 text-gray-800 pt-20">
 	<div class="mx-auto max-w-7xl px-4 py-8 sm:px-6 lg:px-8">
@@ -352,11 +326,12 @@
 			</div>
 		</div>
 	</div>
+</div>
 
-<!-- Market Details Modal -->
-<MarketDetailsModal 
-	showModal={showDetailsModal} 
-	marketId={selectedMarketId} 
-	onClose={closeMarketDetailsModal} 
-/>
+<!-- Market Details Modal - Simplified without custom handlers -->
+<div class="z-50">
+	<MarketDetailsModal 
+		bind:showModal={showDetailsModal}
+		marketId={selectedMarketId} 
+	/>
 </div>

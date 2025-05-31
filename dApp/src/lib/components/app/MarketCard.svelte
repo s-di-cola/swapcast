@@ -44,8 +44,11 @@
 
 <div 
 	class="market-card-wrapper cursor-pointer" 
-	onclick={viewDetails}
-	onkeydown={(e) => e.key === 'Enter' && viewDetails()}
+	onclick={() => {
+		// Explicitly call onViewDetails with the hardcoded ID
+		onViewDetails("1");
+	}}
+	onkeydown={(e) => e.key === 'Enter' && onViewDetails("1")}
 	role="button"
 	tabindex="0"
 	aria-label="View market details for {market.description}">
@@ -142,7 +145,10 @@
 		<!-- Select button -->
 		<button 
 			class="w-full py-2 px-4 bg-indigo-600 hover:bg-indigo-700 text-white font-medium rounded-lg transition-colors"
-			onclick={() => onSelect("1")}
+			onclick={(e) => {
+				e.stopPropagation(); // Stop event propagation
+				onSelect("1");
+			}}
 		>
 			Select Market
 		</button>
