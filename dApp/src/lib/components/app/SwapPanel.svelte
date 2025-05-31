@@ -19,6 +19,8 @@
 		totalBearWeight: number;
 		protocolFeeRate: number;
 		onPredictionSelect: (side: PredictionSide, targetPrice?: number) => void;
+		selectedMarket?: any; // Temporarily using 'any' type, should be properly typed
+		disabled?: boolean;
 	}
 
 	let {
@@ -31,7 +33,9 @@
 		totalBullWeight,
 		totalBearWeight,
 		protocolFeeRate,
-		onPredictionSelect
+		onPredictionSelect,
+		selectedMarket,
+		disabled = false
 	}: Props = $props();
 
 	let predictionSide = $state<PredictionSide>(undefined);
@@ -185,7 +189,7 @@
 	});
 </script>
 
-<div class="flex flex-col gap-6 rounded-xl border border-gray-200 bg-white p-6 shadow-xl md:p-8">
+<div class="flex flex-col gap-6 rounded-xl border border-gray-200 bg-white p-6 shadow-xl md:p-8 {disabled ? 'opacity-60' : ''}">
 	<!-- You Pay Section -->
 	<div>
 		<label for="payAmountInput" class="mb-1 block text-sm font-medium text-gray-700">You Pay</label>
@@ -193,11 +197,12 @@
 			<input
 				type="number"
 				id="payAmountInput"
+				bind:value={payAmount}
+				class="block w-full rounded-lg border-0 py-3 text-2xl font-bold text-gray-900 focus:ring-0 disabled:opacity-50"
+				placeholder="0.0"
 				min="0"
 				step="any"
-				class="flex-1 bg-transparent px-0 py-2 text-3xl font-bold text-gray-700 outline-none"
-				bind:value={payAmount}
-				placeholder="0"
+				disabled={disabled}
 			/>
 			<button
 				title="Select Token (Not implemented)"
@@ -282,20 +287,21 @@
 		<div class="mt-1 flex items-center gap-2">
 			<input
 				type="number"
+				id="targetPriceInput"
 				bind:value={predictedTargetPrice}
-				oninput={handleTargetPriceInput}
-				onfocus={() => (isTargetPriceInputFocused = true)}
-				onblur={() => (isTargetPriceInputFocused = false)}
-				class="flex-1 rounded-md border border-gray-300 bg-white px-3 py-2 text-sm text-gray-700 placeholder-gray-400 outline-none focus:border-sky-500"
+				onfocusin={() => isTargetPriceInputFocused = true}
+				onfocusout={() => isTargetPriceInputFocused = false}
+				class="block w-full rounded-lg border-0 py-3 text-2xl font-bold text-gray-900 focus:ring-0 disabled:opacity-50"
 				placeholder={placeholderTargetPrice}
-				min="0.000001"
-				step="any"
+				min="0"
+				step="0.01"
+				disabled={disabled}
 			/>
 
 			<button
 				onclick={() => handleTargetPrediction('above')}
 				class={getPredictionButtonClass('above')}
-				disabled={!predictedTargetPrice || predictedTargetPrice <= 0}
+				disabled={!predictedTargetPrice || predictedTargetPrice <= 0 || disabled}
 				aria-label="Predict price will be above target"
 			>
 				<ArrowUpOutline class="h-5 w-5" />
@@ -304,7 +310,7 @@
 			<button
 				onclick={() => handleTargetPrediction('below')}
 				class={getPredictionButtonClass('below')}
-				disabled={!predictedTargetPrice || predictedTargetPrice <= 0}
+				disabled={!predictedTargetPrice || predictedTargetPrice <= 0 || disabled}
 				aria-label="Predict price will be below target"
 			>
 				<ArrowDownOutline class="h-5 w-5" />
