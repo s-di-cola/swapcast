@@ -3,7 +3,13 @@
 	import { page } from '$app/state';
 	import SwapPanel from '$lib/components/app/SwapPanel.svelte';
 	import MarketCard from '$lib/components/app/MarketCard.svelte';
+	import MarketDetailsModal from '$lib/components/admin/market/MarketDetailsModal.svelte';
 	import type { PredictionSide, Token } from '$lib/types';
+	
+	// Define custom event types
+	type MarketCardEvents = {
+		viewDetails: CustomEvent<{ marketId: string }>
+	};
 
 	// Define formatNumber and formatPercentage functions directly
 	function formatNumber(value: number | undefined, decimals: number = 2): string {
@@ -36,6 +42,10 @@
 
 	// Type for the selected market
 	let selectedMarket: Market | null = $state(null);
+	
+	// State for market details modal
+	let showDetailsModal = $state(false);
+	let selectedMarketId = $state<string | null>(null);
 
 	// Define Token Objects
 	const ethToken: Token = { symbol: 'ETH', name: 'Ethereum' };
@@ -147,13 +157,30 @@
 	let totalBearWeight = 5500; // Mock data
 	let protocolFeeRate = 0.05; // 5% Mock data
 
-	// Handlers for market selection
-	function handleMarketSelect(market: Market) {
+	// Function to handle market selection
+	function handleMarketSelect(market: Market): void {
 		selectedMarket = market;
-		isMarketSelectionView = false; // Switch to swap interface view
+		isMarketSelectionView = false;
+		// Update URL with market ID
+		const url = new URL(window.location.href);
+		url.searchParams.set('market', market.id);
+		window.history.replaceState({}, '', url);
 	}
-
-	function changeMarket() {
+	
+	// Function to handle viewing market details
+	function handleViewMarketDetails(marketId: string): void {
+		selectedMarketId = marketId;
+		showDetailsModal = true;
+	}
+	
+	// Function to close market details modal
+	function closeMarketDetailsModal(): void {
+		showDetailsModal = false;
+		selectedMarketId = null;
+	}
+	
+	// Function to change market (go back to market selection view)
+	function changeMarket(): void {
 		isMarketSelectionView = true; // Switch back to market selection view
 	}
 
@@ -250,8 +277,18 @@
 									</div>
 								{:else}
 									{#each filteredMarkets as market}
-										<MarketCard {market} onSelect={() => handleMarketSelect(market)} />
-									{/each}
+									<MarketCard 
+										market={market} 
+										onSelect={(marketId) => {
+											// When clicking the Select button, go to swap interface
+											handleMarketSelect(market);
+										}}
+										onViewDetails={(marketId) => {
+											// When clicking the card, only show details modal
+											handleViewMarketDetails(marketId);
+										}}
+									/>
+								{/each}
 								{/if}
 							</div>
 						</div>
@@ -315,4 +352,11 @@
 			</div>
 		</div>
 	</div>
+
+<!-- Market Details Modal -->
+<MarketDetailsModal 
+	showModal={showDetailsModal} 
+	marketId={selectedMarketId} 
+	onClose={closeMarketDetailsModal} 
+/>
 </div>

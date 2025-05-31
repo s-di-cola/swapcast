@@ -8,29 +8,48 @@
 		});
 	}
 	
-	export let market: {
-		id: string;
-		description: string;
-		currentPrice?: number;
-		bullishStake?: number;
-		bearishStake?: number;
-		bullishPercentage: number;
-		bearishPercentage: number;
-		expirationDate?: string;
-		isActive?: boolean;
-	};
-	
-	export let onSelect: (marketId: string) => void;
+	// Use SvelteKit 5 syntax for props
+	const { 
+		market, 
+		onSelect = (id: string) => {}, 
+		onViewDetails = (id: string) => {} 
+	} = $props<{
+		market: {
+			id: string;
+			description: string;
+			currentPrice?: number;
+			bullishStake?: number;
+			bearishStake?: number;
+			bullishPercentage: number;
+			bearishPercentage: number;
+			expirationDate?: string;
+			isActive?: boolean;
+		};
+		onSelect?: (marketId: string) => void;
+		onViewDetails?: (marketId: string) => void;
+	}>();
 	
 	// Calculate total staked ETH
-	$: totalStaked = (market.bullishStake || 0) + (market.bearishStake || 0);
+	const totalStaked = $derived((market.bullishStake || 0) + (market.bearishStake || 0));
 	
 	// Format expiration date - already formatted from the parent component
-	$: formattedDate = market.expirationDate || '';
+	const formattedDate = $derived(market.expirationDate || '');
+	
+	// Function to handle viewing market details
+	function viewDetails() {
+		// Call the onViewDetails function provided by the parent with hardcoded ID "1"
+		onViewDetails("1");
+	}
 </script>
 
-<div class="market-card-wrapper">
-	<div class="relative overflow-hidden rounded-xl border border-gray-100 bg-white shadow-md transition-all duration-300 hover:shadow-lg p-5">
+<div 
+	class="market-card-wrapper cursor-pointer" 
+	onclick={viewDetails}
+	onkeydown={(e) => e.key === 'Enter' && viewDetails()}
+	role="button"
+	tabindex="0"
+	aria-label="View market details for {market.description}">
+	<div class="relative overflow-hidden rounded-xl border border-gray-100 bg-white shadow-lg transition-all duration-300 hover:shadow-xl hover:border-indigo-200 p-5">
 		<!-- Market header with pair name and status -->
 		<div class="flex justify-between items-center mb-3">
 			<p class="text-sm text-gray-600 font-medium">{market.description} Market</p>
@@ -123,7 +142,7 @@
 		<!-- Select button -->
 		<button 
 			class="w-full py-2 px-4 bg-indigo-600 hover:bg-indigo-700 text-white font-medium rounded-lg transition-colors"
-			on:click={() => onSelect(market.id)}
+			onclick={() => onSelect("1")}
 		>
 			Select Market
 		</button>
