@@ -1,175 +1,116 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
 	import { page } from '$app/state';
-	import SwapPanel from '$lib/components/app/SwapPanel.svelte';
+	import { replaceState } from '$app/navigation';
+	import SwapPanel from '$lib/components/app/swap-panel/SwapPanel.svelte';
 	import MarketCard from '$lib/components/app/MarketCard.svelte';
+	import CompactMarketCard from '$lib/components/app/CompactMarketCard.svelte';
 	import MarketDetailsModal from '$lib/components/admin/market/MarketDetailsModal.svelte';
-	import type { PredictionSide, Token } from '$lib/types';
-
-
-	interface Market {
-		id: string;
-		description: string;
-		volume24h: number;
-		change24h: number;
-		image: string;
-		currentPrice?: number;
-		threshold?: number;
-		expirationDate?: string;
-		bullishStake?: number;
-		bearishStake?: number;
-		bullishPercentage: number;
-		bearishPercentage: number;
-		// Optional properties for SwapPanel compatibility
-		baseToken?: { symbol: string; name: string };
-		quoteToken?: { symbol: string; name: string };
-		priceChange24h?: number;
-	}
-
-	// Type for the selected market
-	let selectedMarket: Market | null = $state(null);
+	import type { PredictionSide } from '$lib/types';
+	import type { Market } from '$lib/services/market/types';
 	
+	let selectedMarket: Market | null = $state(null);
+
 	// State for market details modal
 	let showDetailsModal = $state(false);
 	let selectedMarketId = $state<string | null>(null);
 
-	// Define Token Objects
-	const ethToken: Token = { symbol: 'ETH', name: 'Ethereum' };
-	const usdcToken: Token = { symbol: 'USDC', name: 'USD Coin' };
-
 	// UI state for the two-step flow
 	let isMarketSelectionView = $state(true);
 
-	// Available markets with more details
-	const availableMarkets: Market[] = [
-		{
-			id: 'eth-usdc-1',
-			description: 'ETH/USD',
-			volume24h: 12500000,
-			change24h: 2.5,
-			image: '/icons/eth.png',
-			currentPrice: 2389.42,
-			threshold: 2400.00,
-			expirationDate: 'Jun 15, 2025 12:00 UTC',
-			bullishStake: 75000,
-			bearishStake: 25000,
-			bullishPercentage: 75,
-			bearishPercentage: 25
-		},
-		{
-			id: 'btc-usdc-1',
-			description: 'BTC/USD',
-			volume24h: 28700000,
-			change24h: -1.2,
-			image: '/icons/btc.png',
-			currentPrice: 42156.78,
-			threshold: 2400.00,
-			expirationDate: 'Jul 01, 2025 18:00 UTC',
-			bullishStake: 120000,
-			bearishStake: 40000,
-			bullishPercentage: 75,
-			bearishPercentage: 25
-		},
-		{
-			id: 'sol-usdc-1',
-			description: 'SOL/USD',
-			volume24h: 5800000,
-			change24h: 4.7,
-			image: '/icons/sol.png',
-			currentPrice: 98.76,
-			threshold: 2400.00,
-			expirationDate: 'Jun 22, 2025 00:00 UTC',
-			bullishStake: 45000,
-			bearishStake: 15000,
-			bullishPercentage: 75,
-			bearishPercentage: 25
-		},
-		{
-			id: 'avax-usdc-1',
-			description: 'AVAX/USD',
-			volume24h: 3200000,
-			change24h: -0.8,
-			image: '/icons/avax.png',
-			currentPrice: 34.21,
-			threshold: 2400.00,
-			expirationDate: 'Jun 30, 2025 06:00 UTC',
-			bullishStake: 30000,
-			bearishStake: 10000,
-			bullishPercentage: 75,
-			bearishPercentage: 25
-		},
-		{
-			id: 'link-usd',
-			description: 'LINK/USD',
-			volume24h: 7600000,
-			change24h: 1.23,
-			image: '/icons/link.png',
-			currentPrice: 15.67,
-			bullishPercentage: 50,
-			bearishPercentage: 50
-		},
-		{
-			id: 'aave-usd',
-			description: 'AAVE/USD',
-			volume24h: 5400000,
-			change24h: -2.1,
-			image: '/icons/aave.png',
-			currentPrice: 87.32,
-			bullishPercentage: 40,
-			bearishPercentage: 60
-		}
-	];
-
 	// Search state
 	let searchQuery = $state('');
+
+	// Mock available markets using proper Market type
+	const availableMarkets: Market[] = [
+		{
+			id: '1',
+			name: 'ETH/USD Price Prediction',
+			assetSymbol: 'ETH',
+			assetPair: 'ETH/USD',
+			exists: true,
+			resolved: false,
+			winningOutcome: 0,
+			totalStake0: 2500000000000000000n, // 2.5 ETH in wei (bearish)
+			totalStake1: 3500000000000000000n, // 3.5 ETH in wei (bullish)
+			expirationTime: Math.floor(Date.now() / 1000) + 86400 * 7, // 7 days from now
+			priceAggregator: '0x5f4eC3Df9cbd43714FE2740f5E3616155c5b8419' as `0x${string}`, // ETH/USD Chainlink
+			priceThreshold: 2500, // $2500
+			status: 'Open' as const,
+			expirationDisplay: '7 days',
+			totalStake: '6.0'
+		},
+		{
+			id: '2',
+			name: 'BTC/USD Price Prediction',
+			assetSymbol: 'BTC',
+			assetPair: 'BTC/USD',
+			exists: true,
+			resolved: false,
+			winningOutcome: 0,
+			totalStake0: 1800000000000000000n, // 1.8 ETH in wei (bearish)
+			totalStake1: 4200000000000000000n, // 4.2 ETH in wei (bullish)
+			expirationTime: Math.floor(Date.now() / 1000) + 86400 * 5, // 5 days from now
+			priceAggregator: '0xF4030086522a5bEEa4988F8cA5B36dbC97BeE88c' as `0x${string}`, // BTC/USD Chainlink
+			priceThreshold: 45000, // $45000
+			status: 'Open' as const,
+			expirationDisplay: '5 days',
+			totalStake: '6.0'
+		},
+		{
+			id: '3',
+			name: 'USDC/USD Price Prediction',
+			assetSymbol: 'USDC',
+			assetPair: 'USDC/USD',
+			exists: true,
+			resolved: false,
+			winningOutcome: 0,
+			totalStake0: 5000000000000000000n, // 5.0 ETH in wei (bearish)
+			totalStake1: 3000000000000000000n, // 3.0 ETH in wei (bullish)
+			expirationTime: Math.floor(Date.now() / 1000) + 86400 * 3, // 3 days from now
+			priceAggregator: '0x8fFfFfd4AfB6115b954Bd326cbe7B4BA576818f6' as `0x${string}`, // USDC/USD Chainlink
+			priceThreshold: 1.01, // $1.01
+			status: 'Open' as const,
+			expirationDisplay: '3 days',
+			totalStake: '8.0'
+		}
+	];
 
 	// Filter markets based on search query
 	const filteredMarkets: Market[] = $derived(
 		searchQuery
 			? availableMarkets.filter((market: Market) =>
-				market.description.toLowerCase().includes(searchQuery.toLowerCase())
+				market.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+				market.assetPair.toLowerCase().includes(searchQuery.toLowerCase())
 			)
 			: availableMarkets
 	);
 
-	// Swap panel state (will be passed to SwapPanel)
-	let payAmount = $state(0);
-	let payToken = $state(ethToken);
-	let receiveAmount = $state(0);
-	let receiveToken = $state(usdcToken);
-	let ethPrice = 2389.42; // Mock data
-	let networkFee = 0.0012; // Mock data
-	let totalBullWeight = 7500; // Mock data
-	let totalBearWeight = 5500; // Mock data
-	let protocolFeeRate = 0.05; // 5% Mock data
-
-	// Function to handle market selection
+	// Function to handle market selection by Market object
 	function handleMarketSelect(market: Market): void {
 		console.log('handleMarketSelect called with:', market);
-		
-		// Transform market data to match SwapPanel expectations
-		const transformedMarket = {
-			...market,
-			baseToken: { symbol: market.description.split('/')[0], name: market.description.split('/')[0] },
-			quoteToken: { symbol: market.description.split('/')[1], name: market.description.split('/')[1] },
-			priceChange24h: market.change24h
-		};
-		
-		selectedMarket = transformedMarket;
+
+		selectedMarket = market;
 		isMarketSelectionView = false;
-		// Update URL with market ID
-		const url = new URL(window.location.href);
-		url.searchParams.set('market', market.id);
-		window.history.replaceState({}, '', url);
+		// Update URL with market ID using SvelteKit navigation
+		replaceState(`?market=${market.id}`, {});
 		console.log('Market selected, switching to swap view');
 	}
-	
+
+	// Wrapper function to handle market selection by ID (for MarketCard compatibility)
+	function handleMarketSelectById(marketId: string): void {
+		const market = availableMarkets.find(m => m.id === marketId);
+		if (market) {
+			handleMarketSelect(market);
+		}
+	}
+
 	// Simplified function to handle viewing market details
 	function handleViewMarketDetails(marketId: string): void {
 		selectedMarketId = marketId;
 		showDetailsModal = true;
 	}
-	
+
 	// Function to change market (go back to market selection view)
 	function changeMarket(): void {
 		isMarketSelectionView = true; // Switch back to market selection view
@@ -225,7 +166,7 @@
 						<!-- Market Selection View -->
 						<div class="mb-6">
 							<h2 class="text-xl font-bold text-gray-900 mb-4">Select a Market</h2>
-							
+
 							<!-- Search bar -->
 							<div class="relative mb-6">
 								<input
@@ -266,8 +207,8 @@
 									</div>
 								{:else}
 									{#each filteredMarkets as market}
-									<MarketCard 
-										market={market} 
+									<MarketCard
+										market={market}
 										onSelect={(marketId) => {
 											// When clicking the Select button, go to swap interface
 											handleMarketSelect(market);
@@ -284,55 +225,22 @@
 					{:else}
 						<!-- Swap Interface View -->
 						<div>
-							<!-- Market header with back button -->
-							<div class="flex items-center justify-between mb-6">
-								<h2 class="text-xl font-bold text-gray-900">
-									<span class="text-indigo-600">{selectedMarket?.description}</span>
-								</h2>
-								<button
-									onclick={changeMarket}
-									class="inline-flex items-center px-3 py-1.5 border border-gray-300 text-sm leading-5 font-medium rounded-md text-gray-700 bg-white hover:text-gray-500 focus:outline-none focus:border-blue-300 focus:shadow-outline-blue active:text-gray-800 active:bg-gray-50 transition ease-in-out duration-150"
-								>
-									<svg class="-ml-1 mr-1 h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-										<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 19l-7-7m0 0l7-7m-7 7h18" />
-									</svg>
-									Change Market
-								</button>
-							</div>
-							
-							<!-- Market details summary -->
-							<div class="bg-gray-50 rounded-lg p-4 mb-6">
-								<div class="grid grid-cols-3 gap-4 text-center">
-									<div>
-										<p class="text-sm text-gray-500">Current Price</p>
-										<p class="text-lg font-semibold">${selectedMarket && selectedMarket.currentPrice ? selectedMarket.currentPrice.toFixed(2) : '0.00'}</p>
-									</div>
-									<div>
-										<p class="text-sm text-gray-500">24h Volume</p>
-										<p class="text-lg font-semibold">${selectedMarket ? (selectedMarket.volume24h / 1000000).toFixed(1) : '0.0'}M</p>
-									</div>
-									<div>
-										<p class="text-sm text-gray-500">24h Change</p>
-										<p class="text-lg font-semibold ${selectedMarket && selectedMarket.change24h >= 0 ? 'text-green-600' : 'text-red-600'}">
-											{selectedMarket ? (selectedMarket.change24h >= 0 ? '+' : '') + selectedMarket.change24h + '%' : '0.00%'}
-										</p>
-									</div>
-								</div>
-							</div>
+							<!-- Compact Market Card -->
+							{#if selectedMarket}
+								<CompactMarketCard
+									market={selectedMarket}
+									onChangeMarket={() => {
+										isMarketSelectionView = true;
+										replaceState('', {});
+									}}
+								/>
+							{/if}
 
 							<!-- SwapPanel Component -->
 							<SwapPanel
-								bind:payAmount
-								bind:payToken
-								bind:receiveAmount
-								bind:receiveToken
-								ethPrice={ethPrice}
-								networkFee={networkFee}
-								totalBullWeight={totalBullWeight}
-								totalBearWeight={totalBearWeight}
-								protocolFeeRate={protocolFeeRate}
+								marketId={selectedMarket?.id || null}
 								onPredictionSelect={onPredictionSelect}
-								selectedMarket={selectedMarket}
+								onMarketChange={handleMarketSelectById}
 								disabled={!selectedMarket}
 							/>
 						</div>
@@ -345,8 +253,8 @@
 
 <!-- Market Details Modal - Simplified without custom handlers -->
 <div class="z-50">
-	<MarketDetailsModal 
+	<MarketDetailsModal
 		bind:showModal={showDetailsModal}
-		marketId={selectedMarketId} 
+		marketId={selectedMarketId}
 	/>
 </div>

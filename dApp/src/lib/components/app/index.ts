@@ -1,1 +1,1 @@
-export { default as SwapPanel } from './SwapPanel.svelte';
+export { default as SwapPanel } from './swap-panel/SwapPanel.svelte';
