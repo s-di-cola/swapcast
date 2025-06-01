@@ -70,33 +70,60 @@
         <div class="space-y-4">
           <h4 class="text-lg font-semibold text-gray-900">2. ETH Staking Mechanism</h4>
           <p class="text-gray-700">
-            Predictions are staked using <span class="font-semibold">ETH</span> as a universal medium of conviction. Your stake amount determines your market influence and potential rewards.
+            Predictions are staked using <span class="font-semibold">ETH</span>. Your stake amount determines your market influence and potential rewards.
           </p>
-          <div class="rounded-lg bg-amber-50 p-4 text-sm text-amber-800">
-            <p class="font-medium">Conviction Weight Formula:</p>
-            <p class="font-mono text-xs">convictionWeight = swapAmount × convictionFactor</p>
-            <p class="mt-1">Where convictionFactor is typically 0.01 (1%)</p>
+          <div class="rounded-lg bg-amber-50 p-4 text-sm">
+            <p class="font-medium text-amber-800">How your stake is calculated:</p>
+            <div class="mt-3 space-y-3">
+              <div class="flex items-start gap-2">
+                <div class="flex h-5 w-5 items-center justify-center rounded-full bg-amber-600 text-white text-xs font-bold">1</div>
+                <div>
+                  <p class="font-medium text-amber-800">1% of your swap amount becomes your ETH stake</p>
+                  <p class="text-amber-700 text-xs mt-1">This is automatic - we call this your "conviction factor"</p>
+                </div>
+              </div>
+              
+              <div class="flex items-start gap-2">
+                <div class="flex h-5 w-5 items-center justify-center rounded-full bg-amber-600 text-white text-xs font-bold">2</div>
+                <div>
+                  <p class="font-medium text-amber-800">Example:</p>
+                  <p class="text-amber-700 text-xs mt-1">If you swap 1000 USDC, your ETH stake will be worth 10 USDC (1% of 1000)</p>
+                </div>
+              </div>
+            </div>
           </div>
         </div>
 
         <div class="space-y-4">
-          <h4 class="text-lg font-semibold text-gray-900">3. Pari-Mutuel Rewards</h4>
-          <div class="space-y-3">
-            <p class="text-gray-700">
-              Rewards follow a pari-mutuel betting model where winners share the losing side's stake:
-            </p>
-            <div class="rounded-lg border border-purple-100 bg-purple-50 p-4 text-sm">
-              <p class="font-medium text-purple-800">Reward Calculation:</p>
-              <div class="mt-2 space-y-1 font-mono text-xs text-purple-700">
-                <p>// First, you get your original stake back</p>
-                <p>rewardAmount = yourStake</p>
-                <p>&nbsp;</p>
-                <p>// Then, you get a portion of the losing side's pool</p>
-                <p>if (winningOutcome == BEAR) &#123;</p>
-                <p>  rewardAmount += (yourStake * totalBullWeight) / totalBearWeight</p>
-                <p>&#125; else &#123; // BULL wins</p>
-                <p>  rewardAmount += (yourStake * totalBearWeight) / totalBullWeight</p>
-                <p>&#125;</p>
+          <h4 class="text-lg font-semibold text-gray-900">3. Reward System</h4>
+          <p class="text-gray-700">
+            When you win a prediction, you get rewarded based on how much you contributed to the winning side.
+          </p>
+          <div class="rounded-lg bg-purple-50 p-4 text-sm">
+            <p class="font-medium text-purple-800">What you get when you win:</p>
+            <div class="mt-3 space-y-3">
+              <div class="flex items-start gap-2">
+                <div class="flex h-5 w-5 items-center justify-center rounded-full bg-purple-600 text-white text-xs font-bold">1</div>
+                <div>
+                  <p class="font-medium text-purple-800">Your original stake back</p>
+                  <p class="text-purple-700 text-xs mt-1">Whatever ETH amount you put in, you get it back when you win</p>
+                </div>
+              </div>
+              
+              <div class="flex items-start gap-2">
+                <div class="flex h-5 w-5 items-center justify-center rounded-full bg-purple-600 text-white text-xs font-bold">2</div>
+                <div>
+                  <p class="font-medium text-purple-800">A share of the losing side's pool</p>
+                  <p class="text-purple-700 text-xs mt-1">Example: If you contributed 10% of the winning side's total, you get 10% of the losing side's pool</p>
+                </div>
+              </div>
+              
+              <div class="flex items-start gap-2">
+                <div class="flex h-5 w-5 items-center justify-center rounded-full bg-purple-600 text-white text-xs font-bold">3</div>
+                <div>
+                  <p class="font-medium text-purple-800">The bigger the losing side, the more you win</p>
+                  <p class="text-purple-700 text-xs mt-1">If many people bet against you and lose, your reward will be larger</p>
+                </div>
               </div>
             </div>
           </div>
@@ -104,19 +131,46 @@
 
         <div class="space-y-4">
           <h4 class="text-lg font-semibold text-gray-900">4. Example Calculation</h4>
-          <div class="rounded-lg bg-green-50 p-4 text-sm text-green-800">
-            <p class="font-medium">Scenario:</p>
-            <div class="mt-2 space-y-1">
-              <p>• Total Bull Predictions: {exampleTotalBull()} ETH</p>
-              <p>• Total Bear Predictions: {exampleTotalBear()} ETH</p>
-              <p>• Your Bull Position: {exampleStake()} ETH (${exampleStakeInUsd()})</p>
-            </div>
-            <div class="mt-3 border-t border-green-200 pt-2">
-              <p class="font-medium">If Bull outcome wins:</p>
-              <p>• Your original stake: {exampleStake()} ETH</p>
-              <p>• Your share of Bear pool: {(exampleStake() * exampleTotalBear() / exampleTotalBull()).toFixed(3)} ETH</p>
-              <p>• Total reward: {exampleReward().toFixed(3)} ETH (${exampleRewardInUsd()})</p>
-              <p>• ROI: {exampleROI().toFixed(1)}%</p>
+          <p class="text-gray-700">
+            Let's see how this works with a real example.
+          </p>
+          <div class="rounded-lg bg-green-50 p-4 text-sm">
+            <p class="font-medium text-green-800">Example scenario:</p>
+            <div class="mt-3 space-y-3">
+              <div class="flex items-start gap-2">
+                <div class="flex h-5 w-5 items-center justify-center rounded-full bg-green-600 text-white text-xs font-bold">A</div>
+                <div>
+                  <p class="font-medium text-green-800">The market</p>
+                  <div class="text-green-700 text-xs mt-1 space-y-1">
+                    <p>• Total Bull side: {exampleTotalBull()} ETH</p>
+                    <p>• Total Bear side: {exampleTotalBear()} ETH</p>
+                  </div>
+                </div>
+              </div>
+              
+              <div class="flex items-start gap-2">
+                <div class="flex h-5 w-5 items-center justify-center rounded-full bg-green-600 text-white text-xs font-bold">B</div>
+                <div>
+                  <p class="font-medium text-green-800">Your position</p>
+                  <div class="text-green-700 text-xs mt-1">
+                    <p>• You bet {exampleStake()} ETH on Bull (${exampleStakeInUsd()})</p>
+                    <p>• This is {((exampleStake() / exampleTotalBull()) * 100).toFixed(1)}% of the Bull side</p>
+                  </div>
+                </div>
+              </div>
+              
+              <div class="flex items-start gap-2">
+                <div class="flex h-5 w-5 items-center justify-center rounded-full bg-green-600 text-white text-xs font-bold">C</div>
+                <div>
+                  <p class="font-medium text-green-800">If Bull wins, you get:</p>
+                  <div class="text-green-700 text-xs mt-1 space-y-1">
+                    <p>• Your original stake: {exampleStake()} ETH</p>
+                    <p>• Your share of Bear pool: {(exampleStake() * exampleTotalBear() / exampleTotalBull()).toFixed(3)} ETH</p>
+                    <p class="text-green-800 font-medium">• Total reward: {exampleReward().toFixed(3)} ETH (${exampleRewardInUsd()})</p>
+                    <p class="text-green-800 font-medium">• ROI: +{exampleROI().toFixed(1)}%</p>
+                  </div>
+                </div>
+              </div>
             </div>
           </div>
         </div>
@@ -124,8 +178,36 @@
         <div class="space-y-4">
           <h4 class="text-lg font-semibold text-gray-900">5. Automated Resolution</h4>
           <p class="text-gray-700">
-            Predictions are resolved automatically using Chainlink Automation. Winners can claim their rewards through a pull-based mechanism, and you receive unique SwapCast NFTs as proof of your positions.
+            Once the market expires, your prediction is automatically resolved and you can claim your rewards if you won.
           </p>
+          <div class="rounded-lg bg-blue-50 p-4 text-sm">
+            <p class="font-medium text-blue-800">How it works:</p>
+            <div class="mt-3 space-y-3">
+              <div class="flex items-start gap-2">
+                <div class="flex h-5 w-5 items-center justify-center rounded-full bg-blue-600 text-white text-xs font-bold">1</div>
+                <div>
+                  <p class="font-medium text-blue-800">Chainlink price feeds determine the winner</p>
+                  <p class="text-blue-700 text-xs mt-1">We use trusted oracle data to check if the price went up or down</p>
+                </div>
+              </div>
+              
+              <div class="flex items-start gap-2">
+                <div class="flex h-5 w-5 items-center justify-center rounded-full bg-blue-600 text-white text-xs font-bold">2</div>
+                <div>
+                  <p class="font-medium text-blue-800">You receive an NFT for your position</p>
+                  <p class="text-blue-700 text-xs mt-1">This NFT represents your prediction and is used to claim rewards</p>
+                </div>
+              </div>
+              
+              <div class="flex items-start gap-2">
+                <div class="flex h-5 w-5 items-center justify-center rounded-full bg-blue-600 text-white text-xs font-bold">3</div>
+                <div>
+                  <p class="font-medium text-blue-800">Winners claim rewards with one click</p>
+                  <p class="text-blue-700 text-xs mt-1">If you won, just click to claim your ETH rewards</p>
+                </div>
+              </div>
+            </div>
+          </div>
         </div>
 
         <div class="rounded-lg bg-gray-50 p-4 text-sm text-gray-600">
