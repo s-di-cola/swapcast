@@ -13,17 +13,27 @@
     payTokenSymbol?: string;
   } = $props();
 
-  // Example calculations based on README formulas
+  // Example calculations based on actual contract logic
   let exampleStake = $derived(() => 0.1); // 0.1 ETH stake
   let exampleTotalBull = $derived(() => 1.0); // 1 ETH total bull predictions
   let exampleTotalBear = $derived(() => 3.0); // 3 ETH total bear predictions
-  let protocolFee = $derived(() => 0.05); // 5% protocol fee
   
+  // Calculate reward based on actual contract logic
   let exampleReward = $derived(() => {
-    const totalPool = exampleTotalBull() + exampleTotalBear();
-    const distributablePool = totalPool * (1 - protocolFee());
-    const traderShare = exampleStake() / exampleTotalBull();
-    return traderShare * distributablePool;
+    // First, get original stake back
+    let reward = exampleStake();
+    
+    // Then, get share of losing pool (assuming BULL wins)
+    // From contract: rewardAmount += (userStake * totalBearWeight) / totalBullWeight
+    reward += (exampleStake() * exampleTotalBear()) / exampleTotalBull();
+    
+    return reward;
+  });
+  
+  // Calculate ROI
+  let exampleROI = $derived(() => {
+    const profit = exampleReward() - exampleStake();
+    return (profit / exampleStake()) * 100;
   });
   
   let exampleStakeInUsd = $derived(() => (exampleStake() * ethPrice).toFixed(2));
@@ -73,15 +83,20 @@
           <h4 class="text-lg font-semibold text-gray-900">3. Pari-Mutuel Rewards</h4>
           <div class="space-y-3">
             <p class="text-gray-700">
-              Rewards follow a pari-mutuel betting model with protocol fees:
+              Rewards follow a pari-mutuel betting model where winners share the losing side's stake:
             </p>
             <div class="rounded-lg border border-purple-100 bg-purple-50 p-4 text-sm">
               <p class="font-medium text-purple-800">Reward Calculation:</p>
               <div class="mt-2 space-y-1 font-mono text-xs text-purple-700">
-                <p>totalPool = totalBullWeight + totalBearWeight</p>
-                <p>protocolFee = totalPool × 0.05 (5%)</p>
-                <p>distributablePool = totalPool - protocolFee</p>
-                <p>reward = (yourStake / totalWinningWeight) × distributablePool</p>
+                <p>// First, you get your original stake back</p>
+                <p>rewardAmount = yourStake</p>
+                <p>&nbsp;</p>
+                <p>// Then, you get a portion of the losing side's pool</p>
+                <p>if (winningOutcome == BEAR) &#123;</p>
+                <p>  rewardAmount += (yourStake * totalBullWeight) / totalBearWeight</p>
+                <p>&#125; else &#123; // BULL wins</p>
+                <p>  rewardAmount += (yourStake * totalBearWeight) / totalBullWeight</p>
+                <p>&#125;</p>
               </div>
             </div>
           </div>
@@ -95,13 +110,13 @@
               <p>• Total Bull Predictions: {exampleTotalBull()} ETH</p>
               <p>• Total Bear Predictions: {exampleTotalBear()} ETH</p>
               <p>• Your Bull Position: {exampleStake()} ETH (${exampleStakeInUsd()})</p>
-              <p>• Protocol Fee: 5%</p>
             </div>
             <div class="mt-3 border-t border-green-200 pt-2">
               <p class="font-medium">If Bull outcome wins:</p>
-              <p>• Distributable Pool: {(exampleTotalBull() + exampleTotalBear()) * 0.95} ETH</p>
-              <p>• Your Reward: ~{exampleReward().toFixed(3)} ETH (${exampleRewardInUsd()})</p>
-              <p class="text-xs mt-1">Plus your original {exampleStake()} ETH stake returned</p>
+              <p>• Your original stake: {exampleStake()} ETH</p>
+              <p>• Your share of Bear pool: {(exampleStake() * exampleTotalBear() / exampleTotalBull()).toFixed(3)} ETH</p>
+              <p>• Total reward: {exampleReward().toFixed(3)} ETH (${exampleRewardInUsd()})</p>
+              <p>• ROI: {exampleROI().toFixed(1)}%</p>
             </div>
           </div>
         </div>

@@ -36,6 +36,15 @@
     onAmountChange(value);
   }
 
+  function handleFocus(event: Event): void {
+    if (readOnly) return;
+    const target = event.target as HTMLInputElement;
+    // If the current value is 0, select all text so user can immediately type
+    if (amount === 0) {
+      target.select();
+    }
+  }
+
   function handleMax(): void {
     if (readOnly || !token?.balance) return;
     onAmountChange(token.balance);
@@ -50,6 +59,7 @@
         type="number"
         bind:value={amount}
         oninput={handleInput}
+        onfocus={handleFocus}
         class="flex-1 border-0 bg-transparent text-2xl font-semibold text-gray-900 placeholder-gray-400 focus:ring-0 focus:outline-none"
         placeholder="0.00"
         min="0"

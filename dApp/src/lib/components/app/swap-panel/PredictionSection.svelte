@@ -41,7 +41,7 @@
     return total > 0 ? (totalBearWeight / total) * 100 : 50;
   });
 
-  // Advanced reward calculations based on README formulas
+  // Advanced reward calculations based on actual contract implementation
   let rewardAnalysis = $derived(() => {
     if (!predictionStakeAmount || predictionStakeAmount <= 0 || !predictionSide) {
       return {
@@ -54,32 +54,32 @@
         oppositeSideWeight: 0,
         isEarlyPosition: false,
         crowdedSide: null,
-        totalPool: 0,
-        distributablePool: 0
+        totalPool: 0
       };
     }
 
     const convictionWeight = predictionStakeAmount;
-    const totalPool = totalBullWeight + totalBearWeight + convictionWeight;
-    const protocolFee = totalPool * protocolFeeRate;
-    const distributablePool = totalPool - protocolFee;
-    
     const isAbove = predictionSide === 'above_target';
     const currentSideWeight = isAbove ? totalBullWeight : totalBearWeight;
     const oppositeSideWeight = isAbove ? totalBearWeight : totalBullWeight;
-    const totalWinningWeight = currentSideWeight + convictionWeight;
+    const totalSideWeight = currentSideWeight + convictionWeight;
     
-    // Potential reward calculation
-    const potentialReward = totalWinningWeight > 0 
-      ? (convictionWeight / totalWinningWeight) * distributablePool 
-      : 0;
+    // From MarketLogic.sol: rewardAmount = userConvictionStake
+    let potentialReward = convictionWeight;
+    
+    // From MarketLogic.sol: rewardAmount += (userConvictionStake * oppositeWeight) / totalWinningWeight
+    if (totalSideWeight > 0) {
+      potentialReward += (convictionWeight * oppositeSideWeight) / totalSideWeight;
+    }
+    
+    // Net profit (reward minus original stake)
+    const netPayout = potentialReward - convictionWeight;
     
     // ROI calculation
-    const netPayout = potentialReward - convictionWeight;
     const roi = convictionWeight > 0 ? (netPayout / convictionWeight) * 100 : 0;
     
     // Pool share percentage
-    const poolShare = totalWinningWeight > 0 ? (convictionWeight / totalWinningWeight) * 100 : 0;
+    const poolShare = totalSideWeight > 0 ? (convictionWeight / totalSideWeight) * 100 : 0;
     
     // Risk assessment
     const sideRatio = oppositeSideWeight > 0 ? currentSideWeight / oppositeSideWeight : 1;
@@ -89,6 +89,7 @@
     else riskLevel = 'low'; // Your side is underdog
     
     // Early position bonus (if total pool is small)
+    const totalPool = totalBullWeight + totalBearWeight + convictionWeight;
     const isEarlyPosition = totalPool < 1.0; // Less than 1 ETH total
     const timingBonus = isEarlyPosition ? 25 : 0;
     
@@ -102,12 +103,11 @@
       poolShare,
       riskLevel,
       timingBonus,
-      yourSideWeight: currentSideWeight + convictionWeight,
+      yourSideWeight: totalSideWeight,
       oppositeSideWeight,
       isEarlyPosition,
       crowdedSide,
-      totalPool,
-      distributablePool
+      totalPool
     };
   });
 
@@ -359,8 +359,8 @@
               <span class="font-medium">{rewardAnalysis().totalPool.toFixed(3)} ETH</span>
             </div>
             <div class="flex justify-between">
-              <span class="text-gray-600">After Fees</span>
-              <span class="font-medium">{rewardAnalysis().distributablePool.toFixed(3)} ETH</span>
+              <span class="text-gray-600">Potential Profit</span>
+              <span class="font-medium">{(rewardAnalysis().potentialReward - predictionStakeAmount).toFixed(3)} ETH</span>
             </div>
           </div>
         </div>

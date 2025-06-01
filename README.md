@@ -49,39 +49,45 @@ The conviction weight of a prediction is derived from the swap amount, aligning 
 
 ### Reward Distribution Mathematics
 
-Rewards are calculated using a pari-mutuel betting model, adjusted for protocol fees:
+Rewards are calculated using a pari-mutuel betting model where winners share the losing side's stake:
 
-1. **Total Pool Calculation:**
+1. **Base Reward (Original Stake):**
    ```
-   totalPool = totalBullWeight + totalBearWeight
+   rewardAmount = yourStake
+   ```
+   You always get your original stake back as part of your reward.
+
+2. **Additional Reward (Share of Losing Side):**
+   ```
+   // If BEAR side wins
+   rewardAmount += (yourStake * totalBullWeight) / totalBearWeight
+   
+   // If BULL side wins
+   rewardAmount += (yourStake * totalBearWeight) / totalBullWeight
+   ```
+   Your share of the losing side's pool is proportional to your stake relative to the total stake on your (winning) side.
+
+3. **Net Profit:**
+   ```
+   netProfit = rewardAmount - yourStake
    ```
 
-2. **Fee Application:**
+4. **ROI:**
    ```
-   protocolFee = totalPool * feeRate
-   distributablePool = totalPool - protocolFee
-   ```
-   Where `feeRate` is typically 0.05 (5%).
-
-3. **Winner's Reward:**
-   ```
-   reward = (convictionWeight / totalWinningWeight) * (distributablePool)
-   ```
-
-4. **Net Payout:**
-   ```
-   netPayout = reward
+   ROI = (netProfit / yourStake) * 100%
    ```
 
 5. **Example Calculation:**
-    - Total Bull Predictions: 1000 USDC
-    - Total Bear Predictions: 3000 USDC
-    - Protocol Fee: 5%
-    - Trader's Bull Position: 100 USDC
+    - Total Bull Predictions: 1.0 ETH
+    - Total Bear Predictions: 3.0 ETH
+    - Trader's Bull Position: 0.1 ETH
 
    If the Bull outcome is correct:
-    - Distributable Pool: (1000 + 3000) * 0.95 = 3800 USDC
-    - Trader's Share: (100 / 1000) * 3800 = 380 USDC (plus original 100 USDC stake)
+    - Original Stake: 0.1 ETH
+    - Share of Bear Pool: (0.1 ETH / 1.0 ETH) * 3.0 ETH = 0.3 ETH
+    - Total Reward: 0.1 ETH + 0.3 ETH = 0.4 ETH
+    - Net Profit: 0.4 ETH - 0.1 ETH = 0.3 ETH
+    - ROI: (0.3 ETH / 0.1 ETH) * 100% = 300%
 
 ---
 
