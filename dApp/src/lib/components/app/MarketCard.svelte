@@ -139,28 +139,28 @@
 		</div>
 		
 		<!-- Action buttons - side by side -->
-		<div class="flex space-x-3">
+		<div class="flex flex-col sm:flex-row space-y-2 sm:space-y-0 sm:space-x-3">
 			<!-- View Details button -->
 			<button 
-				class="flex-1 py-2 px-4 bg-gray-100 hover:bg-gray-200 text-gray-700 font-medium rounded-lg transition-colors border border-gray-300"
+				class="w-full sm:flex-1 py-2 px-3 sm:px-4 bg-gray-100 hover:bg-gray-200 text-gray-700 text-sm sm:text-base font-medium rounded-lg transition-colors border border-gray-300 flex items-center justify-center"
 				onclick={() => onViewDetails(market.id)}
 			>
-				<svg class="w-4 h-4 inline mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+				<svg class="w-4 h-4 sm:mr-1 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
 					<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"></path>
 					<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"></path>
 				</svg>
-				View Details
+				<span class="ml-1 sm:ml-0">View Details</span>
 			</button>
 			
 			<!-- Select/Change Market button -->
 			<button 
-				class="flex-1 py-2 px-4 bg-indigo-600 hover:bg-indigo-700 text-white font-medium rounded-lg transition-colors"
+				class="w-full sm:flex-1 py-2 px-3 sm:px-4 bg-indigo-600 hover:bg-indigo-700 text-white text-sm sm:text-base font-medium rounded-lg transition-colors flex items-center justify-center"
 				onclick={() => onSelect(market.id)}
 			>
-				<svg class="w-4 h-4 inline mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+				<svg class="w-4 h-4 sm:mr-1 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
 					<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d={selectButtonText === 'Change Market' ? 'M11 17l-5-5m0 0l5-5m-5 5h12' : 'M13 7l5 5m0 0l-5 5m5-5H6'}></path>
 				</svg>
-				{selectButtonText}
+				<span class="ml-1 sm:ml-0">{selectButtonText}</span>
 			</button>
 		</div>
 	</div>

@@ -4,9 +4,12 @@
 	import { Header } from '$lib/components/landing';
 	import { goto } from '$app/navigation';
 	import { browser } from '$app/environment';
+	import { onMount } from 'svelte';
 	import '../app.css';
 	import { appKit } from '$lib/configs/wallet.config';
 	import { isAdmin } from '$lib/utils/admin';
+
+	export const ssr = false; // Disable server-side rendering for this component
 
 	let { children } = $props<{ children: any }>();
 
@@ -17,28 +20,55 @@
 	const pathname = $derived(page.url.pathname);
 	let isConnected = $state(false);
 	let userAddress = $state<string | null>(null);
+	let isMounted = $state(false);
+
+	onMount(() => {
+		isMounted = true;
+		return () => {
+			isMounted = false;
+		};
+	});
 
 	$effect(() => {
-		if (!browser) return;
+		if (!browser || !isMounted) return;
 		
-		// Initial state
-		isConnected = appKit.getIsConnectedState();
-		userAddress = appKit.getAccount()?.address || null;
-		
-		// Subscribe to wallet state changes
-		const unsubscribe = appKit.subscribeState((state) => {
-			const newIsConnected = state.open || appKit.getIsConnectedState();
-			const newAddress = appKit.getAccount()?.address || null;
+		try {
+			// Initial state
+			const initialState = appKit.getIsConnectedState?.();
+			isConnected = !!initialState;
+			userAddress = appKit.getAccount?.()?.address || null;
 			
-			// Only update if there's an actual change
-			if (isConnected !== newIsConnected || userAddress !== newAddress) {
-				isConnected = newIsConnected;
-				userAddress = newAddress;
-				
-				// Trigger route handling on connection state change
-				handleRouteBasedOnConnectionState();
+			// Subscribe to wallet state changes if appKit is available
+			if (typeof appKit.subscribeState === 'function') {
+				const unsubscribe = appKit.subscribeState((state: any) => {
+					if (!isMounted) return;
+					
+					try {
+						const newIsConnected = state?.open || appKit.getIsConnectedState?.() || false;
+						const newAddress = appKit.getAccount?.()?.address || null;
+						
+						// Only update if there's an actual change
+						if (isConnected !== newIsConnected || userAddress !== newAddress) {
+							isConnected = newIsConnected;
+							userAddress = newAddress;
+							
+							// Trigger route handling on connection state change
+							handleRouteBasedOnConnectionState();
+						}
+					} catch (e) {
+						console.error('Error in wallet state subscription:', e);
+					}
+				});
+
+				return () => {
+					if (typeof unsubscribe === 'function') {
+						unsubscribe();
+					}
+				};
 			}
-		});
+		} catch (e) {
+			console.error('Error initializing wallet state:', e);
+		}
 
 		// Add global event listener to prevent page refreshes
 		const handleClick = (e: MouseEvent) => {
@@ -55,7 +85,6 @@
 		document.addEventListener('click', handleClick, true);
 
 		return () => {
-			unsubscribe();
 			document.removeEventListener('click', handleClick, true);
 		};
 	});
@@ -74,11 +103,13 @@
 	 * Central function to handle all routing logic based on connection state
 	 */
 	function handleRouteBasedOnConnectionState() {
-		if (isConnected) {
-			handleAuthenticatedRoutes();
-		} else {
-			handleUnauthenticatedAccess();
-		}
+		// Temporarily disabled for debugging
+		console.log('Wallet connection check bypassed for debugging');
+		// if (isConnected) {
+		// 	handleAuthenticatedRoutes();
+		// } else {
+		// 	handleUnauthenticatedAccess();
+		// }
 	}
 
 	/**
@@ -138,12 +169,13 @@
 	/>
 </svelte:head>
 
+{#if isMounted}
 <div class="flex min-h-screen flex-col bg-white">
 	<!-- Unified header with different props based on route -->
 	<Header
 		showLandingLinks={!isConnected || (!isAppRoute && !isAdminRoute)}
-		showAppLinks={isConnected && isAppRoute}
-		showAdminLinks={isConnected && isAdminRoute}
+		showAppLinks={isAppRoute}
+		showAdminLinks={isAdminRoute}
 		title={isAdminRoute ? 'SwapCast Admin' : 'SwapCast'}
 	/>
 
@@ -157,3 +189,4 @@
 
 	<ToastContainer />
 </div>
+{/if}
