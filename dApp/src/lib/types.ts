@@ -1,6 +1,7 @@
 export interface Token {
 	symbol: string;
 	name: string;
+	balance?: number;
 	// Optional: Add other relevant properties like address, decimals, logoURI, etc.
 	// address?: string;
 	// decimals?: number;

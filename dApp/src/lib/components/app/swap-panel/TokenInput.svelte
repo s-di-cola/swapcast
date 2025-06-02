@@ -52,12 +52,13 @@
 </script>
 
 <div class="space-y-2">
-	<label class="text-sm font-medium text-gray-700">{label}</label>
+	<label for="token-amount-input" class="text-sm font-medium text-gray-700">{label}</label>
 	<div
 		class="group relative rounded-xl border border-gray-200 bg-gray-50/50 p-4 transition-all focus-within:border-blue-500 focus-within:bg-white focus-within:shadow-sm hover:border-gray-300"
 	>
 		<div class="flex items-center justify-between">
 			<input
+				id="token-amount-input"
 				type="number"
 				bind:value={amount}
 				oninput={handleInput}
@@ -66,7 +67,7 @@
 				placeholder="0.00"
 				min="0"
 				step="0.000001"
-				{readOnly}
+				readonly={readOnly}
 				{disabled}
 			/>
 			<button

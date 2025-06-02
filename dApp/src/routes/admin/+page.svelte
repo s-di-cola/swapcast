@@ -354,7 +354,7 @@
 			loading={dashboardState.loading}
 		/>
 
-		<AdminAnalyticsSection activeMarketsCount={dashboardState.openMarketsCount} />
+		<AdminAnalyticsSection />
 
 		<AdminMarketTable
 			markets={dashboardState.markets}

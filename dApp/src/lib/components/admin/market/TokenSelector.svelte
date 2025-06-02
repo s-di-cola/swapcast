@@ -14,6 +14,7 @@
 		filter: (token: Token) => boolean;
 		onSelect: (address: string) => void;
 		onSearch: (term: string) => void;
+		id: string;
 	}
 
 	let {
@@ -26,7 +27,8 @@
 		helper,
 		filter,
 		onSelect,
-		onSearch
+		onSearch,
+		id
 	}: Props = $props();
 
 	const filteredTokens = $derived(
@@ -41,7 +43,7 @@
 </script>
 
 <div>
-	<label class="mb-2 block font-medium">{label}</label>
+	<label for="token-search-{id}" class="mb-2 block font-medium">{label}</label>
 	{#if isLoading}
 		<div class="flex items-center space-x-3 py-3">
 			<Spinner size="6" class="text-indigo-600" />
@@ -68,6 +70,7 @@
 				</svg>
 			</div>
 			<Input
+				id="token-search-{id}"
 				type="search"
 				class="pl-10"
 				placeholder="Search tokens..."

@@ -122,8 +122,8 @@ export async function fetchCoinList(): Promise<void> {
 		const coinList = await getCachedOrFetch<CoinInfo[]>(
 			cacheKey,
 			async () => {
-				const endpoint = buildEndpoint('/coins/list');
-				return makeApiRequest<CoinInfo[]>(endpoint, {});
+				const endpoint = buildEndpoint('/coins/list',{});
+				return makeApiRequest<CoinInfo[]>(endpoint, { skipRateLimit: false });
 			},
 			CACHE_CONFIG.TTL_BY_TYPE.coinList
 		);

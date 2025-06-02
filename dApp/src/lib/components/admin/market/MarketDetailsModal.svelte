@@ -130,9 +130,9 @@
 		<TransactionHistory market={marketState.data} />
 	{/if}
 
-	<svelte:fragment slot="footer">
+	{#snippet footer()}
 		{#if marketState.data}
 			<Button color="blue" onclick={handleRefresh}>{UI_TEXT.refresh}</Button>
 		{/if}
-	</svelte:fragment>
+	{/snippet}
 </Modal>

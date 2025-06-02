@@ -488,7 +488,6 @@
 						{#if selectedMarket}
 							<CompactMarketCard
 								market={selectedMarket}
-								currentPrice={marketPrices[selectedMarket.assetSymbol]}
 								onChangeMarket={() => {
 									isMarketSelectionView = true;
 									replaceState('', {});

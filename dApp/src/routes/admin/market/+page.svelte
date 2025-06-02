@@ -11,6 +11,8 @@
 		logoURI?: string;
 	}
 
+	import { Button } from 'flowbite-svelte';
+
 	/**
 	 * Form state management with SvelteKit 5 runes
 	 */
@@ -182,7 +184,7 @@
 	</header>
 
 	<form
-		on:submit|preventDefault={handleSubmit}
+		onsubmit={(e) => { e.preventDefault(); handleSubmit(); }}
 		class="space-y-8 rounded-xl border border-gray-200 bg-white p-8 shadow-xl"
 	>
 		<div>
@@ -387,13 +389,14 @@
 				type="submit"
 				class="text-md flex w-full justify-center rounded-lg border border-transparent bg-gradient-to-r from-emerald-500 to-teal-600 px-4 py-3.5 font-medium text-white shadow-lg transition-all hover:from-emerald-600 hover:to-teal-700 hover:shadow-xl focus:ring-2 focus:ring-emerald-500 focus:ring-offset-2 focus:outline-none"
 				disabled={isSubmitting}
-				style="z-index: 10; position: relative;"			>
+				style="z-index: 10; position: relative;"
+			>
 				{#if isSubmitting}
 					<span class="mr-2 inline-block animate-spin">↻</span> Creating Market...
 				{:else}
 					Create New Market
 				{/if}
-			<Button>
+			</Button>
 		</div>
 	</form>
 </div>

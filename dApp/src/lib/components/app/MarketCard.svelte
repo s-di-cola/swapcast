@@ -8,12 +8,14 @@
 		currentPrice = market.priceThreshold, // Default to threshold if not provided
 		onSelect = (id: string) => {},
 		onViewDetails = (id: string) => {},
+		onChangeMarket = () => {},
 		selectButtonText = 'Select Market'
 	} = $props<{
 		market: Market;
 		currentPrice?: number | null;
 		onSelect?: (marketId: string) => void;
 		onViewDetails?: (marketId: string) => void;
+		onChangeMarket?: () => void;
 		selectButtonText?: string;
 	}>();
 
