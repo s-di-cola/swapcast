@@ -1,24 +1,21 @@
 <script lang="ts">
 	import type { Market } from '$lib/services/market/types';
 	import { formatNumber } from '$lib/helpers/formatters';
-	import { onMount } from 'svelte';
 
 	// Use SvelteKit 5 syntax for props
 	const { 
 		market, 
+		currentPrice = market.priceThreshold, // Default to threshold if not provided
 		onSelect = (id: string) => {}, 
 		onViewDetails = (id: string) => {},
 		selectButtonText = "Select Market"
 	} = $props<{
 		market: Market;
+		currentPrice?: number | null;
 		onSelect?: (marketId: string) => void;
 		onViewDetails?: (marketId: string) => void;
 		selectButtonText?: string;
 	}>();
-
-	// State for current price (will be fetched from price service)
-	let currentPrice = $state<number | undefined>(undefined);
-	let priceLoading = $state(true);
 
 	// Derived values from the Market type
 	const bullishStake = Number(market.totalStake1) / 1e18; // Convert from wei to ETH
@@ -27,27 +24,7 @@
 	const bullishPercentage = totalStake > 0 ? (bullishStake / totalStake) * 100 : 0;
 	const bearishPercentage = totalStake > 0 ? (bearishStake / totalStake) * 100 : 0;
 
-	// Mock price fetching (replace with actual price service call)
-	onMount(async () => {
-		try {
-			// TODO: Replace with actual price service call
-			// const price = await priceService.getCurrentPrice(market.assetSymbol);
-			
-			// Mock prices for now
-			const mockPrices: Record<string, number> = {
-				'ETH': 2400.00,
-				'BTC': 44500.00,
-				'USDC': 1.00
-			};
-			
-			currentPrice = mockPrices[market.assetSymbol] || market.priceThreshold;
-			priceLoading = false;
-		} catch (error) {
-			console.error('Failed to fetch price:', error);
-			currentPrice = market.priceThreshold; // Fallback to threshold
-			priceLoading = false;
-		}
-	});
+
 </script>
 
 <!-- Remove the clickable wrapper and events -->
@@ -81,7 +58,7 @@
 		<div class="flex justify-between mb-5">
 			<div>
 				<p class="text-xs text-gray-500">Current Price</p>
-				<p class="text-lg font-semibold text-gray-800">{priceLoading ? '...' : `$${formatNumber(currentPrice)}`}</p>
+				<p class="text-lg font-semibold text-gray-800">${formatNumber(currentPrice)}</p>
 			</div>
 			<div class="text-right">
 				<p class="text-xs text-gray-500">Threshold</p>
