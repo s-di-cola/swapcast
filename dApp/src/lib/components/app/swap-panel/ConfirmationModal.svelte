@@ -1,5 +1,6 @@
 <script lang="ts">
   import { Modal } from 'flowbite-svelte';
+  import { formatNumber } from '$lib/helpers/formatters';
   import type { PredictionSide, Token } from '$lib/types';
 
   let {
@@ -39,13 +40,6 @@
     isSubmitting?: boolean;
     displayExchangeRate?: string;
   } = $props();
-
-  function formatNumber(num: number, decimals: number = 6): string {
-    return num.toLocaleString(undefined, {
-      minimumFractionDigits: 0,
-      maximumFractionDigits: decimals,
-    });
-  }
 
   // Calculate potential rewards based on README formulas
   const calculations = $derived(() => {

@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { formatCurrency, formatEther, formatAddress } from '$lib/helpers/formatters';
 	import { onMount } from 'svelte';
 	import type { Market } from '$lib/services/market';
 	import {
@@ -68,27 +69,20 @@
 
 	const ETHERSCAN_BASE_URL = 'https://etherscan.io/address/';
 
-	function formatCurrency(value: string | number): string {
-		const num = typeof value === 'string' ? parseFloat(value) : value;
-		if (num >= 1_000_000) return `$${(num / 1_000_000).toFixed(2)}M`;
-		if (num >= 1_000) return `$${(num / 1_000).toFixed(2)}K`;
-		return `$${num.toFixed(2)}`;
-	}
-
 	function getEtherscanLink(address: string): string {
 		return `${ETHERSCAN_BASE_URL}${address}`;
 	}
 
 	function formatTransactionHash(hash: string): string {
-		return `${hash.substring(0, 10)}...${hash.substring(hash.length - 8)}`;
+		return formatAddress(hash);
 	}
 
 	function formatUserAddress(address: string): string {
-		return `${address.substring(0, 6)}...${address.substring(address.length - 4)}`;
+		return formatAddress(address);
 	}
 
-	function formatTransactionAmount(amount: string): string {
-		return `${formatCurrency(parseFloat(amount) / 1e18)} ETH`;
+	function formatAmount(amount: string): string {
+		return formatEther(amount);
 	}
 
 	function getOutcomeStyles(outcome: number): OutcomeStyle {
@@ -105,13 +99,10 @@
 
 		// Try different ID formats to find the right one
 		const possibleIds = [
-			market.id,
 			market.id.toString(),
 			String(market.id),
 			// If market.id is a hex string, try converting to decimal
-			market.id.startsWith('0x') ? parseInt(market.id, 16).toString() : market.id,
-			// If market.id is a number, try it directly
-			typeof market.id === 'number' ? market.id.toString() : market.id
+			typeof market.id === 'string' && market.id.startsWith('0x') ? parseInt(market.id, 16).toString() : market.id.toString()
 		];
 
 		console.log('Trying these possible market IDs:', possibleIds);
@@ -135,7 +126,7 @@
 				page: transactionState.page
 			});
 			const data = await getMarketPredictions(
-				market.id,
+				market.id.toString(),
 				transactionState.pageSize,
 				transactionState.page
 			);
@@ -172,7 +163,7 @@
 
 		try {
 			transactionState.data = await getMarketPredictions(
-				market.id,
+				market.id.toString(),
 				transactionState.pageSize,
 				transactionState.page
 			);
@@ -294,7 +285,7 @@
 								</span>
 							</td>
 							<td class="px-4 py-3 text-sm whitespace-nowrap text-gray-700">
-								{formatTransactionAmount(tx.amount)}
+								{formatAmount(tx.amount)}
 							</td>
 						</tr>
 					{/each}

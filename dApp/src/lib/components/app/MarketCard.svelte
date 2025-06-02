@@ -1,16 +1,8 @@
 <script lang="ts">
 	import type { Market } from '$lib/services/market/types';
+	import { formatNumber } from '$lib/helpers/formatters';
 	import { onMount } from 'svelte';
 
-	// Define formatNumber function directly in the component
-	function formatNumber(value: number | undefined, decimals: number = 2): string {
-		if (value === undefined || value === null) return '0';
-		return value.toLocaleString('en-US', {
-			minimumFractionDigits: decimals,
-			maximumFractionDigits: decimals
-		});
-	}
-	
 	// Use SvelteKit 5 syntax for props
 	const { 
 		market, 

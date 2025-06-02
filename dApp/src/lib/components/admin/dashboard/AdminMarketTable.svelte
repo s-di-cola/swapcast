@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { formatCurrency } from '$lib/helpers/formatters';
 	import type { Market } from '$lib/services/market';
 	import type { MarketSortField, SortDirection } from '$lib/services/market';
 
@@ -77,13 +78,6 @@
 			sortDirection = 'asc';
 		}
 		onSort(sortField, sortDirection);
-	}
-
-	function formatCurrency(value: string | number): string {
-		const num = typeof value === 'string' ? parseFloat(value) : value;
-		if (num >= 1_000_000) return `${(num / 1_000_000).toFixed(2)}M`;
-		if (num >= 1_000) return `${(num / 1_000).toFixed(2)}K`;
-		return `${num.toFixed(2)}`;
 	}
 
 	function getSortIndicator(field: MarketSortField): string {

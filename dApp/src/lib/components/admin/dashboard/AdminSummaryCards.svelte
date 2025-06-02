@@ -1,4 +1,6 @@
 <script lang="ts">
+	import { formatCurrency, formatNumber } from '$lib/helpers/formatters';
+
 	interface Props {
 		marketCount?: number;
 		openMarketsCount?: number;
@@ -36,13 +38,6 @@
 		totalVolume: 'Total Volume',
 		totalStakeAcross: 'Total stake across all markets'
 	} as const;
-
-	function formatCurrency(value: string | number): string {
-		const num = typeof value === 'string' ? parseFloat(value) : value;
-		if (num >= 1_000_000) return `$${(num / 1_000_000).toFixed(2)}M`;
-		if (num >= 1_000) return `$${(num / 1_000).toFixed(2)}K`;
-		return `$${num.toFixed(2)}`;
-	}
 
 	const cards: CardConfig[] = $derived([
 		{

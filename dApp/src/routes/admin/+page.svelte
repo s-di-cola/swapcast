@@ -15,6 +15,7 @@
 	} from '$lib/components/admin/dashboard';
 	import { toastStore } from '$lib/stores/toastStore';
 	import { setCreateMarketAction, clearCreateMarketAction } from '$lib/stores/headerStore';
+	import { formatCurrency } from '$lib/helpers/formatters';
 
 	interface DashboardState {
 		markets: Market[];
@@ -85,13 +86,6 @@
 	const resolvedMarketsCount = $derived(
 		dashboardState.markets.filter((m) => m.status === 'Resolved').length
 	);
-
-	function formatCurrency(value: string | number): string {
-		const num = typeof value === 'string' ? parseFloat(value) : value;
-		if (num >= 1_000_000) return `$${(num / 1_000_000).toFixed(2)}M`;
-		if (num >= 1_000) return `$${(num / 1_000).toFixed(2)}K`;
-		return `$${num.toFixed(2)}`;
-	}
 
 	function showToast(type: 'success' | 'error' | 'info' | 'warning', message: string): void {
 		try {
@@ -331,7 +325,7 @@
 		<button
 			type="button"
 			onclick={openCreateMarketModal}
-			class="inline-flex items-center rounded-md bg-indigo-600 px-4 py-2 text-sm font-medium text-white shadow-sm hover:bg-indigo-700 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-indigo-600"
+			class="inline-flex items-center rounded-md bg-indigo-600 px-4 py-2 text-sm font-medium text-white shadow-sm hover:bg-indigo-700 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-indigo-600"
 		>
 			<svg
 				class="mr-2 -ml-0.5 h-4 w-4"

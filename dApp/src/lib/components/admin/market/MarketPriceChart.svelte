@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { formatCurrency, formatDate } from '$lib/helpers/formatters';
 	import { onMount } from 'svelte';
 	import { Spinner } from 'flowbite-svelte';
 	import type { Market } from '$lib/services/market';
@@ -80,13 +81,6 @@
 		threshold: 'Threshold:'
 	} as const;
 
-	function formatCurrency(value: string | number): string {
-		const num = typeof value === 'string' ? parseFloat(value) : value;
-		if (num >= 1_000_000) return `${(num / 1_000_000).toFixed(2)}M`;
-		if (num >= 1_000) return `${(num / 1_000).toFixed(2)}K`;
-		return `${num.toFixed(2)}`;
-	}
-
 	function generatePriceData(threshold: number, days = 30): ChartData {
 		const now = new Date();
 		const labels: string[] = [];
@@ -117,8 +111,8 @@
 
 		priceData.prices.forEach((item: [number, number]) => {
 			const [timestamp, price] = item;
-			const date = new Date(timestamp);
-			labels.push(date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' }));
+			// Format date using shared formatter
+			labels.push(formatDate(timestamp / 1000));
 			data.push(price);
 		});
 

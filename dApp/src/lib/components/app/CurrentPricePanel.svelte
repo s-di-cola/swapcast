@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { formatCurrency } from '$lib/helpers/formatters';
 	export let price: number;
 	export let symbol: string = 'ETH/USDC';
 	import { Card } from 'flowbite-svelte';
@@ -7,7 +8,7 @@
 <Card class="flex flex-col items-center gap-3 rounded-2xl border-0 bg-white/95 p-5 shadow-xl">
 	<span class="mb-1 text-xs font-semibold text-gray-500">Current Price</span>
 	<span class="text-3xl font-extrabold text-gray-900"
-		>${price.toLocaleString(undefined, { maximumFractionDigits: 2 })}</span
+		>${formatCurrency(price)}</span
 	>
 	<span class="mb-2 text-sm text-gray-400">{symbol}</span>
 	<svg width="100%" height="48" viewBox="0 0 120 48" fill="none" xmlns="http://www.w3.org/2000/svg">

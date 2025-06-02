@@ -1,5 +1,6 @@
 <script lang="ts">
 	import { ClockSolid } from 'flowbite-svelte-icons';
+	import { formatCurrency, formatEther, formatDate, formatRelativeTime } from '$lib/helpers/formatters';
 	import type { Market } from '$lib/services/market';
 
 	interface Props {
@@ -35,34 +36,18 @@
 		hour12: false
 	} as const;
 
-	function formatCurrency(value: string | number): string {
-		const num = typeof value === 'string' ? parseFloat(value) : value;
-		if (num >= 1_000_000) return `${(num / 1_000_000).toFixed(2)}M`;
-		if (num >= 1_000) return `${(num / 1_000).toFixed(2)}K`;
-		return `${num.toFixed(2)}`;
-	}
-
 	function formatTimeRemaining(expirationTime: number): string {
 		const now = Math.floor(Date.now() / 1000);
 		const diff = expirationTime - now;
 
 		if (diff <= 0) return UI_TEXT.expired;
 
-		const days = Math.floor(diff / (60 * 60 * 24));
-		const hours = Math.floor((diff % (60 * 60 * 24)) / (60 * 60));
-		const minutes = Math.floor((diff % (60 * 60)) / 60);
-
-		return `${days}d ${hours}h ${minutes}m`;
+		// Use relative time formatting for future dates
+		return formatRelativeTime(expirationTime);
 	}
 
 	function formatExpirationDate(expirationTime: number): string {
-		return new Date(expirationTime * 1000).toLocaleString(undefined, DATE_FORMAT_OPTIONS);
-	}
-
-	// Convert wei values to ETH for display
-	function formatWeiToEth(weiValue: bigint): string {
-		const ethValue = Number(weiValue) / 1e18;
-		return formatCurrency(ethValue);
+		return formatDate(expirationTime, true);
 	}
 
 	const financialItems: FinancialItem[] = $derived([
@@ -72,11 +57,11 @@
 		},
 		{
 			label: UI_TEXT.bullishStake,
-			value: `$${formatWeiToEth(market.totalStake1)}`
+			value: formatEther(market.totalStake1)
 		},
 		{
 			label: UI_TEXT.bearishStake,
-			value: `$${formatWeiToEth(market.totalStake0)}`
+			value: formatEther(market.totalStake0)
 		},
 		{
 			label: UI_TEXT.expirationTime,

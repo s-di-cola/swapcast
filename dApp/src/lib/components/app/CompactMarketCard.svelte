@@ -1,17 +1,9 @@
 <script lang="ts">
 	import type { Market } from '$lib/services/market/types';
+	import { formatNumber } from '$lib/helpers/formatters';
 	import { onMount } from 'svelte';
 	import { ChevronLeft, RefreshCw } from 'lucide-svelte';
 
-	// Define formatNumber function
-	function formatNumber(value: number | undefined, decimals: number = 2): string {
-		if (value === undefined || value === null) return '0';
-		return value.toLocaleString('en-US', {
-			minimumFractionDigits: decimals,
-			maximumFractionDigits: decimals
-		});
-	}
-	
 	// Props
 	const { 
 		market, 
