@@ -58,11 +58,6 @@ export async function getAllMarkets(options?: MarketPaginationOptions): Promise<
 		// Include an extra index to check for any newly created markets
 		const marketIds = Array.from({ length: count }, (_, i) => BigInt(i));
 
-		// Add logging to help debug
-		console.log(
-			`Fetching ${marketIds.length} markets with IDs: ${marketIds.map((id) => id.toString()).join(', ')}`
-		);
-
 		// Fetch all markets in parallel with proper type handling
 		const marketPromises = marketIds.map((id) => {
 			return getMarketDetails(id).catch((error) => {

@@ -61,8 +61,7 @@
 			};
 
 			marketData = await getAllMarkets(paginationOptions);
-			console.log('Fetched markets:', marketData);
-
+			
 			// Fetch prices for the loaded markets
 			await fetchPricesForMarkets(marketData.markets);
 		} catch (error) {

@@ -43,8 +43,6 @@
 				endTimestamp
 			});
 
-			console.log('Treasury data:', response);
-
 			if (response?.globalStats?.[0]?.totalStaked) {
 				// Convert from wei to ETH and format to 2 decimal places
 				const totalStaked = parseFloat(response.globalStats[0].totalStaked) / 1e18;

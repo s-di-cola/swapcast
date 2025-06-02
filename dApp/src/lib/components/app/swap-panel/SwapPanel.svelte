@@ -130,15 +130,8 @@
 			// Simulate API call
 			await new Promise((resolve) => setTimeout(resolve, 2000));
 
-			console.log('Executing swap and prediction:', {
-				payAmount,
-				payToken,
-				receiveAmount,
-				receiveToken,
-				predictionSide,
-				predictedTargetPrice,
-				marketId
-			});
+			// Execute the swap and prediction transaction
+			// Implementation will be added when contract integration is complete
 
 			showConfirmationModal = false;
 			// Reset form

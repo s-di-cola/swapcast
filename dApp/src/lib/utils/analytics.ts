@@ -100,8 +100,6 @@ export function processDailyAnalytics(data: any): DailyAnalytics[] {
 		}
 	});
 
-	console.log('Processed data for today:', dailyStats[todayStr]);
-
 	// Convert to array and sort by date
 	return Object.values(dailyStats).sort(
 		(a, b) => new Date(a.date).getTime() - new Date(b.date).getTime()
@@ -135,14 +133,10 @@ export function getLastNDaysData(data: DailyAnalytics[], days: number): DailyAna
 		date.setDate(date.getDate() - i);
 		const dateStr = date.toISOString().split('T')[0];
 
-		console.log(`Checking for data on ${dateStr}`);
-
 		// Use existing data or create an empty entry with zeros
 		if (dataByDate[dateStr]) {
-			console.log(`Found data for ${dateStr}:`, dataByDate[dateStr]);
 			result.push(dataByDate[dateStr]);
 		} else {
-			console.log(`No data for ${dateStr}, using zeros`);
 			result.push({
 				date: dateStr,
 				marketsCreated: 0,

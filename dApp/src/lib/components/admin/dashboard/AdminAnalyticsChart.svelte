@@ -93,51 +93,17 @@
 				throw new Error('Failed to fetch analytics data');
 			}
 
-			// Log raw data for debugging
-			console.log('Raw subgraph data:', response);
-
 			// Process data using our utility function
 			const processedData = processDailyAnalytics(response);
 
 			// Get only the last N days of data
 			let filteredData = getLastNDaysData(processedData, days);
-			console.log('Filtered data:', filteredData);
-
-			// Debug the data for today specifically
-			const todayStr = new Date().toISOString().split('T')[0];
-			const todayData = filteredData.find((item) => item.date === todayStr);
-			console.log("Today's data:", todayData);
-
-			// Log raw data details to debug
-			console.log('Raw markets data:', response.markets.length, 'markets');
-			console.log('Raw predictions data:', response.predictions.length, 'predictions');
-			console.log('First market timestamp:', response.markets[0]?.creationTimestamp);
 
 			// Check if we have any real data from the subgraph
 			const hasRealData = response.markets.length > 0 || response.predictions.length > 0;
-			console.log(
-				'Has real data?',
-				hasRealData,
-				'Markets:',
-				response.markets.length,
-				'Predictions:',
-				response.predictions.length,
-				'Filtered data items:',
-				filteredData.length
-			);
-
-			// Debug each day's data
-			filteredData.forEach((item, index) => {
-				console.log(`Day ${index} (${item.date}):`, {
-					marketsCreated: item.marketsCreated,
-					predictions: item.predictions,
-					stakeAmount: item.stakeAmount
-				});
-			});
 
 			// Create mock data only if no real data is available
 			if (!hasRealData) {
-				console.log('No real data found, creating mock data for visualization');
 				// Create mock data for the last N days
 				const mockData = [];
 				const today = new Date();
@@ -157,18 +123,12 @@
 					});
 				}
 
-				console.log('Created mock data:', mockData);
 				// Replace filtered data with mock data instead of appending
 				filteredData = mockData;
-			} else {
-				console.log('Using real data for visualization');
 			}
 
 			// Format data for the chart
 			const chartData: DataPoint[] = filteredData.map((item) => {
-				console.log(
-					`Processing item for chart: date=${item.date}, markets=${item.marketsCreated}, predictions=${item.predictions}`
-				);
 				return {
 					date: new Date(item.date).toLocaleDateString('en-US', {
 						month: 'short',
@@ -179,23 +139,12 @@
 				};
 			});
 
-			console.log('Final chart data:', chartData);
-			console.log(
-				'Markets data array:',
-				chartData.map((d) => d.markets)
-			);
-			console.log(
-				'Predictions data array:',
-				chartData.map((d) => d.predictions)
-			);
-
 			const result = {
 				labels: chartData.map((d) => d.date),
 				marketsData: chartData.map((d) => d.markets),
 				predictionsData: chartData.map((d) => d.predictions)
 			};
 
-			console.log('Returning chart data:', result);
 			return result;
 		} catch (err) {
 			console.error('Error fetching analytics data:', err);
@@ -375,19 +324,10 @@
 		const maxMarkets = Math.max(...data.marketsData, 1); // Ensure at least 1 to avoid division by zero
 		const maxPredictions = Math.max(...data.predictionsData, 10); // Ensure at least 10 to avoid division by zero
 
-		console.log('Chart data:', data);
-		console.log('Max markets:', maxMarkets);
-		console.log('Max predictions:', maxPredictions);
-		console.log('Markets data array for drawing:', data.marketsData);
-		console.log('Predictions data array for drawing:', data.predictionsData);
-
 		// Calculate separate scales for markets and predictions
 		const yScaleMarkets = dimensions.chartHeight / (maxMarkets * CHART_CONFIG.yPadding || 1);
 		const yScalePredictions =
 			dimensions.chartHeight / (maxPredictions * CHART_CONFIG.yPadding || 1);
-
-		console.log('Y-scale for markets:', yScaleMarkets);
-		console.log('Y-scale for predictions:', yScalePredictions);
 
 		drawAxes(context, dimensions);
 		drawYAxisLabels(

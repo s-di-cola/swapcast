@@ -41,7 +41,6 @@ export async function getMarketCount(): Promise<number> {
 		// Add 1 to account for any newly created markets that might not be indexed yet
 		// This ensures we always check for the latest market
 		const adjustedCount = Number(count) + 1;
-		console.log(`Market count from contract: ${Number(count)}, adjusted to: ${adjustedCount}`);
 		return adjustedCount;
 	} catch (error) {
 		console.error('Failed to get market count:', error);

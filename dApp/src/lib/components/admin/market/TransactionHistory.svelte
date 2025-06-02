@@ -92,8 +92,6 @@
 	async function fetchTransactions(): Promise<void> {
 		if (!market?.id) return;
 
-		console.log('Fetching transactions for market:', market.id);
-		console.log('Market object:', market);
 		transactionState.isLoading = true;
 		transactionState.error = null;
 
@@ -106,8 +104,6 @@
 				? parseInt(market.id, 16).toString()
 				: market.id.toString()
 		];
-
-		console.log('Trying these possible market IDs:', possibleIds);
 
 		try {
 			// First, try to query all markets to see what's available
@@ -122,20 +118,13 @@
 				}
 			);
 			const allMarketsData = await allMarketsQuery.json();
-			console.log('All available markets in subgraph:', allMarketsData);
 
 			// Now try with the original ID
-			console.log('Calling getMarketPredictions with:', {
-				marketId: market.id,
-				pageSize: transactionState.pageSize,
-				page: transactionState.page
-			});
 			const data = await getMarketPredictions(
 				market.id.toString(),
 				transactionState.pageSize,
 				transactionState.page
 			);
-			console.log('Received transaction data:', data);
 			transactionState.data = data;
 		} catch (err) {
 			console.error('Failed to fetch transactions:', err);

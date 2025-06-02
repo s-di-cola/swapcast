@@ -14,7 +14,6 @@
 		AdminMarketTable
 	} from '$lib/components/admin/dashboard';
 	import { toastStore } from '$lib/stores/toastStore';
-	import { setCreateMarketAction, clearCreateMarketAction } from '$lib/stores/headerStore';
 	import { formatCurrency } from '$lib/helpers/formatters';
 
 	interface DashboardState {
@@ -230,10 +229,6 @@
 				modalState.selectedMarketId = marketId;
 				modalState.showMarketDetails = true;
 			}, 100);
-			setTimeout(() => {
-				modalState.selectedMarketId = marketId;
-				modalState.showMarketDetails = true;
-			}, 100);
 		} else {
 			// If modal is not open, just set the state directly
 			modalState.selectedMarketId = marketId;
@@ -303,12 +298,7 @@
 
 	// Initialize component and handle cleanup
 	$effect(() => {
-		setCreateMarketAction(openCreateMarketModal);
 		updateMarketData();
-
-		return () => {
-			clearCreateMarketAction();
-		};
 	});
 
 	// Update page title reactively

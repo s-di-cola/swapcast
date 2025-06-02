@@ -156,10 +156,6 @@ export async function fetchCoinList(): Promise<void> {
 				}
 			}
 		}
-
-		console.log(
-			`Built mapping for ${Object.keys(coinSymbolToIdMap).length} cryptocurrency symbols`
-		);
 	} catch (error) {
 		console.error('Failed to fetch coin list, using fallback mapping:', error);
 		// Use the fallback mapping if the API request fails

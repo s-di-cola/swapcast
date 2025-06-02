@@ -367,8 +367,6 @@
 			</p>
 		</div>
 
-		<!-- Consider adding fields for: target price (for binary), price range (for range), initial liquidity, fees, etc. -->
-
 		<!-- Success/Error Messages -->
 		{#if submissionSuccess}
 			<div class="mt-4 rounded-lg border border-green-400 bg-green-100 p-4 text-green-700">
@@ -402,5 +400,4 @@
 </div>
 
 <style>
-	/* Scoped styles for the admin page can go here if needed */
 </style>

@@ -78,8 +78,7 @@ export async function executeQuery<T>(
 		// Retry logic for transient errors
 		if (retryCount < CONFIG.maxRetries && shouldRetry(error)) {
 			const delay = CONFIG.retryDelay * Math.pow(2, retryCount); // Exponential backoff
-			console.log(`Retrying in ${delay}ms...`);
-
+			
 			await new Promise((resolve) => setTimeout(resolve, delay));
 			return executeQuery<T>(query, variables, retryCount + 1);
 		}

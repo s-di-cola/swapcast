@@ -139,8 +139,8 @@ export function getTickSpacing(fee: number): TickSpacingType {
  * @example
  * ```typescript
  * const info = getFeeTierInfo(FeeAmount.MEDIUM);
- * console.log(info.percentage); // "0.30%"
- * console.log(info.description); // "Standard fee tier for most token pairs"
+ * // info.percentage would be "0.30%"
+ * // info.description would be "Standard fee tier for most token pairs"
  * ```
  */
 export function getFeeTierInfo(fee: FeeAmountType): FeeTierInfo {
@@ -161,8 +161,10 @@ export function getFeeTierInfo(fee: FeeAmountType): FeeTierInfo {
  *
  * @example
  * ```typescript
- * console.log(isValidFeeAmount(3000)); // true
- * console.log(isValidFeeAmount(1234)); // false
+ * // Returns true for valid fee amounts
+ * isValidFeeAmount(3000); // true
+ * // Returns false for invalid fee amounts
+ * isValidFeeAmount(1234); // false
  * ```
  */
 export function isValidFeeAmount(fee: number): fee is FeeAmountType {
@@ -178,8 +180,9 @@ export function isValidFeeAmount(fee: number): fee is FeeAmountType {
  *
  * @example
  * ```typescript
- * console.log(formatFeePercentage(3000)); // "0.30%"
- * console.log(formatFeePercentage(FeeAmount.LOW)); // "0.05%"
+ * // Format fee as percentage
+ * formatFeePercentage(3000); // "0.30%"
+ * formatFeePercentage(FeeAmount.LOW); // "0.05%"
  * ```
  */
 export function formatFeePercentage(fee: FeeAmountType): string {
@@ -194,8 +197,9 @@ export function formatFeePercentage(fee: FeeAmountType): string {
  * @example
  * ```typescript
  * const allTiers = getAllFeeTiers();
+ * // Iterate through all fee tiers
  * allTiers.forEach(tier => {
- *   console.log(`${tier.percentage}: ${tier.description}`);
+ *   // Access tier properties like percentage and description
  * });
  * ```
  */

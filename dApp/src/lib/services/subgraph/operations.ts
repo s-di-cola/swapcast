@@ -35,7 +35,7 @@ import type {
  * @example
  * ```typescript
  * const predictions = await getMarketPredictions('123', 20, 1);
- * console.log(`Found ${predictions.length} predictions`);
+ * // Process the returned predictions array
  * ```
  */
 export async function getMarketPredictions(
@@ -74,7 +74,7 @@ export async function getMarketPredictions(
  * ```typescript
  * const market = await getMarketFromSubgraph('123');
  * if (market) {
- *   console.log(`Market: ${market.description}`);
+ *   // Access market properties like description
  * }
  * ```
  */
@@ -101,6 +101,7 @@ export async function getMarketFromSubgraph(marketId: string): Promise<SubgraphM
  * @example
  * ```typescript
  * const predictions = await getUserPredictions('0x123...', { limit: 50, page: 1 });
+ * // Process the returned user predictions array
  * ```
  */
 export async function getUserPredictions(
@@ -152,6 +153,7 @@ export async function getUserPredictions(
  * @example
  * ```typescript
  * const recent = await getRecentPredictions({ limit: 100 });
+ * // Process the returned recent predictions array
  * ```
  */
 export async function getRecentPredictions(
@@ -183,6 +185,7 @@ export async function getRecentPredictions(
  * @example
  * ```typescript
  * const markets = await getAllMarketsFromSubgraph({ limit: 20, page: 1 });
+ * // Process the returned paginated markets
  * ```
  */
 export async function getAllMarketsFromSubgraph(
@@ -217,6 +220,7 @@ export async function getAllMarketsFromSubgraph(
  * @example
  * ```typescript
  * const markets = await searchMarkets('ethereum', 10);
+ * // Process the returned matching markets array
  * ```
  */
 export async function searchMarkets(
@@ -251,7 +255,7 @@ export async function searchMarkets(
  * @example
  * ```typescript
  * const stats = await getMarketStatistics('123');
- * console.log(`Total predictions: ${stats.totalPredictions}`);
+ * // Access stats properties like totalPredictions
  * ```
  */
 export async function getMarketStatistics(marketId: string): Promise<SubgraphMarketStats | null> {
@@ -285,6 +289,7 @@ export async function getMarketStatistics(marketId: string): Promise<SubgraphMar
  * @example
  * ```typescript
  * const markets = await batchGetMarkets(['123', '456', '789']);
+ * // Process the returned markets array
  * ```
  */
 export async function batchGetMarkets(marketIds: string[]): Promise<SubgraphMarket[]> {

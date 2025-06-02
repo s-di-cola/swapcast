@@ -27,15 +27,10 @@ export async function createPool(
 
 		// Sort tokens in canonical order
 		const [token0, token1] = sortTokens(tokenA, tokenB, Number(appKit.getChainId()));
-		console.log('Sorted tokens:', {
-			token0: { address: token0.address, symbol: token0.symbol },
-			token1: { address: token1.address, symbol: token1.symbol }
-		});
 
 		// Get tick spacing for the fee tier
 		const tickSpacing = getTickSpacing(fee);
 		const sqrtPriceX96 = BigInt('0x1000000000000000000000000'); // 1:1 price
-		console.log('Pool parameters:', { fee, tickSpacing, sqrtPriceX96: sqrtPriceX96.toString() });
 
 		// Prepare the pool key
 		const poolKey = {
@@ -45,8 +40,6 @@ export async function createPool(
 			tickSpacing: tickSpacing,
 			hooks: PUBLIC_SWAPCASTHOOK_ADDRESS as `0x${string}`
 		};
-
-		console.log('Attempting to initialize pool with:', poolKey);
 
 		const currentNetworkConfig = getCurrentNetworkConfig();
 		const poolManager = getPoolManager({
@@ -70,8 +63,6 @@ export async function createPool(
 			hash: hash
 		};
 	} catch (error: any) {
-		console.error('Error creating pool:', error);
-
 		// Check if the error indicates the pool already exists
 		if (error.message && error.message.includes('PoolAlreadyExists')) {
 			return {
