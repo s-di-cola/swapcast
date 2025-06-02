@@ -47,37 +47,37 @@
     });
   }
 
-  // Calculate potential rewards based on actual contract implementation
+  // Calculate potential rewards based on README formulas
   const calculations = $derived(() => {
     const convictionWeight = predictionStakeAmount; // In ETH
+    const totalPool = totalBullWeight + totalBearWeight + convictionWeight;
+    const protocolFee = totalPool * protocolFeeRate;
+    const distributablePool = totalPool - protocolFee;
+    
     const isAbove = predictionSide === 'above_target';
     const currentSideWeight = isAbove ? totalBullWeight : totalBearWeight;
-    const oppositeSideWeight = isAbove ? totalBearWeight : totalBullWeight;
+    const totalWinningWeight = currentSideWeight + convictionWeight;
     
-    // Total weight including user's stake
-    const totalSideWeight = currentSideWeight + convictionWeight;
+    // Potential reward if prediction wins
+    const potentialReward = totalWinningWeight > 0 
+      ? (convictionWeight / totalWinningWeight) * distributablePool 
+      : 0;
     
-    // From MarketLogic.sol: rewardAmount = userConvictionStake
-    let potentialReward = convictionWeight;
-    
-    // From MarketLogic.sol: rewardAmount += (userConvictionStake * oppositeWeight) / totalWinningWeight
-    if (totalSideWeight > 0) {
-      potentialReward += (convictionWeight * oppositeSideWeight) / totalSideWeight;
-    }
-    
-    // Net profit (reward minus original stake)
+    // Net payout (reward minus original stake)
     const netPayout = potentialReward - convictionWeight;
     
     // Return on investment
     const roi = convictionWeight > 0 ? (netPayout / convictionWeight) * 100 : 0;
     
     return {
-      totalPool: totalBullWeight + totalBearWeight + convictionWeight,
+      totalPool,
+      distributablePool,
       potentialReward,
       netPayout,
       roi,
-      currentSideWeight: totalSideWeight,
-      oppositeSideWeight
+      protocolFee,
+      currentSideWeight,
+      oppositeSideWeight: isAbove ? totalBearWeight : totalBullWeight
     };
   });
 </script>
@@ -165,15 +165,19 @@
             </div>
             <div class="flex items-center justify-between">
               <span class="text-gray-600">Your Side ({predictionSide === 'above_target' ? 'Bullish' : 'Bearish'})</span>
-              <span class="font-medium">{formatNumber(calculations().currentSideWeight)} ETH</span>
+              <span class="font-medium">{formatNumber(calculations().currentSideWeight + predictionStakeAmount)} ETH</span>
             </div>
             <div class="flex items-center justify-between">
               <span class="text-gray-600">Opposite Side</span>
               <span class="font-medium">{formatNumber(calculations().oppositeSideWeight)} ETH</span>
             </div>
+            <div class="flex items-center justify-between">
+              <span class="text-gray-600">Protocol Fee ({(protocolFeeRate * 100).toFixed(1)}%)</span>
+              <span class="font-medium">{formatNumber(calculations().protocolFee)} ETH</span>
+            </div>
             <div class="flex items-center justify-between border-t pt-2">
-              <span class="text-gray-600 font-medium">Your Share of Pool</span>
-              <span class="font-semibold">{predictionStakeAmount > 0 ? ((predictionStakeAmount / calculations().currentSideWeight) * 100).toFixed(1) : '0.0'}%</span>
+              <span class="text-gray-600 font-medium">Distributable Pool</span>
+              <span class="font-semibold">{formatNumber(calculations().distributablePool)} ETH</span>
             </div>
           </div>
         </div>
