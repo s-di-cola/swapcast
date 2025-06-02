@@ -3,6 +3,7 @@
 	import { formatNumber } from '$lib/helpers/formatters';
 	import { onMount } from 'svelte';
 	import { ChevronLeft, RefreshCw } from 'lucide-svelte';
+	import { getCurrentPriceBySymbol } from '$lib/services/price/operations';
 
 	// Props
 	const { market, onChangeMarket = () => {} } = $props<{
@@ -21,26 +22,36 @@
 	const bullishPercentage = totalStake > 0 ? (bullishStake / totalStake) * 100 : 0;
 	const bearishPercentage = totalStake > 0 ? (bearishStake / totalStake) * 100 : 0;
 
-	// Mock price fetching (replace with actual price service call)
-	onMount(async () => {
+	// Fetch current price using the price service
+	async function fetchCurrentPrice() {
+		priceLoading = true;
 		try {
-			// TODO: Replace with actual price service call
-			// const price = await priceService.getCurrentPrice(market.assetSymbol);
-
-			// Mock prices for now
-			const mockPrices: Record<string, number> = {
-				ETH: 2400.0,
-				BTC: 44500.0,
-				USDC: 1.0
-			};
-
-			currentPrice = mockPrices[market.assetSymbol] || market.priceThreshold;
-			priceLoading = false;
+			// Extract the base asset symbol from the asset pair
+			const assetSymbol = market.assetSymbol || market.assetPair?.split('/')[0];
+			
+			if (assetSymbol) {
+				// Get the current price from the price service
+				const price = await getCurrentPriceBySymbol(assetSymbol);
+				
+				// Only use the price if it's valid, don't fall back to threshold
+				if (price !== null && price > 0) {
+					currentPrice = price;
+				} else {
+					// If price service fails, log error but don't change the price
+					console.error(`Invalid price returned for ${assetSymbol}:`, price);
+				}
+			}
 		} catch (error) {
 			console.error('Failed to fetch price:', error);
-			currentPrice = market.priceThreshold; // Fallback to threshold
+			// Don't fall back to threshold on error, just log it
+		} finally {
 			priceLoading = false;
 		}
+	}
+
+	// Fetch price on component mount
+	onMount(() => {
+		fetchCurrentPrice();
 	});
 </script>
 
@@ -55,13 +66,23 @@
 				{market.status}
 			</span>
 		</div>
-		<button
-			onclick={onChangeMarket}
-			class="flex items-center space-x-1 rounded-md bg-blue-600 px-3 py-1.5 text-sm text-white transition-colors hover:bg-blue-700"
-		>
-			<RefreshCw size={16} />
-			<span>Change Market</span>
-		</button>
+		<div class="flex items-center space-x-2">
+			<button
+				onclick={fetchCurrentPrice}
+				class="flex items-center space-x-1 rounded-md bg-gray-100 px-2 py-1.5 text-sm text-gray-700 transition-colors hover:bg-gray-200"
+				title="Refresh price"
+				disabled={priceLoading}
+			>
+				<RefreshCw size={16} class={priceLoading ? 'animate-spin' : ''} />
+			</button>
+			<button
+				onclick={onChangeMarket}
+				class="flex items-center space-x-1 rounded-md bg-blue-600 px-3 py-1.5 text-sm text-white transition-colors hover:bg-blue-700"
+			>
+				<ChevronLeft size={16} />
+				<span>Change Market</span>
+			</button>
+		</div>
 	</div>
 
 	<!-- Price information in a compact row -->
