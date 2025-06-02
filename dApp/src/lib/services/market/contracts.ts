@@ -34,10 +34,10 @@ function getPredictionManagerContract() {
 export async function getMarketCount(): Promise<number> {
 	try {
 		const predictionManager = getPredictionManagerContract();
-		
+
 		// Get the current count from the contract
 		const count = await predictionManager.read.getMarketCount();
-		
+
 		// Add 1 to account for any newly created markets that might not be indexed yet
 		// This ensures we always check for the latest market
 		const adjustedCount = Number(count) + 1;
@@ -104,8 +104,10 @@ export async function getMarketDetails(marketId: string | bigint) {
 		};
 
 		// If we're getting zeros for stake values, let's add some test values for development
-		const testBearishStake = totalConvictionBearish > 0n ? totalConvictionBearish : 2500000000000000000n; // 2.5 ETH
-		const testBullishStake = totalConvictionBullish > 0n ? totalConvictionBullish : 3500000000000000000n; // 3.5 ETH
+		const testBearishStake =
+			totalConvictionBearish > 0n ? totalConvictionBearish : 2500000000000000000n; // 2.5 ETH
+		const testBullishStake =
+			totalConvictionBullish > 0n ? totalConvictionBullish : 3500000000000000000n; // 3.5 ETH
 
 		const details: MarketDetailsResult = {
 			marketId: _id,

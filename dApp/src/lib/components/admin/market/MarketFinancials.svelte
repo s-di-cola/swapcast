@@ -1,6 +1,11 @@
 <script lang="ts">
 	import { ClockSolid } from 'flowbite-svelte-icons';
-	import { formatCurrency, formatEther, formatDate, formatRelativeTime } from '$lib/helpers/formatters';
+	import {
+		formatCurrency,
+		formatEther,
+		formatDate,
+		formatRelativeTime
+	} from '$lib/helpers/formatters';
 	import type { Market } from '$lib/services/market';
 
 	interface Props {

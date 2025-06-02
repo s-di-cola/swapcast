@@ -60,8 +60,6 @@ export async function getHistoricalPriceData(
 	);
 }
 
-
-
 /**
  * Searches for cryptocurrencies by name or symbol
  *
@@ -257,7 +255,6 @@ export async function getCurrentPriceBySymbol(
 
 	return getCurrentPrice(coinId, vsCurrency);
 }
-
 
 /**
  * Formats raw CoinGecko price data for chart display

@@ -92,7 +92,13 @@
 	});
 </script>
 
-<Modal bind:open={showModal} size="xl" autoclose={true} class="w-full max-w-4xl" outsideclose={true}>
+<Modal
+	bind:open={showModal}
+	size="xl"
+	autoclose={true}
+	class="w-full max-w-4xl"
+	outsideclose={true}
+>
 	<div class="mb-4 flex items-center justify-between border-b pb-4">
 		<h3 class="text-xl font-semibold text-gray-900">
 			{getModalTitle()}

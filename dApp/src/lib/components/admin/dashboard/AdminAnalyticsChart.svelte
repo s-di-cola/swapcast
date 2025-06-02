@@ -2,7 +2,11 @@
 	import { onMount } from 'svelte';
 	import { executeQuery } from '$lib/services/subgraph';
 	import { GET_ANALYTICS_DATA } from '$lib/services/subgraph/queries';
-	import { processDailyAnalytics, getLastNDaysData, getDateRangeForAnalytics } from '$lib/utils/analytics';
+	import {
+		processDailyAnalytics,
+		getLastNDaysData,
+		getDateRangeForAnalytics
+	} from '$lib/utils/analytics';
 
 	interface Props {
 		timeRange?: '7d' | '30d';
@@ -91,28 +95,37 @@
 
 			// Log raw data for debugging
 			console.log('Raw subgraph data:', response);
-			
+
 			// Process data using our utility function
 			const processedData = processDailyAnalytics(response);
-			
+
 			// Get only the last N days of data
 			let filteredData = getLastNDaysData(processedData, days);
 			console.log('Filtered data:', filteredData);
-			
+
 			// Debug the data for today specifically
 			const todayStr = new Date().toISOString().split('T')[0];
-			const todayData = filteredData.find(item => item.date === todayStr);
-			console.log('Today\'s data:', todayData);
+			const todayData = filteredData.find((item) => item.date === todayStr);
+			console.log("Today's data:", todayData);
 
 			// Log raw data details to debug
 			console.log('Raw markets data:', response.markets.length, 'markets');
 			console.log('Raw predictions data:', response.predictions.length, 'predictions');
 			console.log('First market timestamp:', response.markets[0]?.creationTimestamp);
-			
+
 			// Check if we have any real data from the subgraph
 			const hasRealData = response.markets.length > 0 || response.predictions.length > 0;
-			console.log('Has real data?', hasRealData, 'Markets:', response.markets.length, 'Predictions:', response.predictions.length, 'Filtered data items:', filteredData.length);
-			
+			console.log(
+				'Has real data?',
+				hasRealData,
+				'Markets:',
+				response.markets.length,
+				'Predictions:',
+				response.predictions.length,
+				'Filtered data items:',
+				filteredData.length
+			);
+
 			// Debug each day's data
 			filteredData.forEach((item, index) => {
 				console.log(`Day ${index} (${item.date}):`, {
@@ -121,19 +134,19 @@
 					stakeAmount: item.stakeAmount
 				});
 			});
-			
+
 			// Create mock data only if no real data is available
 			if (!hasRealData) {
 				console.log('No real data found, creating mock data for visualization');
 				// Create mock data for the last N days
 				const mockData = [];
 				const today = new Date();
-				
+
 				for (let i = 0; i < days; i++) {
 					const date = new Date(today);
 					date.setDate(date.getDate() - (days - i - 1));
 					const dateStr = date.toISOString().split('T')[0];
-					
+
 					mockData.push({
 						date: dateStr,
 						marketsCreated: Math.floor(Math.random() * 3), // 0-2 markets per day
@@ -143,7 +156,7 @@
 						stakeOutcome1: Math.random() * 2.5 // Random bullish stake
 					});
 				}
-				
+
 				console.log('Created mock data:', mockData);
 				// Replace filtered data with mock data instead of appending
 				filteredData = mockData;
@@ -152,8 +165,10 @@
 			}
 
 			// Format data for the chart
-			const chartData: DataPoint[] = filteredData.map(item => {
-				console.log(`Processing item for chart: date=${item.date}, markets=${item.marketsCreated}, predictions=${item.predictions}`);
+			const chartData: DataPoint[] = filteredData.map((item) => {
+				console.log(
+					`Processing item for chart: date=${item.date}, markets=${item.marketsCreated}, predictions=${item.predictions}`
+				);
 				return {
 					date: new Date(item.date).toLocaleDateString('en-US', {
 						month: 'short',
@@ -165,15 +180,21 @@
 			});
 
 			console.log('Final chart data:', chartData);
-			console.log('Markets data array:', chartData.map(d => d.markets));
-			console.log('Predictions data array:', chartData.map(d => d.predictions));
+			console.log(
+				'Markets data array:',
+				chartData.map((d) => d.markets)
+			);
+			console.log(
+				'Predictions data array:',
+				chartData.map((d) => d.predictions)
+			);
 
 			const result = {
 				labels: chartData.map((d) => d.date),
 				marketsData: chartData.map((d) => d.markets),
 				predictionsData: chartData.map((d) => d.predictions)
 			};
-			
+
 			console.log('Returning chart data:', result);
 			return result;
 		} catch (err) {
@@ -353,41 +374,50 @@
 		// Calculate separate max values for markets and predictions
 		const maxMarkets = Math.max(...data.marketsData, 1); // Ensure at least 1 to avoid division by zero
 		const maxPredictions = Math.max(...data.predictionsData, 10); // Ensure at least 10 to avoid division by zero
-		
+
 		console.log('Chart data:', data);
 		console.log('Max markets:', maxMarkets);
 		console.log('Max predictions:', maxPredictions);
 		console.log('Markets data array for drawing:', data.marketsData);
 		console.log('Predictions data array for drawing:', data.predictionsData);
-		
+
 		// Calculate separate scales for markets and predictions
 		const yScaleMarkets = dimensions.chartHeight / (maxMarkets * CHART_CONFIG.yPadding || 1);
-		const yScalePredictions = dimensions.chartHeight / (maxPredictions * CHART_CONFIG.yPadding || 1);
-		
+		const yScalePredictions =
+			dimensions.chartHeight / (maxPredictions * CHART_CONFIG.yPadding || 1);
+
 		console.log('Y-scale for markets:', yScaleMarkets);
 		console.log('Y-scale for predictions:', yScalePredictions);
 
 		drawAxes(context, dimensions);
-		drawYAxisLabels(context, dimensions, maxMarkets, maxPredictions, yScaleMarkets, yScalePredictions);
+		drawYAxisLabels(
+			context,
+			dimensions,
+			maxMarkets,
+			maxPredictions,
+			yScaleMarkets,
+			yScalePredictions
+		);
 		drawXAxisLabels(context, dimensions, data.labels);
-		
+
 		// Draw predictions line first (so markets line appears on top)
 		drawLine(context, dimensions, data.predictionsData, COLORS.predictions, yScalePredictions);
-		
+
 		// Draw markets line using left y-axis scale with increased visibility
 		context.lineWidth = CHART_CONFIG.lineWidth + 1; // Make markets line thicker
 		drawLine(context, dimensions, data.marketsData, COLORS.markets, yScaleMarkets);
-		
+
 		// Draw points again for markets to make them more visible
 		data.marketsData.forEach((value, i) => {
-			const xPos = dimensions.padding.left + (i * dimensions.chartWidth) / (data.marketsData.length - 1);
+			const xPos =
+				dimensions.padding.left + (i * dimensions.chartWidth) / (data.marketsData.length - 1);
 			const yPos = dimensions.height - dimensions.padding.bottom - value * yScaleMarkets;
 
 			context.beginPath();
 			context.fillStyle = COLORS.markets;
 			context.arc(xPos, yPos, CHART_CONFIG.pointRadius + 1, 0, Math.PI * 2);
 			context.fill();
-			
+
 			// Add a white border around market points for better visibility
 			context.beginPath();
 			context.strokeStyle = 'white';
@@ -430,7 +460,7 @@
 </script>
 
 <div class="relative h-full w-full">
-	<div class="absolute right-0 top-0 z-10 flex space-x-2">
+	<div class="absolute top-0 right-0 z-10 flex space-x-2">
 		<button
 			class="rounded-full px-3 py-1 text-xs font-medium transition-colors"
 			class:bg-emerald-100={timeRange === '7d'}
@@ -456,7 +486,7 @@
 	<canvas bind:this={canvas} class="h-full w-full"></canvas>
 
 	{#if isLoading}
-		<div class="absolute inset-0 flex items-center justify-center bg-white bg-opacity-80">
+		<div class="bg-opacity-80 absolute inset-0 flex items-center justify-center bg-white">
 			<div class="flex items-center">
 				<div
 					class="mr-2 h-5 w-5 animate-spin rounded-full border-2 border-emerald-500 border-t-transparent"
@@ -465,7 +495,7 @@
 			</div>
 		</div>
 	{:else if error}
-		<div class="absolute inset-0 flex items-center justify-center bg-white bg-opacity-80">
+		<div class="bg-opacity-80 absolute inset-0 flex items-center justify-center bg-white">
 			<div class="max-w-md rounded-md bg-red-50 p-4 text-center">
 				<div class="flex items-center justify-center">
 					<svg class="h-6 w-6 text-red-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -483,7 +513,7 @@
 				</div>
 				<div class="mt-4">
 					<button
-						class="rounded-md bg-red-100 px-4 py-2 text-sm font-medium text-red-800 hover:bg-red-200 focus:outline-none focus:ring-2 focus:ring-red-500 focus:ring-offset-2"
+						class="rounded-md bg-red-100 px-4 py-2 text-sm font-medium text-red-800 hover:bg-red-200 focus:ring-2 focus:ring-red-500 focus:ring-offset-2 focus:outline-none"
 						onclick={() => {
 							error = null;
 							drawChart();

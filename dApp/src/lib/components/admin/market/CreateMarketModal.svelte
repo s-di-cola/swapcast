@@ -49,9 +49,9 @@
 	}: Props = $props();
 
 	let tokenASearchTerm = $state('');
-let tokenBSearchTerm = $state('');
+	let tokenBSearchTerm = $state('');
 
-let formData = $state<MarketFormData>({
+	let formData = $state<MarketFormData>({
 		marketName: '',
 		tokenA_address: '',
 		tokenB_address: '',
@@ -349,11 +349,18 @@ let formData = $state<MarketFormData>({
 	autoclose={false}
 	size="xl"
 >
-	<form onsubmit={handleSubmit} autocomplete="off" class="max-h-[80vh] space-y-6 overflow-y-auto p-2">
+	<form
+		onsubmit={handleSubmit}
+		autocomplete="off"
+		class="max-h-[80vh] space-y-6 overflow-y-auto p-2"
+	>
 		<!-- Market Definition Section -->
 		<div class="rounded-lg bg-gray-50 p-6 shadow-sm dark:bg-gray-800">
-			<h3 class="mb-4 text-lg font-semibold text-gray-900 dark:text-white flex items-center">
-				<span class="inline-flex items-center justify-center w-8 h-8 mr-3 rounded-full bg-indigo-100 text-indigo-800 dark:bg-indigo-900 dark:text-indigo-200">1</span>
+			<h3 class="mb-4 flex items-center text-lg font-semibold text-gray-900 dark:text-white">
+				<span
+					class="mr-3 inline-flex h-8 w-8 items-center justify-center rounded-full bg-indigo-100 text-indigo-800 dark:bg-indigo-900 dark:text-indigo-200"
+					>1</span
+				>
 				{FORM_SECTIONS.definition}
 			</h3>
 			<div class="mb-4">
@@ -363,7 +370,7 @@ let formData = $state<MarketFormData>({
 					id="marketName"
 					bind:value={formData.marketName}
 					required
-					class="text-lg py-3"
+					class="py-3 text-lg"
 					placeholder={UI_TEXT.marketNamePlaceholder}
 				/>
 				<Helper class="mt-2 text-sm">{UI_TEXT.marketNameHelper}</Helper>
@@ -372,8 +379,11 @@ let formData = $state<MarketFormData>({
 
 		<!-- Token & Pool Setup Section -->
 		<div class="rounded-lg bg-gray-50 p-6 shadow-sm dark:bg-gray-800">
-			<h3 class="mb-4 text-lg font-semibold text-gray-900 dark:text-white flex items-center">
-				<span class="inline-flex items-center justify-center w-8 h-8 mr-3 rounded-full bg-indigo-100 text-indigo-800 dark:bg-indigo-900 dark:text-indigo-200">2</span>
+			<h3 class="mb-4 flex items-center text-lg font-semibold text-gray-900 dark:text-white">
+				<span
+					class="mr-3 inline-flex h-8 w-8 items-center justify-center rounded-full bg-indigo-100 text-indigo-800 dark:bg-indigo-900 dark:text-indigo-200"
+					>2</span
+				>
 				{FORM_SECTIONS.tokens}
 			</h3>
 			<div class="space-y-6">
@@ -395,37 +405,56 @@ let formData = $state<MarketFormData>({
 					{:else}
 						<!-- Search box for Token A -->
 						<div class="relative mb-4">
-							<div class="absolute inset-y-0 left-0 flex items-center pl-3 pointer-events-none">
-								<svg class="w-4 h-4 text-gray-500 dark:text-gray-400" aria-hidden="true" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 20 20">
-									<path stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="m19 19-4-4m0-7A7 7 0 1 1 1 8a7 7 0 0 1 14 0Z"/>
+							<div class="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-3">
+								<svg
+									class="h-4 w-4 text-gray-500 dark:text-gray-400"
+									aria-hidden="true"
+									xmlns="http://www.w3.org/2000/svg"
+									fill="none"
+									viewBox="0 0 20 20"
+								>
+									<path
+										stroke="currentColor"
+										stroke-linecap="round"
+										stroke-linejoin="round"
+										stroke-width="2"
+										d="m19 19-4-4m0-7A7 7 0 1 1 1 8a7 7 0 0 1 14 0Z"
+									/>
 								</svg>
 							</div>
-							<Input 
-								type="search" 
-								class="pl-10" 
-								placeholder="Search tokens..." 
+							<Input
+								type="search"
+								class="pl-10"
+								placeholder="Search tokens..."
 								bind:value={tokenASearchTerm}
 							/>
 						</div>
-						
-						<div class="grid grid-cols-3 gap-3 mb-4 max-h-60 overflow-y-auto">
-							{#each tokenList.filter(t => 
-								!['USDC', 'USDT', 'DAI'].includes(t.symbol) && 
-								(tokenASearchTerm === '' || 
-								t.symbol.toLowerCase().includes(tokenASearchTerm.toLowerCase()) || 
-								t.name.toLowerCase().includes(tokenASearchTerm.toLowerCase()))
-							) as token (token.address)}
+
+						<div class="mb-4 grid max-h-60 grid-cols-3 gap-3 overflow-y-auto">
+							{#each tokenList.filter((t) => !['USDC', 'USDT', 'DAI'].includes(t.symbol) && (tokenASearchTerm === '' || t.symbol
+											.toLowerCase()
+											.includes(tokenASearchTerm.toLowerCase()) || t.name
+											.toLowerCase()
+											.includes(tokenASearchTerm.toLowerCase()))) as token (token.address)}
 								<button
 									type="button"
-									class="flex items-center justify-between p-3 border rounded-lg transition-colors
-										{formData.tokenA_address === token.address ? 'bg-indigo-100 border-indigo-300 text-indigo-800' : 'bg-white hover:bg-gray-50 border-gray-200'}"
-									onclick={() => formData.tokenA_address = token.address}
+									class="flex items-center justify-between rounded-lg border p-3 transition-colors
+										{formData.tokenA_address === token.address
+										? 'border-indigo-300 bg-indigo-100 text-indigo-800'
+										: 'border-gray-200 bg-white hover:bg-gray-50'}"
+									onclick={() => (formData.tokenA_address = token.address)}
 								>
 									<div class="flex items-center">
 										{#if token.logoURI}
-											<img src={token.logoURI} alt={token.symbol} class="w-6 h-6 mr-2 rounded-full" />
+											<img
+												src={token.logoURI}
+												alt={token.symbol}
+												class="mr-2 h-6 w-6 rounded-full"
+											/>
 										{:else}
-											<div class="w-6 h-6 mr-2 rounded-full bg-gray-200 flex items-center justify-center text-xs font-bold">
+											<div
+												class="mr-2 flex h-6 w-6 items-center justify-center rounded-full bg-gray-200 text-xs font-bold"
+											>
 												{token.symbol.charAt(0)}
 											</div>
 										{/if}
@@ -433,8 +462,17 @@ let formData = $state<MarketFormData>({
 									</div>
 									{#if formData.tokenA_address === token.address}
 										<div class="flex-shrink-0 text-indigo-600">
-											<svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
-												<path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clip-rule="evenodd" />
+											<svg
+												xmlns="http://www.w3.org/2000/svg"
+												class="h-5 w-5"
+												viewBox="0 0 20 20"
+												fill="currentColor"
+											>
+												<path
+													fill-rule="evenodd"
+													d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z"
+													clip-rule="evenodd"
+												/>
 											</svg>
 										</div>
 									{/if}
@@ -463,37 +501,56 @@ let formData = $state<MarketFormData>({
 					{:else}
 						<!-- Search box for Token B -->
 						<div class="relative mb-4">
-							<div class="absolute inset-y-0 left-0 flex items-center pl-3 pointer-events-none">
-								<svg class="w-4 h-4 text-gray-500 dark:text-gray-400" aria-hidden="true" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 20 20">
-									<path stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="m19 19-4-4m0-7A7 7 0 1 1 1 8a7 7 0 0 1 14 0Z"/>
+							<div class="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-3">
+								<svg
+									class="h-4 w-4 text-gray-500 dark:text-gray-400"
+									aria-hidden="true"
+									xmlns="http://www.w3.org/2000/svg"
+									fill="none"
+									viewBox="0 0 20 20"
+								>
+									<path
+										stroke="currentColor"
+										stroke-linecap="round"
+										stroke-linejoin="round"
+										stroke-width="2"
+										d="m19 19-4-4m0-7A7 7 0 1 1 1 8a7 7 0 0 1 14 0Z"
+									/>
 								</svg>
 							</div>
-							<Input 
-								type="search" 
-								class="pl-10" 
-								placeholder="Search stablecoins..." 
+							<Input
+								type="search"
+								class="pl-10"
+								placeholder="Search stablecoins..."
 								bind:value={tokenBSearchTerm}
 							/>
 						</div>
-						
-						<div class="grid grid-cols-3 gap-3 mb-4 max-h-60 overflow-y-auto">
-							{#each tokenList.filter(t => 
-								['USDC', 'USDT', 'DAI'].includes(t.symbol) && 
-								(tokenBSearchTerm === '' || 
-								t.symbol.toLowerCase().includes(tokenBSearchTerm.toLowerCase()) || 
-								t.name.toLowerCase().includes(tokenBSearchTerm.toLowerCase()))
-							) as token (token.address)}
+
+						<div class="mb-4 grid max-h-60 grid-cols-3 gap-3 overflow-y-auto">
+							{#each tokenList.filter((t) => ['USDC', 'USDT', 'DAI'].includes(t.symbol) && (tokenBSearchTerm === '' || t.symbol
+											.toLowerCase()
+											.includes(tokenBSearchTerm.toLowerCase()) || t.name
+											.toLowerCase()
+											.includes(tokenBSearchTerm.toLowerCase()))) as token (token.address)}
 								<button
 									type="button"
-									class="flex items-center justify-between p-3 border rounded-lg transition-colors
-										{formData.tokenB_address === token.address ? 'bg-indigo-100 border-indigo-300 text-indigo-800' : 'bg-white hover:bg-gray-50 border-gray-200'}"
-									onclick={() => formData.tokenB_address = token.address}
+									class="flex items-center justify-between rounded-lg border p-3 transition-colors
+										{formData.tokenB_address === token.address
+										? 'border-indigo-300 bg-indigo-100 text-indigo-800'
+										: 'border-gray-200 bg-white hover:bg-gray-50'}"
+									onclick={() => (formData.tokenB_address = token.address)}
 								>
 									<div class="flex items-center">
 										{#if token.logoURI}
-											<img src={token.logoURI} alt={token.symbol} class="w-6 h-6 mr-2 rounded-full" />
+											<img
+												src={token.logoURI}
+												alt={token.symbol}
+												class="mr-2 h-6 w-6 rounded-full"
+											/>
 										{:else}
-											<div class="w-6 h-6 mr-2 rounded-full bg-gray-200 flex items-center justify-center text-xs font-bold">
+											<div
+												class="mr-2 flex h-6 w-6 items-center justify-center rounded-full bg-gray-200 text-xs font-bold"
+											>
 												{token.symbol.charAt(0)}
 											</div>
 										{/if}
@@ -501,8 +558,17 @@ let formData = $state<MarketFormData>({
 									</div>
 									{#if formData.tokenB_address === token.address}
 										<div class="flex-shrink-0 text-indigo-600">
-											<svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
-												<path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clip-rule="evenodd" />
+											<svg
+												xmlns="http://www.w3.org/2000/svg"
+												class="h-5 w-5"
+												viewBox="0 0 20 20"
+												fill="currentColor"
+											>
+												<path
+													fill-rule="evenodd"
+													d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z"
+													clip-rule="evenodd"
+												/>
 											</svg>
 										</div>
 									{/if}
@@ -515,21 +581,32 @@ let formData = $state<MarketFormData>({
 			</div>
 
 			<div>
-				<Label for="feeTier" class="mb-2 block font-medium pt-4">{UI_TEXT.feeTier}</Label>
-				<div class="grid grid-cols-4 gap-3 mb-4">
+				<Label for="feeTier" class="mb-2 block pt-4 font-medium">{UI_TEXT.feeTier}</Label>
+				<div class="mb-4 grid grid-cols-4 gap-3">
 					{#each FEE_TIERS as tier}
 						<button
 							type="button"
-							class="flex flex-col items-center justify-center p-3 border rounded-lg transition-colors
-								{formData.feeTier === tier.value ? 'bg-indigo-100 border-indigo-300 text-indigo-800' : 'bg-white hover:bg-gray-50 border-gray-200'}"
-							onclick={() => formData.feeTier = tier.value}
+							class="flex flex-col items-center justify-center rounded-lg border p-3 transition-colors
+								{formData.feeTier === tier.value
+								? 'border-indigo-300 bg-indigo-100 text-indigo-800'
+								: 'border-gray-200 bg-white hover:bg-gray-50'}"
+							onclick={() => (formData.feeTier = tier.value)}
 						>
 							<span class="text-lg font-semibold">{tier.label}</span>
-							<span class="text-xs text-gray-500 mt-1">{tier.value} bps</span>
+							<span class="mt-1 text-xs text-gray-500">{tier.value} bps</span>
 							{#if formData.feeTier === tier.value}
 								<div class="mt-2 text-indigo-600">
-									<svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
-										<path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clip-rule="evenodd" />
+									<svg
+										xmlns="http://www.w3.org/2000/svg"
+										class="h-5 w-5"
+										viewBox="0 0 20 20"
+										fill="currentColor"
+									>
+										<path
+											fill-rule="evenodd"
+											d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z"
+											clip-rule="evenodd"
+										/>
 									</svg>
 								</div>
 							{/if}
@@ -542,23 +619,27 @@ let formData = $state<MarketFormData>({
 
 		<!-- Prediction Details Section -->
 		<div class="rounded-lg bg-gray-50 p-6 shadow-sm dark:bg-gray-800">
-			<h3 class="mb-4 text-lg font-semibold text-gray-900 dark:text-white flex items-center">
-				<span class="inline-flex items-center justify-center w-8 h-8 mr-3 rounded-full bg-indigo-100 text-indigo-800 dark:bg-indigo-900 dark:text-indigo-200">3</span>
+			<h3 class="mb-4 flex items-center text-lg font-semibold text-gray-900 dark:text-white">
+				<span
+					class="mr-3 inline-flex h-8 w-8 items-center justify-center rounded-full bg-indigo-100 text-indigo-800 dark:bg-indigo-900 dark:text-indigo-200"
+					>3</span
+				>
 				{FORM_SECTIONS.prediction}
 			</h3>
-			
-			<div class="mb-4 p-4 bg-indigo-50 border border-indigo-100 rounded-lg">
+
+			<div class="mb-4 rounded-lg border border-indigo-100 bg-indigo-50 p-4">
 				<p class="text-sm text-indigo-800">
-					The price threshold is an absolute value (not a percentage) that determines the market outcome.
-					For example, if you set $2,500 for ETH/USDC, the market resolves based on whether ETH reaches this exact price.
+					The price threshold is an absolute value (not a percentage) that determines the market
+					outcome. For example, if you set $2,500 for ETH/USDC, the market resolves based on whether
+					ETH reaches this exact price.
 				</p>
 			</div>
-			
+
 			<div class="space-y-4">
 				<div>
 					<Label for="targetPrice" class="mb-2 block font-medium">{UI_TEXT.targetPrice}</Label>
 					<div class="relative">
-						<div class="absolute inset-y-0 left-0 flex items-center pl-3 pointer-events-none">
+						<div class="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-3">
 							<span class="text-gray-500">$</span>
 						</div>
 						<Input
@@ -578,31 +659,44 @@ let formData = $state<MarketFormData>({
 
 		<!-- Market Timing Section -->
 		<div class="rounded-lg bg-gray-50 p-6 shadow-sm dark:bg-gray-800">
-			<h3 class="mb-4 text-lg font-semibold text-gray-900 dark:text-white flex items-center">
-				<span class="inline-flex items-center justify-center w-8 h-8 mr-3 rounded-full bg-indigo-100 text-indigo-800 dark:bg-indigo-900 dark:text-indigo-200">4</span>
+			<h3 class="mb-4 flex items-center text-lg font-semibold text-gray-900 dark:text-white">
+				<span
+					class="mr-3 inline-flex h-8 w-8 items-center justify-center rounded-full bg-indigo-100 text-indigo-800 dark:bg-indigo-900 dark:text-indigo-200"
+					>4</span
+				>
 				{FORM_SECTIONS.timing}
 			</h3>
-			
-			<div class="mb-4 p-4 bg-indigo-50 border border-indigo-100 rounded-lg">
+
+			<div class="mb-4 rounded-lg border border-indigo-100 bg-indigo-50 p-4">
 				<p class="text-sm text-indigo-800">
-					Set when this market will expire. At expiration, the market will be resolved based on the actual price
-					compared to your target price threshold.
+					Set when this market will expire. At expiration, the market will be resolved based on the
+					actual price compared to your target price threshold.
 				</p>
 			</div>
-			
+
 			<div class="grid grid-cols-1 gap-6 md:grid-cols-2">
 				<div>
-					<Label for="expirationDate" class="mb-2 block font-medium">{UI_TEXT.expirationDate}</Label>
+					<Label for="expirationDate" class="mb-2 block font-medium">{UI_TEXT.expirationDate}</Label
+					>
 					<div class="relative">
-						<div class="absolute inset-y-0 left-0 flex items-center pl-3 pointer-events-none">
-							<svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 text-gray-500" viewBox="0 0 20 20" fill="currentColor">
-								<path fill-rule="evenodd" d="M6 2a1 1 0 00-1 1v1H4a2 2 0 00-2 2v10a2 2 0 002 2h12a2 2 0 002-2V6a2 2 0 00-2-2h-1V3a1 1 0 10-2 0v1H7V3a1 1 0 00-1-1zm0 5a1 1 0 000 2h8a1 1 0 100-2H6z" clip-rule="evenodd" />
+						<div class="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-3">
+							<svg
+								xmlns="http://www.w3.org/2000/svg"
+								class="h-5 w-5 text-gray-500"
+								viewBox="0 0 20 20"
+								fill="currentColor"
+							>
+								<path
+									fill-rule="evenodd"
+									d="M6 2a1 1 0 00-1 1v1H4a2 2 0 00-2 2v10a2 2 0 002 2h12a2 2 0 002-2V6a2 2 0 00-2-2h-1V3a1 1 0 10-2 0v1H7V3a1 1 0 00-1-1zm0 5a1 1 0 000 2h8a1 1 0 100-2H6z"
+									clip-rule="evenodd"
+								/>
 							</svg>
 						</div>
 						<Input
 							type="date"
 							id="expirationDate"
-							class="pl-10 bg-white border-gray-300 focus:border-indigo-500 focus:ring-indigo-500"
+							class="border-gray-300 bg-white pl-10 focus:border-indigo-500 focus:ring-indigo-500"
 							bind:value={formData.expirationDay}
 							min={minExpirationDate ? minExpirationDate.toISOString().split('T')[0] : ''}
 							required
@@ -614,7 +708,8 @@ let formData = $state<MarketFormData>({
 					<Helper class="mt-2 text-sm">{UI_TEXT.expirationDateHelper}</Helper>
 				</div>
 				<div>
-					<Label for="expirationTime" class="mb-2 block font-medium">{UI_TEXT.expirationTime}</Label>
+					<Label for="expirationTime" class="mb-2 block font-medium">{UI_TEXT.expirationTime}</Label
+					>
 					<div
 						onclick={openTimePicker}
 						onkeydown={(e) => {
@@ -625,15 +720,24 @@ let formData = $state<MarketFormData>({
 						aria-label="Set expiration time"
 						tabindex="0"
 					>
-						<div class="absolute inset-y-0 left-0 flex items-center pl-3 pointer-events-none">
-							<svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 text-gray-500" viewBox="0 0 20 20" fill="currentColor">
-								<path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm1-12a1 1 0 10-2 0v4a1 1 0 00.293.707l2.828 2.829a1 1 0 101.415-1.415L11 9.586V6z" clip-rule="evenodd" />
+						<div class="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-3">
+							<svg
+								xmlns="http://www.w3.org/2000/svg"
+								class="h-5 w-5 text-gray-500"
+								viewBox="0 0 20 20"
+								fill="currentColor"
+							>
+								<path
+									fill-rule="evenodd"
+									d="M10 18a8 8 0 100-16 8 8 0 000 16zm1-12a1 1 0 10-2 0v4a1 1 0 00.293.707l2.828 2.829a1 1 0 101.415-1.415L11 9.586V6z"
+									clip-rule="evenodd"
+								/>
 							</svg>
 						</div>
 						<Input
 							type="time"
 							id="expirationTime"
-							class="pl-10 bg-white border-gray-300 focus:border-indigo-500 focus:ring-indigo-500"
+							class="border-gray-300 bg-white pl-10 focus:border-indigo-500 focus:ring-indigo-500"
 							bind:value={formData.expirationTime}
 							required
 							onkeydown={(e) => {
@@ -648,22 +752,26 @@ let formData = $state<MarketFormData>({
 
 		<!-- Summary Section -->
 		<div class="rounded-lg bg-gray-50 p-6 shadow-sm dark:bg-gray-800">
-			<h3 class="mb-4 text-lg font-semibold text-gray-900 dark:text-white flex items-center">
-				<span class="inline-flex items-center justify-center w-8 h-8 mr-3 rounded-full bg-indigo-100 text-indigo-800 dark:bg-indigo-900 dark:text-indigo-200">5</span>
+			<h3 class="mb-4 flex items-center text-lg font-semibold text-gray-900 dark:text-white">
+				<span
+					class="mr-3 inline-flex h-8 w-8 items-center justify-center rounded-full bg-indigo-100 text-indigo-800 dark:bg-indigo-900 dark:text-indigo-200"
+					>5</span
+				>
 				Review & Create
 			</h3>
-			
-			<div class="mb-6 p-4 bg-indigo-50 border border-indigo-100 rounded-lg">
+
+			<div class="mb-6 rounded-lg border border-indigo-100 bg-indigo-50 p-4">
 				<p class="text-sm text-indigo-800">
-					Review your market details before creating. Once created, the market will be available for users to place predictions.
+					Review your market details before creating. Once created, the market will be available for
+					users to place predictions.
 				</p>
 			</div>
-			
-			<div class="space-y-4 mb-6">
+
+			<div class="mb-6 space-y-4">
 				{#if formData.marketName && formData.tokenA_address && formData.tokenB_address}
-					<div class="bg-white p-4 rounded-lg border border-gray-200 shadow-sm">
-						<h4 class="font-medium text-gray-900 mb-2">Market Summary</h4>
-						<div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+					<div class="rounded-lg border border-gray-200 bg-white p-4 shadow-sm">
+						<h4 class="mb-2 font-medium text-gray-900">Market Summary</h4>
+						<div class="grid grid-cols-1 gap-4 md:grid-cols-2">
 							<div>
 								<p class="text-sm text-gray-500">Market Name</p>
 								<p class="font-medium">{formData.marketName}</p>
@@ -671,8 +779,10 @@ let formData = $state<MarketFormData>({
 							<div>
 								<p class="text-sm text-gray-500">Token Pair</p>
 								<p class="font-medium">
-									{tokenList.find(t => t.address === formData.tokenA_address)?.symbol || 'Token A'} / 
-									{tokenList.find(t => t.address === formData.tokenB_address)?.symbol || 'Token B'}
+									{tokenList.find((t) => t.address === formData.tokenA_address)?.symbol ||
+										'Token A'} /
+									{tokenList.find((t) => t.address === formData.tokenB_address)?.symbol ||
+										'Token B'}
 								</p>
 							</div>
 							<div>
@@ -686,33 +796,48 @@ let formData = $state<MarketFormData>({
 						</div>
 					</div>
 				{:else}
-					<div class="bg-yellow-50 p-4 rounded-lg border border-yellow-200">
-						<p class="text-sm text-yellow-700 flex items-center">
-							<svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 mr-2" viewBox="0 0 20 20" fill="currentColor">
-								<path fill-rule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clip-rule="evenodd" />
+					<div class="rounded-lg border border-yellow-200 bg-yellow-50 p-4">
+						<p class="flex items-center text-sm text-yellow-700">
+							<svg
+								xmlns="http://www.w3.org/2000/svg"
+								class="mr-2 h-5 w-5"
+								viewBox="0 0 20 20"
+								fill="currentColor"
+							>
+								<path
+									fill-rule="evenodd"
+									d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z"
+									clip-rule="evenodd"
+								/>
 							</svg>
 							Please complete all required fields to see the market summary.
 						</p>
 					</div>
 				{/if}
 			</div>
-			
+
 			<div class="flex items-center justify-between border-t pt-6 dark:border-gray-700">
-				<Button type="button" color="alternative" onclick={handleCancelClick} disabled={isSubmitting} class="px-6">
+				<Button
+					type="button"
+					color="alternative"
+					onclick={handleCancelClick}
+					disabled={isSubmitting}
+					class="px-6"
+				>
 					{UI_TEXT.cancel}
 				</Button>
 				<Button
-				type="button"
-				color="indigo"
-				class="ml-3 inline-flex items-center rounded-md bg-indigo-600 px-4 py-2 text-sm font-medium text-white shadow-sm hover:bg-indigo-700 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-indigo-600"
-				disabled={isSubmitting}
-				onclick={handleSubmit}
-			>
-				{#if isSubmitting}
-					<Spinner class="mr-2" size="4" color="gray" />
-				{/if}
-				{UI_TEXT.createMarket}
-			</Button>
+					type="button"
+					color="indigo"
+					class="ml-3 inline-flex items-center rounded-md bg-indigo-600 px-4 py-2 text-sm font-medium text-white shadow-sm hover:bg-indigo-700 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-indigo-600"
+					disabled={isSubmitting}
+					onclick={handleSubmit}
+				>
+					{#if isSubmitting}
+						<Spinner class="mr-2" size="4" color="gray" />
+					{/if}
+					{UI_TEXT.createMarket}
+				</Button>
 			</div>
 		</div>
 	</form>

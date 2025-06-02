@@ -31,27 +31,27 @@
 
 	$effect(() => {
 		if (!browser || !isMounted) return;
-		
+
 		try {
 			// Initial state
 			const initialState = appKit.getIsConnectedState?.();
 			isConnected = !!initialState;
 			userAddress = appKit.getAccount?.()?.address || null;
-			
+
 			// Subscribe to wallet state changes if appKit is available
 			if (typeof appKit.subscribeState === 'function') {
 				const unsubscribe = appKit.subscribeState((state: any) => {
 					if (!isMounted) return;
-					
+
 					try {
 						const newIsConnected = state?.open || appKit.getIsConnectedState?.() || false;
 						const newAddress = appKit.getAccount?.()?.address || null;
-						
+
 						// Only update if there's an actual change
 						if (isConnected !== newIsConnected || userAddress !== newAddress) {
 							isConnected = newIsConnected;
 							userAddress = newAddress;
-							
+
 							// Trigger route handling on connection state change
 							handleRouteBasedOnConnectionState();
 						}
@@ -94,11 +94,11 @@
 	 */
 	$effect(() => {
 		if (!browser) return;
-		
+
 		// Initial route handling when the page loads
 		handleRouteBasedOnConnectionState();
 	});
-	
+
 	/**
 	 * Central function to handle all routing logic based on connection state
 	 */
@@ -128,20 +128,20 @@
 		// First check if user is on a page they shouldn't be on when authenticated
 		const isHomePage = pathname === '/';
 		const isLoginPage = pathname.includes('/login') || pathname.includes('/connect');
-		
+
 		if (isHomePage || isLoginPage) {
 			// Redirect to appropriate dashboard
 			const userDashboard = isAdmin() ? '/admin' : '/app';
 			goto(userDashboard);
 			return;
 		}
-		
+
 		// Then check if admin user is trying to access non-admin routes
 		if (isAdmin() && isAppRoute) {
 			goto('/admin');
 			return;
 		}
-		
+
 		// Finally check if non-admin user is trying to access admin routes
 		if (!isAdmin() && isAdminRoute) {
 			goto('/app');
@@ -170,23 +170,23 @@
 </svelte:head>
 
 {#if isMounted}
-<div class="flex min-h-screen flex-col bg-white">
-	<!-- Unified header with different props based on route -->
-	<Header
-		showLandingLinks={!isConnected || (!isAppRoute && !isAdminRoute)}
-		showAppLinks={isAppRoute}
-		showAdminLinks={isAdminRoute}
-		title={isAdminRoute ? 'SwapCast Admin' : 'SwapCast'}
-	/>
+	<div class="flex min-h-screen flex-col bg-white">
+		<!-- Unified header with different props based on route -->
+		<Header
+			showLandingLinks={!isConnected || (!isAppRoute && !isAdminRoute)}
+			showAppLinks={isAppRoute}
+			showAdminLinks={isAdminRoute}
+			title={isAdminRoute ? 'SwapCast Admin' : 'SwapCast'}
+		/>
 
-	<main class="flex-1">
-		{@render children()}
-	</main>
+		<main class="flex-1">
+			{@render children()}
+		</main>
 
-	{#if !isAdminRoute}
-		<Footer />
-	{/if}
+		{#if !isAdminRoute}
+			<Footer />
+		{/if}
 
-	<ToastContainer />
-</div>
+		<ToastContainer />
+	</div>
 {/if}

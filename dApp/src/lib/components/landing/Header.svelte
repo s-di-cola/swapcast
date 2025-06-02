@@ -6,7 +6,12 @@
 		text: string;
 	}
 
-	let { showLandingLinks = true, showAppLinks = false, showAdminLinks = false, title = 'SwapCast' } = $props();
+	let {
+		showLandingLinks = true,
+		showAppLinks = false,
+		showAdminLinks = false,
+		title = 'SwapCast'
+	} = $props();
 
 	const BRAND = {
 		name: title,

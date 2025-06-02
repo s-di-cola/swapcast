@@ -111,20 +111,20 @@ export function transformMarketDetails(details: MarketDetailsResult): Market {
 	const now = Math.floor(Date.now() / 1000);
 	const timeRemaining = Number(details.expirationTimestamp) - now;
 	const { status, expirationDisplay } = getMarketStatus(details.resolved, timeRemaining);
-	
+
 	// Convert bigint values to proper number format for display
 	// Using formatEther would be better but we'll use simple division for now
 	const bearishStake = Number(details.totalConvictionBearish) / 1e18;
 	const bullishStake = Number(details.totalConvictionBullish) / 1e18;
 	const totalStakeValue = bearishStake + bullishStake;
-	
+
 	// Format asset pair to ensure it shows the complete pair (e.g., "ETH/USD")
 	let formattedAssetPair = details.assetPair;
 	if (formattedAssetPair && !formattedAssetPair.includes('/')) {
 		// If we only have a symbol without the pair format, append the standard pair
 		formattedAssetPair = `${formattedAssetPair}/USD`;
 	}
-	
+
 	return {
 		id: details.marketId.toString(),
 		name: details.description || `Market ${details.marketId}`,

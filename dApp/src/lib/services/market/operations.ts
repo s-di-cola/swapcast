@@ -57,25 +57,27 @@ export async function getAllMarkets(options?: MarketPaginationOptions): Promise<
 		// Generate market IDs and fetch details in parallel
 		// Include an extra index to check for any newly created markets
 		const marketIds = Array.from({ length: count }, (_, i) => BigInt(i));
-		
+
 		// Add logging to help debug
-		console.log(`Fetching ${marketIds.length} markets with IDs: ${marketIds.map(id => id.toString()).join(', ')}`);
-		
+		console.log(
+			`Fetching ${marketIds.length} markets with IDs: ${marketIds.map((id) => id.toString()).join(', ')}`
+		);
+
 		// Fetch all markets in parallel with proper type handling
 		const marketPromises = marketIds.map((id) => {
-			return getMarketDetails(id).catch(error => {
+			return getMarketDetails(id).catch((error) => {
 				console.error(`Error fetching market ${id}:`, error);
 				// Return null for failed fetches
 				return null;
 			});
 		});
-		
+
 		const allMarkets = await Promise.all(marketPromises);
-		
+
 		// Filter out null values and markets that don't exist
 		// TypeScript: Filter out nulls first, then we have an array of Market objects
-		const validMarkets = allMarkets.filter((market): market is NonNullable<typeof market> => 
-			market !== null && market.exists === true
+		const validMarkets = allMarkets.filter(
+			(market): market is NonNullable<typeof market> => market !== null && market.exists === true
 		);
 
 		// Apply sorting

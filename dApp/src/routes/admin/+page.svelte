@@ -114,14 +114,16 @@
 	function calculateTotalStake(markets: Market[]): number {
 		return markets.reduce((sum: number, market: Market) => {
 			// Convert bigint values to number if necessary and ensure we have numbers
-			const stake0 = typeof market.totalStake0 === 'bigint' 
-				? Number(market.totalStake0) / 1e18 
-				: (Number(market.totalStake0 || 0) / 1e18);
-			
-			const stake1 = typeof market.totalStake1 === 'bigint' 
-				? Number(market.totalStake1) / 1e18 
-				: (Number(market.totalStake1 || 0) / 1e18);
-			
+			const stake0 =
+				typeof market.totalStake0 === 'bigint'
+					? Number(market.totalStake0) / 1e18
+					: Number(market.totalStake0 || 0) / 1e18;
+
+			const stake1 =
+				typeof market.totalStake1 === 'bigint'
+					? Number(market.totalStake1) / 1e18
+					: Number(market.totalStake1 || 0) / 1e18;
+
 			return sum + stake0 + stake1;
 		}, 0);
 	}
@@ -133,15 +135,15 @@
 		try {
 			// Get the total market count first
 			const count = dashboardState.marketCount || 0;
-			
+
 			// Use a page size that will fit all markets (or 100 as a reasonable maximum)
 			const pageSize = count > 0 ? Math.min(count, 100) : 50;
-			
+
 			// Get all markets in a single request
-			const allMarketsResult = await getAllMarkets({ 
+			const allMarketsResult = await getAllMarkets({
 				page: 1,
 				pageSize
-			}); 
+			});
 			return calculateTotalStake(allMarketsResult.markets);
 		} catch (error) {
 			console.error('Error calculating total stake across all markets:', error);
@@ -223,7 +225,7 @@
 		if (modalState.showMarketDetails) {
 			modalState.showMarketDetails = false;
 			modalState.selectedMarketId = null;
-			
+
 			setTimeout(() => {
 				modalState.selectedMarketId = marketId;
 				modalState.showMarketDetails = true;
@@ -242,7 +244,7 @@
 	function handleRefresh(): void {
 		// Reset to page 1 to ensure we get fresh data from the beginning
 		paginationState.currentPage = 1;
-		
+
 		// Fetch market data with the updated pagination state
 		fetchMarketData().catch(() => {
 			showToast('error', TOAST_CONFIG.errorMessages.refreshFailed);
@@ -251,28 +253,28 @@
 
 	async function handleMarketCreated(marketId: string, name: string): Promise<void> {
 		modalState.showCreateMarket = false;
-		
+
 		// Force a delay to ensure the blockchain has time to update
-		await new Promise(resolve => setTimeout(resolve, 1000));
-		
+		await new Promise((resolve) => setTimeout(resolve, 1000));
+
 		// Reset to page 1 to ensure the new market is visible
 		paginationState.currentPage = 1;
 		paginationState.sortField = 'id';
 		paginationState.sortDirection = 'desc';
-		
+
 		// Fetch market data with a retry mechanism
 		let retryCount = 0;
 		const maxRetries = 3;
-		
+
 		const attemptFetch = async () => {
 			const success = await fetchMarketDataBase(false);
 			if (!success && retryCount < maxRetries) {
 				retryCount++;
-				await new Promise(resolve => setTimeout(resolve, 2000));
+				await new Promise((resolve) => setTimeout(resolve, 2000));
 				return attemptFetch();
 			}
 		};
-		
+
 		await attemptFetch();
 		showToast('success', TOAST_CONFIG.successMessages.marketCreated);
 	}

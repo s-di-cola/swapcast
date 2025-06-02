@@ -8,19 +8,22 @@
  * @param decimals - Number of decimal places (default: 2)
  * @returns Formatted currency string
  */
-export function formatCurrency(value: number | string | undefined | null, decimals: number = 2): string {
-  if (value === undefined || value === null) return '$0.00';
-  
-  const numValue = typeof value === 'string' ? parseFloat(value) : value;
-  
-  if (isNaN(numValue)) return '$0.00';
-  
-  return new Intl.NumberFormat('en-US', {
-    style: 'currency',
-    currency: 'USD',
-    minimumFractionDigits: decimals,
-    maximumFractionDigits: decimals
-  }).format(numValue);
+export function formatCurrency(
+	value: number | string | undefined | null,
+	decimals: number = 2
+): string {
+	if (value === undefined || value === null) return '$0.00';
+
+	const numValue = typeof value === 'string' ? parseFloat(value) : value;
+
+	if (isNaN(numValue)) return '$0.00';
+
+	return new Intl.NumberFormat('en-US', {
+		style: 'currency',
+		currency: 'USD',
+		minimumFractionDigits: decimals,
+		maximumFractionDigits: decimals
+	}).format(numValue);
 }
 
 /**
@@ -30,12 +33,12 @@ export function formatCurrency(value: number | string | undefined | null, decima
  * @returns Formatted number string
  */
 export function formatNumber(value: number | undefined | null, decimals: number = 2): string {
-  if (value === undefined || value === null) return '0';
-  
-  return value.toLocaleString('en-US', {
-    minimumFractionDigits: decimals,
-    maximumFractionDigits: decimals
-  });
+	if (value === undefined || value === null) return '0';
+
+	return value.toLocaleString('en-US', {
+		minimumFractionDigits: decimals,
+		maximumFractionDigits: decimals
+	});
 }
 
 /**
@@ -44,13 +47,16 @@ export function formatNumber(value: number | undefined | null, decimals: number 
  * @param decimals - Number of decimal places (default: 4)
  * @returns Formatted ETH value
  */
-export function formatEther(weiValue: string | number | bigint | undefined | null, decimals: number = 4): string {
-  if (weiValue === undefined || weiValue === null) return '0';
-  
-  // Convert to number and divide by 10^18 (wei to ETH)
-  const ethValue = Number(weiValue) / 1e18;
-  
-  return formatNumber(ethValue, decimals);
+export function formatEther(
+	weiValue: string | number | bigint | undefined | null,
+	decimals: number = 4
+): string {
+	if (weiValue === undefined || weiValue === null) return '0';
+
+	// Convert to number and divide by 10^18 (wei to ETH)
+	const ethValue = Number(weiValue) / 1e18;
+
+	return formatNumber(ethValue, decimals);
 }
 
 /**
@@ -60,9 +66,9 @@ export function formatEther(weiValue: string | number | bigint | undefined | nul
  * @returns Formatted percentage string with % symbol
  */
 export function formatPercentage(value: number | undefined | null, decimals: number = 1): string {
-  if (value === undefined || value === null) return '0%';
-  
-  return `${formatNumber(value, decimals)}%`;
+	if (value === undefined || value === null) return '0%';
+
+	return `${formatNumber(value, decimals)}%`;
 }
 
 /**
@@ -72,11 +78,11 @@ export function formatPercentage(value: number | undefined | null, decimals: num
  * @returns Formatted address string
  */
 export function formatAddress(address: string | undefined | null, chars: number = 6): string {
-  if (!address) return '';
-  
-  if (address.length <= chars * 2) return address;
-  
-  return `${address.slice(0, chars)}...${address.slice(-chars)}`;
+	if (!address) return '';
+
+	if (address.length <= chars * 2) return address;
+
+	return `${address.slice(0, chars)}...${address.slice(-chars)}`;
 }
 
 /**
@@ -85,26 +91,29 @@ export function formatAddress(address: string | undefined | null, chars: number 
  * @param includeTime - Whether to include time in the output (default: false)
  * @returns Formatted date string
  */
-export function formatDate(timestamp: number | string | undefined | null, includeTime: boolean = false): string {
-  if (!timestamp) return '';
-  
-  const date = new Date(Number(timestamp) * 1000);
-  
-  if (includeTime) {
-    return date.toLocaleString('en-US', {
-      year: 'numeric',
-      month: 'short',
-      day: 'numeric',
-      hour: '2-digit',
-      minute: '2-digit'
-    });
-  }
-  
-  return date.toLocaleDateString('en-US', {
-    year: 'numeric',
-    month: 'short',
-    day: 'numeric'
-  });
+export function formatDate(
+	timestamp: number | string | undefined | null,
+	includeTime: boolean = false
+): string {
+	if (!timestamp) return '';
+
+	const date = new Date(Number(timestamp) * 1000);
+
+	if (includeTime) {
+		return date.toLocaleString('en-US', {
+			year: 'numeric',
+			month: 'short',
+			day: 'numeric',
+			hour: '2-digit',
+			minute: '2-digit'
+		});
+	}
+
+	return date.toLocaleDateString('en-US', {
+		year: 'numeric',
+		month: 'short',
+		day: 'numeric'
+	});
 }
 
 /**
@@ -113,33 +122,31 @@ export function formatDate(timestamp: number | string | undefined | null, includ
  * @returns Formatted relative time string
  */
 export function formatRelativeTime(timestamp: number | string | undefined | null): string {
-  if (!timestamp) return '';
-  
-  const now = Date.now() / 1000;
-  const diff = Number(timestamp) - now;
-  const absDiff = Math.abs(diff);
-  
-  const units = [
-    { name: 'year', seconds: 31536000 },
-    { name: 'month', seconds: 2592000 },
-    { name: 'week', seconds: 604800 },
-    { name: 'day', seconds: 86400 },
-    { name: 'hour', seconds: 3600 },
-    { name: 'minute', seconds: 60 },
-    { name: 'second', seconds: 1 }
-  ];
-  
-  for (const unit of units) {
-    const value = Math.floor(absDiff / unit.seconds);
-    if (value >= 1) {
-      const plural = value === 1 ? '' : 's';
-      return diff < 0 
-        ? `${value} ${unit.name}${plural} ago`
-        : `in ${value} ${unit.name}${plural}`;
-    }
-  }
-  
-  return 'just now';
+	if (!timestamp) return '';
+
+	const now = Date.now() / 1000;
+	const diff = Number(timestamp) - now;
+	const absDiff = Math.abs(diff);
+
+	const units = [
+		{ name: 'year', seconds: 31536000 },
+		{ name: 'month', seconds: 2592000 },
+		{ name: 'week', seconds: 604800 },
+		{ name: 'day', seconds: 86400 },
+		{ name: 'hour', seconds: 3600 },
+		{ name: 'minute', seconds: 60 },
+		{ name: 'second', seconds: 1 }
+	];
+
+	for (const unit of units) {
+		const value = Math.floor(absDiff / unit.seconds);
+		if (value >= 1) {
+			const plural = value === 1 ? '' : 's';
+			return diff < 0 ? `${value} ${unit.name}${plural} ago` : `in ${value} ${unit.name}${plural}`;
+		}
+	}
+
+	return 'just now';
 }
 
 /**
@@ -148,19 +155,22 @@ export function formatRelativeTime(timestamp: number | string | undefined | null
  * @param decimals - Number of decimal places (default: 1)
  * @returns Formatted number string with suffix
  */
-export function formatCompactNumber(value: number | undefined | null, decimals: number = 1): string {
-  if (value === undefined || value === null) return '0';
-  
-  const absValue = Math.abs(value);
-  const sign = value < 0 ? '-' : '';
-  
-  if (absValue >= 1e9) {
-    return `${sign}${formatNumber(absValue / 1e9, decimals)}B`;
-  } else if (absValue >= 1e6) {
-    return `${sign}${formatNumber(absValue / 1e6, decimals)}M`;
-  } else if (absValue >= 1e3) {
-    return `${sign}${formatNumber(absValue / 1e3, decimals)}K`;
-  }
-  
-  return `${sign}${formatNumber(absValue, decimals)}`;
+export function formatCompactNumber(
+	value: number | undefined | null,
+	decimals: number = 1
+): string {
+	if (value === undefined || value === null) return '0';
+
+	const absValue = Math.abs(value);
+	const sign = value < 0 ? '-' : '';
+
+	if (absValue >= 1e9) {
+		return `${sign}${formatNumber(absValue / 1e9, decimals)}B`;
+	} else if (absValue >= 1e6) {
+		return `${sign}${formatNumber(absValue / 1e6, decimals)}M`;
+	} else if (absValue >= 1e3) {
+		return `${sign}${formatNumber(absValue / 1e3, decimals)}K`;
+	}
+
+	return `${sign}${formatNumber(absValue, decimals)}`;
 }
