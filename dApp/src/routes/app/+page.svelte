@@ -1,12 +1,14 @@
 <script lang="ts">
-	import { onMount } from 'svelte';
-	import { page } from '$app/state';
-	import { replaceState } from '$app/navigation';
+	// Import component types
+	import type {ComponentProps} from 'svelte';
+	import {onMount} from 'svelte';
+	import {page} from '$app/state';
+	import {replaceState} from '$app/navigation';
 	import SwapPanel from '$lib/components/app/swap-panel/SwapPanel.svelte';
 	import MarketCard from '$lib/components/app/MarketCard.svelte';
 	import CompactMarketCard from '$lib/components/app/CompactMarketCard.svelte';
 	import MarketDetailsModal from '$lib/components/admin/market/MarketDetailsModal.svelte';
-	import type { PredictionSide } from '$lib/types';
+	import type {PredictionSide} from '$lib/types';
 	import {
 		getAllMarkets,
 		getMarketDetails,
@@ -14,11 +16,8 @@
 		type MarketPaginationOptions,
 		type PaginatedMarkets
 	} from '$lib/services/market';
-	import { getCurrentPriceBySymbol } from '$lib/services/price/operations';
+	import {getCurrentPriceBySymbol} from '$lib/services/price/operations';
 
-	// Import component types
-	import type { ComponentProps } from 'svelte';
-	import type { SvelteComponent } from 'svelte';
 	type MarketCardProps = ComponentProps<typeof MarketCard>;
 	type CompactMarketCardProps = ComponentProps<typeof CompactMarketCard>;
 
@@ -42,7 +41,7 @@
 
 	// Pagination state
 	let currentPage = $state(1);
-	let pageSize = $state(5);
+	let pageSize = $state(6);
 	let marketData = $state<PaginatedMarkets | null>(null);
 
 	// Store for current prices
@@ -65,7 +64,7 @@
 			console.log('Fetched markets:', marketData);
 
 			// Fetch prices for the loaded markets
-			fetchPricesForMarkets(marketData.markets);
+			await fetchPricesForMarkets(marketData.markets);
 
 		} catch (error) {
 			console.error('Error fetching markets:', error);
