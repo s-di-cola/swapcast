@@ -22,6 +22,13 @@ import type {
 let coinSymbolToIdMap: Record<string, string> = {};
 
 /**
+ * In-memory price cache for frequently accessed prices
+ * This is separate from the main cache system to provide faster access
+ * and reduce redundant API calls for the same symbols
+ */
+const inMemoryPriceCache: Record<string, { price: number; timestamp: number }> = {};
+
+/**
  * Fetches historical price data for a specific cryptocurrency
  *
  * @param coinId - The CoinGecko ID of the cryptocurrency (e.g., 'bitcoin', 'ethereum')
@@ -200,6 +207,15 @@ export async function getCurrentPrice(
 	coinId: string,
 	vsCurrency: VsCurrency = 'usd'
 ): Promise<number | null> {
+	// Check in-memory cache first for faster access
+	const memoryCacheKey = `${coinId}_${vsCurrency}`;
+	const cachedPrice = inMemoryPriceCache[memoryCacheKey];
+	const cacheExpiry = CACHE_CONFIG.TTL_BY_TYPE.current || 120000; // 2 minutes default
+	
+	if (cachedPrice && (Date.now() - cachedPrice.timestamp) < cacheExpiry) {
+		return cachedPrice.price;
+	}
+
 	const endpoint = buildEndpoint('/simple/price', {});
 	const queryParams = {
 		ids: coinId,
@@ -212,12 +228,18 @@ export async function getCurrentPrice(
 		const response = await getCachedOrFetch<Record<string, Record<string, number>>>(
 			cacheKey,
 			async () => makeApiRequest<Record<string, Record<string, number>>>(url, {}),
-			CACHE_CONFIG.TTL_BY_TYPE.current || 60 // 60 seconds cache if not configured
+			CACHE_CONFIG.TTL_BY_TYPE.current || 120000 // 2 minutes cache if not configured
 		);
 
 		// Check if the response contains the requested coin and currency
 		if (response && response[coinId] && response[coinId][vsCurrency]) {
-			return response[coinId][vsCurrency];
+			const price = response[coinId][vsCurrency];
+			// Update in-memory cache
+			inMemoryPriceCache[memoryCacheKey] = { 
+				price, 
+				timestamp: Date.now() 
+			};
+			return price;
 		}
 		return null;
 	} catch (error) {
@@ -250,6 +272,114 @@ export async function getCurrentPriceBySymbol(
 	}
 
 	return getCurrentPrice(coinId, vsCurrency);
+}
+
+/**
+ * Gets current prices for multiple cryptocurrencies in a single API call
+ * 
+ * @param symbols - Array of cryptocurrency symbols (e.g., ['BTC', 'ETH'])
+ * @param vsCurrency - The currency to show prices in (e.g., 'usd', 'eur')
+ * @returns Promise with a record of symbol to price mappings
+ */
+export async function getBatchPrices(
+	symbols: string[],
+	vsCurrency: VsCurrency = 'usd'
+): Promise<Record<string, number | null>> {
+	// Ensure we have the coin mapping
+	if (Object.keys(coinSymbolToIdMap).length === 0) {
+		await fetchCoinList();
+	}
+
+	// Filter out duplicates
+	const uniqueSymbols = [...new Set(symbols)];
+	
+	// Check which symbols we need to fetch (not in memory cache)
+	const symbolsToFetch: string[] = [];
+	const result: Record<string, number | null> = {};
+	const cacheExpiry = CACHE_CONFIG.TTL_BY_TYPE.current || 120000;
+	
+	// First check in-memory cache
+	for (const symbol of uniqueSymbols) {
+		const coinId = coinSymbolToIdMap[symbol.toLowerCase()];
+		if (!coinId) {
+			result[symbol] = null;
+			continue;
+		}
+		
+		const memoryCacheKey = `${coinId}_${vsCurrency}`;
+		const cachedPrice = inMemoryPriceCache[memoryCacheKey];
+		
+		if (cachedPrice && (Date.now() - cachedPrice.timestamp) < cacheExpiry) {
+			result[symbol] = cachedPrice.price;
+		} else {
+			symbolsToFetch.push(symbol.toLowerCase());
+		}
+	}
+	
+	// If all prices were in memory cache, return early
+	if (symbolsToFetch.length === 0) {
+		return result;
+	}
+	
+	// Convert symbols to CoinGecko IDs
+	const coinIds = symbolsToFetch
+		.map(symbol => coinSymbolToIdMap[symbol])
+		.filter(Boolean);
+	
+	if (coinIds.length === 0) {
+		return result;
+	}
+	
+	// Make a single API call for all needed coins
+	const endpoint = buildEndpoint('/simple/price', {});
+	const queryParams = {
+		ids: coinIds.join(','),
+		vs_currencies: vsCurrency
+	};
+	const url = `${endpoint}?${buildQueryString(queryParams)}`;
+	
+	const cacheKey = generateCacheKey('batch_prices', coinIds.join('_'), vsCurrency);
+	
+	try {
+		const response = await getCachedOrFetch<Record<string, Record<string, number>>>(
+			cacheKey,
+			async () => makeApiRequest<Record<string, Record<string, number>>>(url, {}),
+			CACHE_CONFIG.TTL_BY_TYPE.current || 120000
+		);
+		
+		// Process response and update both result and in-memory cache
+		for (const symbol of symbolsToFetch) {
+			const coinId = coinSymbolToIdMap[symbol];
+			if (coinId && response[coinId] && response[coinId][vsCurrency]) {
+				const price = response[coinId][vsCurrency];
+				result[symbol.toUpperCase()] = price;
+				
+				// Update in-memory cache
+				inMemoryPriceCache[`${coinId}_${vsCurrency}`] = {
+					price,
+					timestamp: Date.now()
+				};
+			} else {
+				result[symbol.toUpperCase()] = null;
+			}
+		}
+		
+		return result;
+	} catch (error) {
+		console.error(`Failed to fetch batch prices:`, error);
+		// Fall back to individual fetches for symbols that weren't in cache
+		const promises = symbolsToFetch.map(async (symbol) => {
+			const price = await getCurrentPriceBySymbol(symbol, vsCurrency);
+			return { symbol: symbol.toUpperCase(), price };
+		});
+		
+		const results = await Promise.all(promises);
+		results.forEach(({ symbol, price }) => {
+			result[symbol] = price;
+		});
+		
+		return result;
+	}
 }
 
 /**

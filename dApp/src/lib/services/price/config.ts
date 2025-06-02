@@ -122,7 +122,7 @@ export const CACHE_CONFIG = {
 		historical: 5 * 60 * 1000, // 5 minutes
 		search: 10 * 60 * 1000, // 10 minutes
 		coinList: 60 * 60 * 1000, // 1 hour
-		current: 30 * 1000 // 30 seconds
+		current: 2 * 60 * 1000 // 2 minutes
 	}
 } as const;
 

@@ -16,7 +16,7 @@
 		type MarketPaginationOptions,
 		type PaginatedMarkets
 	} from '$lib/services/market';
-	import { getCurrentPriceBySymbol } from '$lib/services/price/operations';
+	import { getCurrentPriceBySymbol, getBatchPrices } from '$lib/services/price/operations';
 
 	type MarketCardProps = ComponentProps<typeof MarketCard>;
 	type CompactMarketCardProps = ComponentProps<typeof CompactMarketCard>;
@@ -81,28 +81,38 @@
 
 		// Create a unique list of asset symbols to fetch prices for
 		const assetSymbols = [...new Set(markets.map((market) => market.assetSymbol))];
+		
+		try {
+			// Use the new batch price fetching function
+			const newPrices = await getBatchPrices(assetSymbols);
+			
+			// Update the prices state
+			marketPrices = { ...marketPrices, ...newPrices };
+		} catch (error) {
+			console.error('Error fetching prices:', error);
+			
+			// Fallback to individual fetches if batch fails
+			const pricePromises = assetSymbols.map(async (symbol) => {
+				try {
+					const price = await getCurrentPriceBySymbol(symbol);
+					return { symbol, price };
+				} catch (error) {
+					console.error(`Error fetching price for ${symbol}:`, error);
+					return { symbol, price: null };
+				}
+			});
 
-		// Fetch prices for each asset symbol
-		const pricePromises = assetSymbols.map(async (symbol) => {
-			try {
-				const price = await getCurrentPriceBySymbol(symbol);
-				return { symbol, price };
-			} catch (error) {
-				console.error(`Error fetching price for ${symbol}:`, error);
-				return { symbol, price: null };
-			}
-		});
+			// Wait for all price fetches to complete
+			const results = await Promise.all(pricePromises);
 
-		// Wait for all price fetches to complete
-		const results = await Promise.all(pricePromises);
+			// Update the prices state
+			const newPrices: Record<string, number | null> = {};
+			results.forEach(({ symbol, price }) => {
+				newPrices[symbol] = price;
+			});
 
-		// Update the prices state
-		const newPrices: Record<string, number | null> = {};
-		results.forEach(({ symbol, price }) => {
-			newPrices[symbol] = price;
-		});
-
-		marketPrices = { ...marketPrices, ...newPrices };
+			marketPrices = { ...marketPrices, ...newPrices };
+		}
 	}
 
 	// Filter markets based on search query
