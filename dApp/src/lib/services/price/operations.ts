@@ -195,6 +195,71 @@ export async function getCoinIdFromAssetPair(assetPair: string): Promise<string 
 }
 
 /**
+ * Gets the current price for a cryptocurrency
+ *
+ * @param coinId - The CoinGecko ID of the cryptocurrency (e.g., 'bitcoin', 'ethereum')
+ * @param vsCurrency - The currency to show prices in (e.g., 'usd', 'eur')
+ * @returns Promise with the current price or null if not found
+ * @throws Error if the API request fails
+ */
+export async function getCurrentPrice(
+	coinId: string,
+	vsCurrency: VsCurrency = 'usd'
+): Promise<number | null> {
+	const endpoint = buildEndpoint('/simple/price', {});
+	const queryParams = {
+		ids: coinId,
+		vs_currencies: vsCurrency
+	};
+	const url = `${endpoint}?${buildQueryString(queryParams)}`;
+
+	const cacheKey = generateCacheKey('current_price', coinId, vsCurrency);
+	try {
+		const response = await getCachedOrFetch<Record<string, Record<string, number>>>(
+			cacheKey,
+			async () => makeApiRequest<Record<string, Record<string, number>>>(url, {}),
+			CACHE_CONFIG.TTL_BY_TYPE.current || 60 // 60 seconds cache if not configured
+		);
+
+		// Check if the response contains the requested coin and currency
+		if (response && response[coinId] && response[coinId][vsCurrency]) {
+			return response[coinId][vsCurrency];
+		}
+		return null;
+	} catch (error) {
+		console.error(`Failed to fetch current price for ${coinId}:`, error);
+		return null;
+	}
+}
+
+/**
+ * Gets the current price for a cryptocurrency using its symbol
+ *
+ * @param symbol - The symbol of the cryptocurrency (e.g., 'BTC', 'ETH')
+ * @param vsCurrency - The currency to show prices in (e.g., 'usd', 'eur')
+ * @returns Promise with the current price or null if not found
+ */
+export async function getCurrentPriceBySymbol(
+	symbol: string,
+	vsCurrency: VsCurrency = 'usd'
+): Promise<number | null> {
+	// Ensure we have the coin mapping
+	if (Object.keys(coinSymbolToIdMap).length === 0) {
+		await fetchCoinList();
+	}
+
+	// Look up the CoinGecko ID for this symbol
+	const coinId = coinSymbolToIdMap[symbol.toLowerCase()];
+	if (!coinId) {
+		console.warn(`Could not find CoinGecko ID for symbol ${symbol}`);
+		return null;
+	}
+
+	return getCurrentPrice(coinId, vsCurrency);
+}
+
+
+/**
  * Formats raw CoinGecko price data for chart display
  *
  * This function transforms the raw price data from CoinGecko's API into a format
