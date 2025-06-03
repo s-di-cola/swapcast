@@ -9,6 +9,7 @@ import { anvil } from 'viem/chains';
 import { CONTRACT_ADDRESSES, TOKEN_ADDRESSES } from './utils/wallets';
 import { getTickSpacing } from './utils/helpers';
 import { getCurrentPrice, calculateRealisticPriceThreshold } from './utils/currentPrice';
+import { addLiquidityToPool } from './utils/liquidity';
 import { getPoolManager } from '../src/generated/types/PoolManager';
 import { getPredictionManager } from '../src/generated/types/PredictionManager';
 import chalk from 'chalk';
@@ -237,6 +238,21 @@ export async function generateMarkets(
 			console.log(chalk.yellow(`Fetching current price for ${assetPair.symbol}...`));
 			const currentPrice = await getCurrentPrice(assetPair.symbol);
 			console.log(chalk.blue(`Current price for ${assetPair.symbol}: $${currentPrice}`));
+
+			// Add liquidity to the pool
+			console.log(chalk.yellow(`Adding liquidity to pool for ${marketName}...`));
+			try {
+				const publicClient = createPublicClient({
+					chain: anvil,
+					transport: http(anvil.rpcUrls.default.http[0])
+				});
+				
+				await addLiquidityToPool(publicClient, adminAccount, poolKey, currentPrice);
+				console.log(chalk.green(`Successfully added liquidity to pool for ${marketName}`));
+			} catch (liquidityError: any) {
+				console.error(chalk.red(`Failed to add liquidity to pool: ${liquidityError.message}`));
+				// Continue even if adding liquidity fails - we can still create the market
+			}
 
 			// Calculate a realistic price threshold (absolute price value)
 			const priceThreshold = calculateRealisticPriceThreshold(currentPrice);
