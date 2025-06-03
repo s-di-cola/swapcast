@@ -1,30 +1,28 @@
 <script lang="ts">
-	import { onMount } from 'svelte';
-	import { Button, Helper, Input, Label, Modal, Select, Spinner } from 'flowbite-svelte';
-	import { ExclamationCircleSolid } from 'flowbite-svelte-icons';
-	import { toastStore } from '$lib/stores/toastStore';
-	import { createMarket, getOrCreateMarketPool } from '$lib/services/market';
-	import type { Address } from 'viem';
-	import { PUBLIC_SWAPCASTHOOK_ADDRESS } from '$env/static/public';
-	import { getTickSpacing } from '$lib/services/market/helpers';
-	import { sortTokens } from '$lib/services/market/poolService';
-	import { appKit } from '$lib/configs/wallet.config';
+    import type { Token } from '$lib/types';
+    import { Button, Helper, Input, Label, Modal, Select, Spinner } from 'flowbite-svelte';
+    import { ExclamationCircleSolid } from 'flowbite-svelte-icons';
+    import { createMarket, getOrCreateMarketPool } from '$lib/services/market';
+    import { onMount } from 'svelte';
+    import { appKit } from '$lib/configs/wallet.config';
+    import { getTokenList } from '$lib/services/token/operations';
+    import { toastStore } from '$lib/stores/toastStore';
+    import type { Address } from 'viem';
+    import { PUBLIC_SWAPCASTHOOK_ADDRESS } from '$env/static/public';
+    import { getTickSpacing } from '$lib/services/market/helpers';
+    import { sortTokens } from '$lib/services/market/poolService';
 
-	interface Props {
-		showModal?: boolean;
-		onClose: () => void;
-		onMarketCreated?: (marketId: string, name: string) => void;
-		onMarketCreationFailed?: (error: string) => void;
-	}
+    interface Props {
+        showModal?: boolean;
+        onClose: () => void;
+        onMarketCreated?: (marketId: string, name: string) => void;
+        onMarketCreationFailed?: (error: string) => void;
+    }
 
-	interface Token {
-		name: string;
-		address: Address;
-		symbol: string;
-		decimals: number;
-		chainId: number;
-		logoURI?: string;
-	}
+    // Using the Token type from the token service, but with address field required
+    interface TokenWithAddress extends Token {
+        address: Address;
+    }
 
 	interface MarketFormData {
 		marketName: string;
@@ -122,14 +120,25 @@
 
 	async function loadTokenList(): Promise<void> {
 		try {
-			const response = await fetch(
-				'https://raw.githubusercontent.com/Uniswap/default-token-list/main/src/tokens/mainnet.json'
-			);
-			if (!response.ok) {
-				throw new Error(`Failed to fetch token list: ${response.statusText}`);
-			}
-			const data = await response.json();
-			tokenList = data.filter((token: Token) => token.chainId === 1);
+			// Use the shared token service instead of direct fetch
+			const tokens = await getTokenList(true); // Force refresh to get latest data
+			
+			// Filter tokens that have addresses and convert to TokenWithAddress type
+			tokenList = tokens
+				.filter(token => token.address) // Only include tokens with addresses
+				.map(token => {
+					// Ensure address is in the correct 0x format
+					const address = token.address!.startsWith('0x') 
+						? token.address as `0x${string}` 
+						: `0x${token.address}` as `0x${string}`;
+					
+					return {
+						...token,
+						address // Properly formatted address
+					};
+				}) as TokenWithAddress[];
+			
+			console.log(`Loaded ${tokenList.length} tokens from token service`);
 		} catch (err: any) {
 			console.error('Error fetching token list:', err);
 			errorLoadingTokens = err.message || 'Could not load token list.';
@@ -202,12 +211,22 @@
 		tokenB: Token,
 		expirationDateTime: number
 	): Promise<void> {
+		// Ensure addresses are defined
+		if (!tokenA.address || !tokenB.address) {
+			showToast('error', 'Token addresses are required to create a market');
+			return;
+		}
+		
+		// Ensure addresses are in the correct 0x format
+		const addressA = tokenA.address.startsWith('0x') ? tokenA.address as `0x${string}` : `0x${tokenA.address}` as `0x${string}`;
+		const addressB = tokenB.address.startsWith('0x') ? tokenB.address as `0x${string}` : `0x${tokenB.address}` as `0x${string}`;
+		
 		const priceFeedKey = `${tokenA.symbol}/${tokenB.symbol}`;
 
 		// Create or verify pool exists
 		const poolResult = await getOrCreateMarketPool(
-			tokenA.address,
-			tokenB.address,
+			addressA,
+			addressB,
 			formData.feeTier
 		);
 
@@ -217,7 +236,7 @@
 		}
 
 		// Create the market
-		const tokens = sortTokens(tokenA.address, tokenB.address, Number(appKit.getChainId()));
+		const tokens = sortTokens(addressA, addressB, Number(appKit.getChainId()));
 		const tickSpacing = getTickSpacing(formData.feeTier);
 
 		const poolKey = {
@@ -228,21 +247,27 @@
 			hooks: PUBLIC_SWAPCASTHOOK_ADDRESS as `0x${string}`
 		};
 
+		// Ensure all string values are defined before passing to createMarket
+		const marketName = formData.marketName || '';
+		const targetPrice = formData.targetPriceStr || '0';
+		
 		const marketResult = await createMarket(
-			formData.marketName,
+			marketName,
 			priceFeedKey,
 			expirationDateTime,
-			formData.targetPriceStr,
+			targetPrice,
 			poolKey
 		);
 
 		if (!marketResult.success) {
-			showToast('error', marketResult.message);
+			showToast('error', marketResult.message || 'Unknown error creating market');
 			return;
 		}
 
 		showToast('success', 'Market and pool created successfully!');
-		onMarketCreated(marketResult.marketId || '0', formData.marketName);
+		// Ensure marketId is always a string
+		const marketId = marketResult.marketId || '0';
+		onMarketCreated(marketId, marketName);
 
 		resetForm();
 		showModal = false;
@@ -273,7 +298,8 @@
 		return { isValid: true };
 	}
 
-	function getValidatedTokens(): { tokenA?: Token; tokenB?: Token } {
+	function getValidatedTokens(): { tokenA?: TokenWithAddress; tokenB?: TokenWithAddress } {
+		// Find tokens with strict address matching
 		const tokenA = tokenList.find((t) => t.address === formData.tokenA_address);
 		const tokenB = tokenList.find((t) => t.address === formData.tokenB_address);
 
@@ -282,6 +308,13 @@
 			return {};
 		}
 
+		// Check if addresses exist - this should always be true due to our filtering in loadTokenList
+		if (!tokenA.address || !tokenB.address) {
+			showToast('error', 'Token addresses are required');
+			return {};
+		}
+
+		// Validate address format
 		if (
 			!/^0x[a-fA-F0-9]{40}$/.test(tokenA.address) ||
 			!/^0x[a-fA-F0-9]{40}$/.test(tokenB.address)
@@ -290,7 +323,11 @@
 			return {};
 		}
 
-		return { tokenA, tokenB };
+			// Cast to TokenWithAddress to ensure type safety
+		return { 
+			tokenA: tokenA as TokenWithAddress, 
+			tokenB: tokenB as TokenWithAddress 
+		};
 	}
 
 	function calculateExpirationDateTime(): number | null {
@@ -448,17 +485,17 @@
 										{#if token.logoURI}
 											<img
 												src={token.logoURI}
-												alt={token.symbol}
+												alt={token.symbol || ""}
 												class="mr-2 h-6 w-6 rounded-full"
 											/>
 										{:else}
 											<div
 												class="mr-2 flex h-6 w-6 items-center justify-center rounded-full bg-gray-200 text-xs font-bold"
 											>
-												{token.symbol.charAt(0)}
+												{(token.symbol || "?").charAt(0)}
 											</div>
 										{/if}
-										<span class="font-medium">{token.symbol}</span>
+										<span class="font-medium">{token.symbol || "?"}</span>
 									</div>
 									{#if formData.tokenA_address === token.address}
 										<div class="flex-shrink-0 text-indigo-600">
@@ -544,17 +581,17 @@
 										{#if token.logoURI}
 											<img
 												src={token.logoURI}
-												alt={token.symbol}
+												alt={token.symbol || ""}
 												class="mr-2 h-6 w-6 rounded-full"
 											/>
 										{:else}
 											<div
 												class="mr-2 flex h-6 w-6 items-center justify-center rounded-full bg-gray-200 text-xs font-bold"
 											>
-												{token.symbol.charAt(0)}
+												{(token.symbol || "?").charAt(0)}
 											</div>
 										{/if}
-										<span class="font-medium">{token.symbol}</span>
+										<span class="font-medium">{token.symbol || "?"}</span>
 									</div>
 									{#if formData.tokenB_address === token.address}
 										<div class="flex-shrink-0 text-indigo-600">
@@ -829,7 +866,7 @@
 				<Button
 					type="button"
 					color="indigo"
-					class="ml-3 inline-flex items-center rounded-md bg-indigo-600 px-4 py-2 text-sm font-medium text-white shadow-sm hover:bg-indigo-700 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-indigo-600"
+					class="ml-3 inline-flex items-center rounded-md bg-indigo-600 px-4 py-2 text-sm font-medium text-white shadow-sm hover:bg-indigo-700 focus:ring-primary-500 focus:border-primary-500 focus-visible:outline-offset-2 focus-visible:outline-2 focus-visible:outline-primary-600"
 					disabled={isSubmitting}
 					onclick={handleSubmit}
 				>
