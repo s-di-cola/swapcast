@@ -4,14 +4,14 @@
  * High-level market operations and business logic
  */
 
-import { type Address, parseEther, http } from 'viem';
+import { type Address, http, parseEther } from 'viem';
 import { createPool } from './poolService';
 import { appKit } from '$lib/configs/wallet.config';
 import { getCurrentNetworkConfig } from '$lib/utils/network';
 import { PUBLIC_PREDICTIONMANAGER_ADDRESS } from '$env/static/public';
 import { getMarketCount, getMarketDetails } from './contracts';
-import { sortMarkets, applyDefaultSort, DEFAULT_ETH_USD_PRICE_FEED } from './utils';
 import { getPredictionManager } from '$generated/types/PredictionManager';
+import { sortMarkets, applyDefaultSort, DEFAULT_ETH_USD_PRICE_FEED } from './utils';
 import type {
 	MarketPaginationOptions,
 	PaginatedMarkets,
@@ -113,6 +113,32 @@ export async function getAllMarkets(options?: MarketPaginationOptions): Promise<
 		};
 	}
 }
+
+/**
+ * Fetches the Uniswap v4 PoolKey for a given marketId from the PredictionManager contract.
+ *
+ * @param marketId - Market ID (string | bigint)
+ * @returns Promise resolving to PoolKey or undefined if not found or error occurs
+ */
+export async function getPoolKey(marketId: string | bigint): Promise<PoolKey | undefined> {
+	const id = typeof marketId === 'string' ? BigInt(marketId) : marketId;
+	try {
+		const { rpcUrl, chain } = getCurrentNetworkConfig();
+		const predictionManager = getPredictionManager({
+			address: PUBLIC_PREDICTIONMANAGER_ADDRESS,
+			chain,
+			transport: http(rpcUrl)
+		});
+		const result = await predictionManager.read.marketIdToPoolKey([id]);
+		if (!result) return undefined;
+		const [currency0, currency1, fee, tickSpacing, hooks] = result as [Address, Address, number, number, Address];
+		return { currency0, currency1, fee, tickSpacing, hooks };
+	} catch (error) {
+		console.error(`Failed to get PoolKey for marketId ${marketId}:`, error);
+		return undefined;
+	}
+}
+
 
 /**
  * Creates a new prediction market

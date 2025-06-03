@@ -33,7 +33,8 @@ export {
 	getActiveMarketsCount,
 	getAllMarkets,
 	createMarket,
-	getOrCreateMarketPool
+	getOrCreateMarketPool,
+	getPoolKey
 } from './operations';
 
 // Re-export utilities if needed externally
