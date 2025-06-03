@@ -18,7 +18,8 @@ const TARGET_CONTRACTS = [
   'RewardDistributor',
   'Treasury',
   'MarketLogic',
-  'PoolManager'
+  'PoolManager',
+  'StateView'
 ];
 
 if (!existsSync(generatedDir)) {
