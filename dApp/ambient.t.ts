@@ -8,6 +8,7 @@ declare module '$env/static/public' {
 	export const PUBLIC_SWAPCASTHOOK_ADDRESS: `0x${string}`;
 	export const PUBLIC_UNIV4_POOLMANAGER_ADDRESS: `0x${string}`;
 	export const PUBLIC_COINGECKO_API_URL: string;
+	export const PUBLIC_RPC_URL: string;
 }
 
 declare module '$env/static/private' {
