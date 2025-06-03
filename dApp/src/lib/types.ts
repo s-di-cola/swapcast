@@ -6,6 +6,7 @@ export interface Token {
 	decimals?: number;
 	contractAddress?: string;
 	logo?: string;
+	logoURI?: string;
 }
 
 export type PredictionSide = 'above_target' | 'below_target' | 'no_prediction' | undefined;

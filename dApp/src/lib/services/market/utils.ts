@@ -118,11 +118,13 @@ export function transformMarketDetails(details: MarketDetailsResult): Market {
 	const bullishStake = Number(details.totalConvictionBullish) / 1e18;
 	const totalStakeValue = bearishStake + bullishStake;
 
-	// Format asset pair to ensure it shows the complete pair (e.g., "ETH/USD")
+	// Format the asset pair to ensure it's always in BASE/QUOTE format
+	// If the asset pair doesn't contain a slash, assume it's the base token and use USDT as quote
 	let formattedAssetPair = details.assetPair;
-	if (formattedAssetPair && !formattedAssetPair.includes('/')) {
-		// If we only have a symbol without the pair format, append the standard pair
-		formattedAssetPair = `${formattedAssetPair}/USD`;
+	if (!formattedAssetPair.includes('/')) {
+		// Add the default quote token if missing
+		formattedAssetPair = `${formattedAssetPair}/USDT`;
+		console.log(`Fixed asset pair format: ${details.assetPair} → ${formattedAssetPair}`);
 	}
 
 	return {
