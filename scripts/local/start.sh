@@ -265,6 +265,8 @@ deploy_contracts() {
   
   # Add Uniswap v4 PoolManager address (mainnet)
   echo "PUBLIC_UNIV4_POOLMANAGER_ADDRESS=0x000000000004444c5dc75cB358380D2e3dE08A90" >> "$DAPP_ENV_FILE"
+  # Add Uniswap v4 StateView address (mainnet)
+  echo "PUBLIC_UNIV4_STATEVIEW_ADDRESS=0x7ffe42c4a5deea5b0fec41c94c136cf115597227" >> "$DAPP_ENV_FILE"
 
   # Add the admin private key and address (using first Anvil account)
   echo "PUBLIC_ADMIN_PRIVATE_KEY=$PRIVATE_KEY" >> "$DAPP_ENV_FILE"
