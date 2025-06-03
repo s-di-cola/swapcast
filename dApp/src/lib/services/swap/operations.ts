@@ -3,16 +3,44 @@
  * @module services/swap/operations
  */
 
-import { http, type Address } from 'viem';
+import { http, type Address, keccak256, encodeAbiParameters } from 'viem';
 import { getPoolKey } from '$lib/services/market/operations';
 import { getStateView } from '$generated/types/StateView';
-import { PoolId } from '$lib/utils/poolId';
 import { getCurrentNetworkConfig } from '$lib/utils/network';
 import { PUBLIC_UNIV4_STATEVIEW_ADDRESS } from '$env/static/public';
 import type { PriceFetchResult, SwapQuoteResult } from './types';
+import type { PoolKey } from '$lib/services/market/types';
 
 // Constants for price calculations
 const Q96 = 2n ** 96n;
+
+/**
+ * Calculates a pool ID from a pool key
+ * @param poolKey - The pool key object with Uniswap v4 pool parameters
+ * @returns The pool ID as a bytes32 string
+ */
+function calculatePoolId(poolKey: PoolKey): `0x${string}` {
+  // Encode the pool key components according to Uniswap v4 spec
+  const encodedData = encodeAbiParameters(
+    [
+      { type: 'address' },  // currency0
+      { type: 'address' },  // currency1
+      { type: 'uint24' },   // fee
+      { type: 'int24' },    // tickSpacing
+      { type: 'address' }   // hooks
+    ],
+    [
+      poolKey.currency0,
+      poolKey.currency1,
+      poolKey.fee,
+      poolKey.tickSpacing,
+      poolKey.hooks
+    ]
+  );
+  
+  // Hash the encoded data to get the pool ID
+  return keccak256(encodedData);
+}
 
 /**
  * Creates a StateView contract instance
@@ -59,7 +87,7 @@ export async function fetchPoolPrices(marketId: string | bigint): Promise<PriceF
     const stateView = getStateViewContract();
 
     // Calculate the pool ID from the pool key
-    const poolId = PoolId.fromPoolKey(poolKey);
+    const poolId = calculatePoolId(poolKey);
     
     // Get the slot0 data from the pool
     const slot0Data = await stateView.read.getSlot0([poolId]);
@@ -134,7 +162,16 @@ export async function getSwapQuote(
     }
     
     // Get the price from the pool data
-    const { token0Price, token1Price } = priceResult.prices!;
+    const { token0Price, token1Price, sqrtPriceX96 } = priceResult.prices!;
+    
+    // Check if the pool has no liquidity (sqrtPriceX96 is 0)
+    if (sqrtPriceX96 === 0n) {
+      return {
+        success: false,
+        error: 'ZERO_LIQUIDITY_POOL',
+        details: 'This pool has no liquidity. Swap quotes cannot be calculated.'
+      };
+    }
     
     // Calculate the output amount based on which token is being swapped
     const price = isToken0 ? token0Price : token1Price;
@@ -142,8 +179,16 @@ export async function getSwapQuote(
     // Apply a 0.3% fee (standard Uniswap fee) - this is simplified and doesn't account for slippage
     const feeMultiplier = 0.997; // 1 - 0.003 (0.3% fee)
     
+    // Determine decimals for the tokens (using 18 as default for ETH-like tokens)
+    const decimals = 18;
+    
     // Calculate output amount: amountIn * price * feeMultiplier
-    const amountOut = BigInt(Math.floor(Number(amountIn) * price * feeMultiplier));
+    // Convert amountIn to a decimal number first, maintaining precision
+    const amountInDecimal = Number(amountIn) / 10**18; // Convert from wei to ether
+    const amountOutDecimal = amountInDecimal * price * feeMultiplier;
+    
+    // Convert back to wei (bigint)
+    const amountOut = BigInt(Math.floor(amountOutDecimal * 10**18));
     
     // Determine the output token address
     const tokenOut = isToken0 ? poolKey.currency1 : poolKey.currency0;
@@ -157,7 +202,7 @@ export async function getSwapQuote(
         amountOut,
         price,
         priceImpact: 0.003, // Simplified price impact calculation (0.3%)
-        fee: amountIn - BigInt(Math.floor(Number(amountIn) * feeMultiplier))
+        fee: BigInt(Math.floor(amountInDecimal * 0.003 * 10**18)) // 0.3% fee
       }
     };
   } catch (error) {

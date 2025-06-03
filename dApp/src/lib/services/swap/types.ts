@@ -80,4 +80,7 @@ export interface SwapQuoteResult {
   
   /** Error message if unsuccessful */
   error?: string;
+  
+  /** Additional error details or context */
+  details?: string;
 }

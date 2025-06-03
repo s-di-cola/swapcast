@@ -164,11 +164,7 @@
 					{disabled}
 					max={token?.balance || Infinity}
 			/>
-			<button
-					type="button"
-					class="ml-3 flex items-center gap-2 rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm font-medium text-gray-900 shadow-sm transition-all hover:border-gray-300 hover:shadow-md disabled:opacity-50"
-					disabled={disabled || !token}
-			>
+			<div class="ml-3 flex items-center gap-2 rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm font-medium text-gray-900 shadow-sm">
 				{#if token}
 					{#if token.logoURI || token.logo}
 						<img src={token.logoURI || token.logo} alt={token.symbol} class="mr-2 h-6 w-6 rounded-full" />
@@ -181,7 +177,7 @@
 				{:else}
 					<span>Select</span>
 				{/if}
-			</button>
+			</div>
 		</div>
 
 		<div class="mt-2 flex flex-col gap-1">

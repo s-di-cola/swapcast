@@ -3,6 +3,7 @@
     import type { Market } from '$lib/services/market/types';
     import { getTokenBySymbol, getTokenLogoUrl } from '$lib/services/token/operations';
     import { getMarketDetails } from '$lib/services/market/contracts';
+    import { getPoolKey } from '$lib/services/market/operations';
     import { clearBalanceCache, getTokenBalance } from '$lib/services/balance/operations';
     import { ArrowUpDown, RefreshCw } from 'lucide-svelte';
     import { Spinner } from 'flowbite-svelte';
@@ -11,6 +12,8 @@
     import PredictionSection from '$lib/components/app/swap-panel/PredictionSection.svelte';
     import ConfirmationModal from '$lib/components/app/swap-panel/ConfirmationModal.svelte';
     import HelpModal from '$lib/components/app/swap-panel/HelpModal.svelte';
+    import { fetchPoolPrices, getSwapQuote } from '$lib/services/swap';
+    import { toastStore } from '$lib/stores/toastStore';
 
     // Props
     let {
@@ -179,7 +182,7 @@
                         throw new Error(error);
                     }
                     
-                    // Create token objects with synchronous logo assignment
+                    // Initialize basic token objects first with synchronous logo assignment
                     payToken = {
                         symbol: baseSymbol,
                         name: baseSymbol,
@@ -192,16 +195,16 @@
                         logoURI: getTokenLogoUrl(quoteSymbol, true) // Use synchronous version with fallback
                     };
                     
-                    console.log('Setting tokens from market asset pair:', { 
+                    console.log('Initial tokens set from market asset pair:', { 
                         assetPair: marketData.assetPair,
                         payToken,
                         receiveToken
                     });
                     
-                    // Asynchronously fetch full token details including logos
+                    // Then fetch complete token details asynchronously
                     const fetchTokenDetails = async () => {
                         try {
-                            // Get full token details
+                            // Fetch both tokens in parallel
                             const [payTokenDetails, receiveTokenDetails] = await Promise.all([
                                 getTokenBySymbol(baseSymbol),
                                 getTokenBySymbol(quoteSymbol)
@@ -225,8 +228,28 @@
                                     chainId: receiveTokenDetails.chainId
                                 };
                             }
+                            
+                            console.log('Updated tokens with full details:', {
+                                payToken,
+                                receiveToken
+                            });
+                            
+                            // Fetch token balances after setting tokens
+                            if (isConnected && payToken && connectedAddress) {
+                                payToken.balance = await getTokenBalance(payToken.symbol, connectedAddress);
+                            }
+                            if (isConnected && receiveToken && connectedAddress) {
+                                receiveToken.balance = await getTokenBalance(receiveToken.symbol, connectedAddress);
+                            }
                         } catch (error) {
                             console.error('Error fetching token details:', error);
+                            // Token balances still need to be fetched even if details failed
+                            if (isConnected && payToken && connectedAddress) {
+                                payToken.balance = await getTokenBalance(payToken.symbol, connectedAddress);
+                            }
+                            if (isConnected && receiveToken && connectedAddress) {
+                                receiveToken.balance = await getTokenBalance(receiveToken.symbol, connectedAddress);
+                            }
                         }
                     };
                     
@@ -249,10 +272,66 @@
         fetchMarketData();
     });
 
-    // Derived values
+    // Fetch pool prices when market data changes
+    let poolPrices = $state<any>(null);
+    let isLoadingPrices = $state(false);
+    let hasShownLiquidityWarning = $state(false); // Track if we've shown the warning
+    let priceError = $state<string | null>(null);
+    
+    $effect(() => {
+        if (!marketId || !marketData) {
+            poolPrices = null;
+            return;
+        }
+        
+        const fetchPrices = async () => {
+            isLoadingPrices = true;
+            priceError = null;
+            
+            try {
+                console.log(`Fetching pool prices for marketId: ${marketId}`);
+                const result = await fetchPoolPrices(marketId);
+                
+                if (result.success && result.prices) {
+                    poolPrices = result.prices;
+                    console.log('Pool prices received:', poolPrices);
+                    
+                    // Check if the pool has no liquidity (sqrtPriceX96 is 0)
+                    if (poolPrices.sqrtPriceX96 === 0n && !hasShownLiquidityWarning) {
+                        toastStore.warning('This pool has no liquidity. Swap quotes may not be accurate.', {
+                            duration: 6000,
+                            position: 'top-center'
+                        });
+                        hasShownLiquidityWarning = true;
+                    }
+                    
+                    // Update exchange rate based on real pool prices
+                    updateReceiveAmount();
+                } else {
+                    priceError = result.error || 'Failed to fetch pool prices';
+                    console.error('Failed to fetch pool prices:', priceError);
+                }
+            } catch (error) {
+                console.error('Error fetching pool prices:', error);
+                priceError = error instanceof Error ? error.message : 'Unknown error';
+            } finally {
+                isLoadingPrices = false;
+            }
+        };
+        
+        fetchPrices();
+    });
+    
+    // Calculate exchange rate based on pool prices
     let exchangeRate = $derived(() => {
-        if (payAmount === 0) return 0;
-        return receiveAmount / payAmount;
+        if (!poolPrices || payAmount === 0) return 0;
+        
+        // Use the correct price based on which token is being paid
+        if (payToken?.symbol === marketData?.assetPair?.split('/')[0]) {
+            return poolPrices.token0Price;
+        } else {
+            return poolPrices.token1Price;
+        }
     });
 
     let displayExchangeRate = $derived(() => {
@@ -423,34 +502,99 @@
     }
 
     /**
-     * Handles changes to the pay amount and calculates the corresponding receive amount
-     * based on the token pair and exchange rate
-     * 
-     * @param value - The new pay amount
+     * Handles changes to the pay amount
+     * Updates the receive amount based on the exchange rate
      */
-    function handlePayAmountChange(value: number) {
+    function handlePayAmountChange(value: number): void {
         payAmount = value;
+        updateReceiveAmount();
+    }
+
+    /**
+     * Updates the receive amount based on the pay amount and real pool prices
+     * Uses the swap service to calculate accurate swap amounts
+     */
+    async function updateReceiveAmount(): Promise<void> {
+        if (payAmount <= 0 || !marketId || !payToken?.symbol) {
+            receiveAmount = 0;
+            return;
+        }
         
-        // Calculate receive amount based on exchange rate
-        const isBaseToken = payToken?.symbol === 'ETH' || payToken?.symbol === 'BTC';
-        const isStablecoin = ['USDC', 'DAI', 'USDT'].includes(payToken?.symbol || '');
-        const otherIsBaseToken = receiveToken?.symbol === 'ETH' || receiveToken?.symbol === 'BTC';
-        const otherIsStablecoin = ['USDC', 'DAI', 'USDT'].includes(receiveToken?.symbol || '');
+        // Track if we've already shown a zero liquidity warning in this function
+        let hasShownZeroLiquidityWarning = false;
         
-        if (isBaseToken && otherIsStablecoin) {
-            // Base token to stablecoin: multiply by base token price
-            const price = payToken?.symbol === 'ETH' ? ethPrice : 45000; // Use ethPrice for ETH, mock price for BTC
-            receiveAmount = value * price;
-        } else if (isStablecoin && otherIsBaseToken) {
-            // Stablecoin to base token: divide by base token price
-            const price = receiveToken?.symbol === 'ETH' ? ethPrice : 45000; // Use ethPrice for ETH, mock price for BTC
-            receiveAmount = price > 0 ? value / price : 0;
-        } else {
-            // Default 1:1 for other token pairs
-            receiveAmount = value;
+        // Early return if we don't have pool prices yet
+        if (!poolPrices) {
+            console.log('Pool prices not available yet, using simple calculation');
+            // Fallback to simple calculation
+            receiveAmount = payAmount * (exchangeRate() || 0);
+            return;
+        }
+        
+        try {
+            // Convert payAmount to bigint (assuming 18 decimals)
+            const amountBigInt = BigInt(Math.floor(payAmount * 10**18));
+            
+            // Get token addresses from market data
+            // Make sure we have market data
+            if (!marketData) {
+                console.error('Market data not available');
+                return;
+            }
+            
+            // Get the market data from the contract
+            const [baseSymbol, quoteSymbol] = marketData.assetPair.split('/');
+            
+            // Determine which token is being paid
+            const isToken0 = payToken.symbol === baseSymbol;
+            
+            // Get the pool key to access the actual token addresses
+            const poolKey = await getPoolKey(marketId);
+            if (!poolKey) {
+                throw new Error('Failed to get pool key for market');
+            }
+            
+            // Use the correct token address from the pool key
+            const tokenInAddress = isToken0 ? poolKey.currency0 : poolKey.currency1;
+            
+            // Log the token information for debugging
+            console.log('Using token addresses for swap quote:', {
+                isBaseToken: isToken0,
+                baseSymbol,
+                quoteSymbol,
+                tokenInAddress,
+                poolKey
+            });
+            
+            // Get swap quote from service
+            const quoteResult = await getSwapQuote(marketId, tokenInAddress, amountBigInt);
+            
+            if (quoteResult.success && quoteResult.quote) {
+                // Convert the output amount from bigint to number
+                receiveAmount = Number(quoteResult.quote.amountOut) / 10**18;
+                console.log('Swap quote received:', quoteResult.quote);
+            } else {
+                console.error('Failed to get swap quote:', quoteResult.error);
+                
+                // Check for zero liquidity error
+                if (quoteResult.error === 'ZERO_LIQUIDITY_POOL' && !hasShownZeroLiquidityWarning) {
+                    toastStore.warning(quoteResult.details || 'This pool has no liquidity. Swap quotes may not be accurate.', {
+                        duration: 6000,
+                        position: 'top-center'
+                    });
+                    hasShownZeroLiquidityWarning = true;
+                }
+                
+                // Fallback to simple calculation
+                receiveAmount = payAmount * (exchangeRate() || 0);
+            }
+        } catch (error) {
+            console.error('Error updating receive amount:', error);
+            // Fallback to simple calculation
+            receiveAmount = payAmount * (exchangeRate() || 0);
         }
     }
-    
+
     /**
      * Handles changes to the receive amount and calculates the corresponding pay amount
      * based on the token pair and exchange rate

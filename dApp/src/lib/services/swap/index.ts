@@ -3,5 +3,8 @@
  * @module services/swap
  */
 
-export * from './types';
-export * from './operations';
+// Import and re-export types
+export type { PriceFetchResult, SwapQuoteResult, PoolPrices, SwapQuote } from './types.js';
+
+// Import and re-export operations
+export { fetchPoolPrices, getSwapQuote } from './operations.js';
