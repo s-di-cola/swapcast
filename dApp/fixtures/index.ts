@@ -14,6 +14,7 @@ import { CONTRACT_ADDRESSES, WHALE_ADDRESSES, setupWallets } from './utils/walle
 import { getPredictionManager } from '../src/generated/types/PredictionManager';
 import { getPoolManager } from '../src/generated/types/PoolManager';
 import chalk from 'chalk';
+import { validatePools } from './test/pool-test';
 
 /**
  * Configuration constants for fixtures generation
@@ -224,6 +225,8 @@ async function main() {
 		if (totalPredictionsFailed > 0) {
 			console.log(chalk.yellow(`⚠️ Failed markets: ${totalPredictionsFailed}`));
 		}
+		console.log(chalk.blue(`\n🧪 VALIDATING POOLS`));
+		await validatePools();
 	} catch (error) {
 		console.error(chalk.red('❌ Error generating fixtures:'));
 		console.error(error);

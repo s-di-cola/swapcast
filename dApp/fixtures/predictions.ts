@@ -8,7 +8,7 @@ import { formatEther, parseEther, type Address, createPublicClient, http } from 
 import { anvil } from 'viem/chains';
 import { CONTRACT_ADDRESSES, WHALE_ADDRESSES } from './utils/wallets';
 import { getPredictionManager } from '../src/generated/types/PredictionManager';
-import { recordPredictionViaSwap, OUTCOME_BEARISH, OUTCOME_BULLISH } from './utils/swapPrediction';
+import { recordPredictionViaSwap, OUTCOME_BEARISH, OUTCOME_BULLISH } from './utils/predictions';
 import chalk from 'chalk';
 import type { MarketCreationResult } from './markets';
 
