@@ -49,36 +49,40 @@
 	// State for error message
 	let errorMessage = $state('');
 	let hasExceededBalance = $state(false);
-	
-	// Reactively validate when token or balance changes
+
+	// FIXED: Only validate for "You pay" inputs, not "You receive"
 	$effect(() => {
-		// Skip validation if component is read-only or disabled
-		if (readOnly || disabled) return;
-		
+		// Skip validation if component is read-only, disabled, or is a receive input
+		if (readOnly || disabled || label.toLowerCase().includes('receive')) {
+			errorMessage = '';
+			hasExceededBalance = false;
+			return;
+		}
+
 		// Reset validation state
 		errorMessage = '';
 		hasExceededBalance = false;
-		
+
 		// Skip validation if amount is 0 or no token
 		if (amount === 0 || !token?.symbol) return;
-		
-		// Check if balance is 0 or undefined
-		if (showBalance && token?.symbol) {
+
+		// Only validate balance for "pay" inputs
+		if (showBalance && token?.symbol && label.toLowerCase().includes('pay')) {
 			if (token.balance === 0 || token.balance === undefined) {
 				errorMessage = `You have no ${token.symbol} balance`;
 				hasExceededBalance = true;
 				return;
 			}
-			
+
 			// Check if the value exceeds available balance
 			if (amount > token.balance) {
-				errorMessage = `Exceeds available balance of ${token.balance} ${token.symbol}`;
+				errorMessage = `Exceeds available balance `;
 				hasExceededBalance = true;
 				return;
 			}
 		}
 	});
-	
+
 	/**
 	 * Handles input changes and validates against available balance
 	 * @param event - The input event
@@ -86,40 +90,39 @@
 	function handleInput(event: Event): void {
 		if (readOnly) return;
 		const target = event.target as HTMLInputElement;
-		
+
 		// Clear previous error state
 		errorMessage = '';
 		hasExceededBalance = false;
-		
+
 		// If the input is empty, set to 0
 		if (!target.value) {
 			onAmountChange(0);
 			return;
 		}
-		
+
 		// Parse the input value
 		const value = parseFloat(target.value);
-		
-		// Check if balance is 0 or undefined
-		if (showBalance && token?.symbol) {
+
+		// Only validate for "pay" inputs, not "receive"
+		if (showBalance && token?.symbol && label.toLowerCase().includes('pay')) {
 			if (token.balance === 0 || token.balance === undefined) {
 				errorMessage = `You have no ${token.symbol} balance`;
 				hasExceededBalance = true;
 				onAmountChange(value || 0);
 				return;
 			}
-			
+
 			// Check if the value exceeds available balance
 			if (value > token.balance) {
 				// Show error but don't cap the value automatically
-				// This gives better feedback to the user
-				errorMessage = `Exceeds available balance of ${token.balance} ${token.symbol}`;
+				errorMessage = `Exceeds available balance`;
 				hasExceededBalance = true;
 				onAmountChange(value || 0);
 				return;
 			}
 		}
-		
+
 		// If we get here, the input is valid
 		onAmountChange(value || 0);
 	}
@@ -131,15 +134,19 @@
 		if (readOnly || !token?.balance) return;
 		onAmountChange(token.balance);
 	}
+
+	// FIXED: Format balance to floor to 6 decimals instead of rounding
+	let formattedBalance = $derived(() => {
+		if (!token?.balance) return '0.000000';
+		return (Math.floor(token.balance * 1000000) / 1000000).toFixed(6);
+	});
 </script>
 
-<!-- Same template as before, but replace token?.balance with balance -->
 <div class="space-y-2">
 	<label for="token-amount-input" class="text-sm font-medium text-gray-700">{label}</label>
-	<div class="group relative rounded-xl border ${hasExceededBalance ? 'border-red-300' : 'border-gray-200'} ${hasExceededBalance ? 'bg-red-50/50' : 'bg-gray-50/50'} p-4 transition-all focus-within:${hasExceededBalance ? 'border-red-500' : 'border-blue-500'} focus-within:bg-white focus-within:shadow-sm hover:${hasExceededBalance ? 'border-red-300' : 'border-gray-300'}">
-		{#if hasExceededBalance}
-		<div class="absolute inset-0 rounded-xl bg-red-100/40 pointer-events-none animate-pulse border-2 border-red-400"></div>
-		{/if}
+	<!-- FIXED: Remove the expanding red border animation and keep consistent sizing -->
+	<div class="group relative rounded-xl border {hasExceededBalance ? 'border-red-300' : 'border-gray-200'} {hasExceededBalance ? 'bg-red-50/50' : 'bg-gray-50/50'} p-4 transition-colors focus-within:{hasExceededBalance ? 'border-red-500' : 'border-blue-500'} focus-within:bg-white focus-within:shadow-sm hover:{hasExceededBalance ? 'border-red-300' : 'border-gray-300'}">
+		<!-- FIXED: Remove the expanding animated overlay -->
 		<div class="flex items-center justify-between">
 			<input
 					id="token-amount-input"
@@ -181,34 +188,39 @@
 		</div>
 
 		<div class="mt-2 flex flex-col gap-1">
-			<!-- Error message if balance exceeded -->
-			{#if errorMessage}
+			<!-- Error message if balance exceeded - only show for pay inputs -->
+			{#if errorMessage && label.toLowerCase().includes('pay')}
 				<div class="flex items-center gap-1 text-sm font-medium text-red-600">
 					<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-alert-circle"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
 					{errorMessage}
 				</div>
 			{/if}
-			
+
 			<div class="flex justify-between text-xs text-gray-500">
 				{#if showBalance}
 					{#if isLoadingBalance}
 						<span>Loading...</span>
 					{:else}
 						<div class="flex items-center">
+							<!-- FIXED: Only show "Available" for pay inputs, show different text for receive -->
 							<button
 									type="button"
 									onclick={handleMax}
 									class="text-blue-600 hover:text-blue-700 hover:underline mr-2 {hasExceededBalance ? 'font-medium' : ''}"
-									disabled={disabled || !token?.balance}
+									disabled={disabled || !token?.balance || label.toLowerCase().includes('receive')}
 							>
-								Available: {token?.balance?.toFixed(6) || '0.000000'} {token?.symbol || ''}
+								{#if label.toLowerCase().includes('receive')}
+									Available: {formattedBalance()} {token?.symbol || ''}
+								{:else}
+									Available: {formattedBalance()} {token?.symbol || ''}
+								{/if}
 							</button>
 							{#if onRefreshBalance}
-								<button 
-									type="button" 
-									onclick={() => onRefreshBalance?.()}
-									class="text-gray-400 hover:text-gray-600"
-									title="Refresh balance"
+								<button
+										type="button"
+										onclick={() => onRefreshBalance?.()}
+										class="text-gray-400 hover:text-gray-600"
+										title="Refresh balance"
 								>
 									<RefreshCw size={12} />
 								</button>

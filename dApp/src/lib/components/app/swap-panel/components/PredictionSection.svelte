@@ -1,5 +1,5 @@
 <script lang="ts">
-	import type { Token, PredictionSide } from '../../../types';
+	import type { Token, PredictionSide } from '../../../../types';
 	import { TrendingUp, TrendingDown, HelpCircle, Check } from 'lucide-svelte';
 
 	let {
