@@ -143,10 +143,8 @@
 </script>
 
 <div class="space-y-2">
-	<label for="token-amount-input" class="text-sm font-medium text-gray-700">{label}</label>
-	<!-- FIXED: Remove the expanding red border animation and keep consistent sizing -->
+	<label for="token-amount-input" class="text-sm font-medium text-gray-700 ">{label}</label>
 	<div class="group relative rounded-xl border {hasExceededBalance ? 'border-red-300' : 'border-gray-200'} {hasExceededBalance ? 'bg-red-50/50' : 'bg-gray-50/50'} p-4 transition-colors focus-within:{hasExceededBalance ? 'border-red-500' : 'border-blue-500'} focus-within:bg-white focus-within:shadow-sm hover:{hasExceededBalance ? 'border-red-300' : 'border-gray-300'}">
-		<!-- FIXED: Remove the expanding animated overlay -->
 		<div class="flex items-center justify-between">
 			<input
 					id="token-amount-input"
