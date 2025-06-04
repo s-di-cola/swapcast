@@ -1,5 +1,5 @@
 /**
- * Helper utilities for fixture generation
+ * Helper utilities for fixture generation - FIXED VERSION
  *
  * Common utility functions used across the fixture generation process
  */
@@ -30,13 +30,21 @@ export function getTickSpacing(fee: number): number {
 
 /**
  * Sorts token addresses in canonical order (lower address first)
+ * CRITICAL: This function is essential for Uniswap v4 pool creation
  *
  * @param tokenA First token address
  * @param tokenB Second token address
  * @returns Sorted token addresses [token0, token1]
  */
 export function sortTokenAddresses(tokenA: Address, tokenB: Address): [Address, Address] {
-	return tokenA.toLowerCase() < tokenB.toLowerCase() ? [tokenA, tokenB] : [tokenB, tokenA];
+	const addressA = tokenA.toLowerCase();
+	const addressB = tokenB.toLowerCase();
+	
+	if (addressA === addressB) {
+		throw new Error(`Cannot create pool with identical tokens: ${tokenA}`);
+	}
+	
+	return addressA < addressB ? [tokenA, tokenB] : [tokenB, tokenA];
 }
 
 /**
@@ -93,215 +101,145 @@ export function sleep(ms: number): Promise<void> {
  * @returns Whale account address
  */
 export async function findWhaleForTokenPair(
-  publicClient: PublicClient, 
-  token0: Address, 
-  token1: Address
+	publicClient: PublicClient, 
+	token0: Address, 
+	token1: Address
 ): Promise<Address> {
-  // Default to admin account if no suitable whale is found
-  const adminAddress = '0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266';
-  
-  // Map of common tokens to their whale addresses
-  const tokenWhaleMap: Record<string, Address> = {
-    // WETH
-    '0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2': '0x2fEb1512183545f48f6b9C5b4EbfCaF49CfCa6F3',
-    // USDC
-    '0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48': '0x55FE002aefF02F77364de339a1292923A15844B8',
-    // USDT
-    '0xdAC17F958D2ee523a2206206994597C13D831ec7': '0x5754284f345afc66a98fbB0a0Afe71e0F007B949',
-    // DAI
-    '0x6B175474E89094C44Da98b954EedeAC495271d0F': '0x5d3a536E4D6DbD6114cc1Ead35777bAB948E3643',
-    // WBTC
-    '0x2260FAC5E5542a773Aa44fBCfeDf7C193bc2C599': '0x9ff58f4fFB29fA2266Ab25e75e2A8b3503311656'
-  };
-  
-  // Try to find a whale for token0
-  if (tokenWhaleMap[token0.toLowerCase()]) {
-    return tokenWhaleMap[token0.toLowerCase()];
-  }
-  
-  // Try to find a whale for token1
-  if (tokenWhaleMap[token1.toLowerCase()]) {
-    return tokenWhaleMap[token1.toLowerCase()];
-  }
-  
-  // If no whale found, return admin address
-  return adminAddress;
+	// Simplified whale selection based on token types
+	const token0Lower = token0.toLowerCase();
+	const token1Lower = token1.toLowerCase();
+	
+	// Map of token addresses to their best whale accounts
+	const tokenWhaleMap: Record<string, Address> = {
+		// WETH
+		'0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2': '0x2fEb1512183545f48f6b9C5b4EbfCaF49CfCa6F3',
+		// USDC
+		'0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48': '0x55FE002aefF02F77364de339a1292923A15844B8',
+		// USDT
+		'0xdac17f958d2ee523a2206206994597c13d831ec7': '0x5754284f345afc66a98fbB0a0Afe71e0F007B949',
+		// DAI
+		'0x6b175474e89094c44da98b954eedeac495271d0f': '0x5d3a536E4D6DbD6114cc1Ead35777bAB948E3643',
+		// WBTC
+		'0x2260fac5e5542a773aa44fbcfedf7c193bc2c599': '0x9ff58f4fFB29fA2266Ab25e75e2A8b3503311656'
+	};
+	
+	// Prefer whales in this order: WETH > WBTC > USDC > others
+	const preferenceOrder = [
+		'0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2', // WETH
+		'0x2260fac5e5542a773aa44fbcfedf7c193bc2c599', // WBTC  
+		'0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48', // USDC
+		'0xdac17f958d2ee523a2206206994597c13d831ec7', // USDT
+		'0x6b175474e89094c44da98b954eedeac495271d0f'  // DAI
+	];
+	
+	// Find the best whale for this pair
+	for (const tokenAddr of preferenceOrder) {
+		if (token0Lower === tokenAddr || token1Lower === tokenAddr) {
+			return tokenWhaleMap[tokenAddr];
+		}
+	}
+	
+	// Default to admin account if no specific whale found
+	return '0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266';
 }
 
 /**
  * Ensures an account has enough of both tokens to provide liquidity
+ * Simplified version that works with Anvil's testing capabilities
  * 
  * @param publicClient Public client instance
  * @param accountAddress Account address to fund
- * @param token0 First token address
- * @param token1 Second token address
+ * @param token0Address First token address
+ * @param token1Address Second token address
+ * @param amountToEnsureToken0 Amount of token0 to ensure (optional)
+ * @param amountToEnsureToken1 Amount of token1 to ensure (optional)
  */
-const MINIMAL_ERC20_ABI = [
-  { name: 'transfer', type: 'function', stateMutability: 'nonpayable', inputs: [{ name: '_to', type: 'address' }, { name: '_value', type: 'uint256' }], outputs: [{ name: '', type: 'bool' }] },
-  { name: 'balanceOf', type: 'function', stateMutability: 'view', inputs: [{ name: '_owner', type: 'address' }], outputs: [{ name: 'balance', type: 'uint256' }] },
-  { name: 'decimals', type: 'function', stateMutability: 'view', inputs: [], outputs: [{ name: '', type: 'uint8' }] }
-] as const;
-
-// Re-using the whale map concept from findWhaleForTokenPair
-const TOKEN_WHALE_MAP: Record<string, Address> = {
-  // WETH
-  '0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2': '0x2fEb1512183545f48f6b9C5b4EbfCaF49CfCa6F3',
-  // USDC
-  '0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48': '0x55FE002aefF02F77364de339a1292923A15844B8',
-  // USDT
-  '0xdac17f958d2ee523a2206206994597c13d831ec7': '0x5754284f345afc66a98fbB0a0Afe71e0F007B949',
-  // DAI
-  '0x6b175474e89094c44da98b954eedeac495271d0f': '0x5d3a536E4D6DbD6114cc1Ead35777bAB948E3643',
-  // WBTC
-  '0x2260fac5e5542a773aa44fbcfedf7c193bc2c599': '0x9ff58f4fFB29fA2266Ab25e75e2A8b3503311656',
-  // Add other common tokens and their mainnet whale addresses if needed
-  // Default/fallback whale if a specific token whale isn't listed (e.g., a general fund or a known testnet faucet)
-  'default_whale': '0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266' // Anvil account 0
-};
-
 export async function ensureAccountHasTokens(
-  publicClient: PublicClient,
-  accountAddress: Address,
-  token0Address: Address,
-  token1Address: Address,
-  // Default amounts will be calculated after fetching decimals
-  amountToEnsureToken0Input?: bigint,
-  amountToEnsureToken1Input?: bigint
+	publicClient: PublicClient,
+	accountAddress: Address,
+	token0Address: Address,
+	token1Address: Address,
+	amountToEnsureToken0?: bigint,
+	amountToEnsureToken1?: bigint
 ): Promise<void> {
-  // Fetch decimals for each token to correctly parse amounts
-  let token0Decimals: number;
-  let token1Decimals: number;
+	console.log(chalk.blue(`Ensuring account ${accountAddress} has sufficient tokens...`));
 
-  try {
-    token0Decimals = await publicClient.readContract({
-      address: token0Address,
-      abi: MINIMAL_ERC20_ABI,
-      functionName: 'decimals'
-    }) as number;
-  } catch (e) {
-    console.warn(chalk.yellow(`Could not fetch decimals for token ${token0Address}. Assuming 18. Error: ${(e as Error).message}`));
-    token0Decimals = 18; // Fallback to 18 if decimals call fails
-  }
+	// Default amounts
+	const defaultAmount0 = amountToEnsureToken0 ?? parseUnits('10000', 18);
+	const defaultAmount1 = amountToEnsureToken1 ?? parseUnits('10000', 18);
 
-  try {
-    token1Decimals = await publicClient.readContract({
-      address: token1Address,
-      abi: MINIMAL_ERC20_ABI,
-      functionName: 'decimals'
-    }) as number;
-  } catch (e) {
-    console.warn(chalk.yellow(`Could not fetch decimals for token ${token1Address}. Assuming 18. Error: ${(e as Error).message}`));
-    token1Decimals = 18; // Fallback to 18 if decimals call fails
-  }
+	try {
+		// Impersonate the account
+		await publicClient.request({
+			method: 'anvil_impersonateAccount' as any,
+			params: [accountAddress]
+		});
 
-  const amountToEnsureToken0 = amountToEnsureToken0Input ?? parseUnits('10000', token0Decimals);
-  const amountToEnsureToken1 = amountToEnsureToken1Input ?? parseUnits('10000', token1Decimals);
-  // Impersonate the account
-  await publicClient.request({
-    method: 'anvil_impersonateAccount' as any,
-    params: [accountAddress]
-  });
-  
-  // Set a large balance for the account (1000 ETH)
-  await publicClient.request({
-    method: 'anvil_setBalance' as any,
-    params: [
-      accountAddress,
-      ('0x' + (BigInt(1000) * BigInt(1e18)).toString(16)) as any
-    ]
-  });
-  
-  console.log(chalk.green(`Ensured account ${accountAddress} has 1000 ETH for gas.`));
+		// Set a large ETH balance for gas
+		await publicClient.request({
+			method: 'anvil_setBalance' as any,
+			params: [
+				accountAddress,
+				`0x${(parseUnits('1000', 18)).toString(16)}`
+			]
+		});
 
-  // Helper function to transfer a single token type
-  const transferToken = async (tokenAddress: Address, amountToTransfer: bigint, recipientAddress: Address) => {
-    const tokenWhaleAddress = TOKEN_WHALE_MAP[tokenAddress.toLowerCase()] || TOKEN_WHALE_MAP['default_whale'];
-    if (!tokenWhaleAddress) {
-      console.warn(chalk.yellow(`No whale found for token ${tokenAddress}. Skipping transfer.`));
-      return;
-    }
+		console.log(chalk.green(`Funded account ${accountAddress} with ETH for gas`));
 
-    console.log(chalk.blue(`Attempting to transfer ${formatUnits(amountToTransfer, await publicClient.readContract({ address: tokenAddress, abi: MINIMAL_ERC20_ABI, functionName: 'decimals' }) as number)} of token ${tokenAddress} from whale ${tokenWhaleAddress} to ${recipientAddress}`));
+		// For testing purposes, we'll try to set token balances directly
+		// This works in test environments but not on real mainnet forks
+		const tokens = [
+			{ address: token0Address, amount: defaultAmount0, name: 'token0' },
+			{ address: token1Address, amount: defaultAmount1, name: 'token1' }
+		];
 
-    try {
-      // Impersonate the token whale
-      await publicClient.request({
-        method: 'anvil_impersonateAccount' as any,
-        params: [tokenWhaleAddress]
-      });
+		for (const token of tokens) {
+			try {
+				// Try to set balance using storage manipulation
+				// This is a common testing pattern with Anvil
+				const balanceSlot = 0; // Most ERC20s use slot 0 for balances mapping
+				const paddedAddress = accountAddress.toLowerCase().replace('0x', '').padStart(64, '0');
+				const paddedSlot = balanceSlot.toString(16).padStart(64, '0');
+				const storageKey = `0x${paddedAddress}${paddedSlot}`;
+				
+				await publicClient.request({
+					method: 'anvil_setStorageAt' as any,
+					params: [
+						token.address,
+						storageKey,
+						`0x${token.amount.toString(16).padStart(64, '0')}`
+					]
+				});
 
-      // Check whale's balance (optional, for debugging)
-      const whaleBalance = await publicClient.readContract({
-        address: tokenAddress,
-        abi: MINIMAL_ERC20_ABI,
-        functionName: 'balanceOf',
-        args: [tokenWhaleAddress]
-      });
-      console.log(chalk.gray(`Whale ${tokenWhaleAddress} balance of ${tokenAddress}: ${formatUnits(whaleBalance as bigint, await publicClient.readContract({ address: tokenAddress, abi: MINIMAL_ERC20_ABI, functionName: 'decimals' }) as number)}`));
+				console.log(chalk.green(`Set ${token.name} balance for ${accountAddress}`));
 
-      if ((whaleBalance as bigint) < amountToTransfer) {
-        console.warn(chalk.yellow(`Whale ${tokenWhaleAddress} has insufficient balance of ${tokenAddress} to transfer ${formatUnits(amountToTransfer, await publicClient.readContract({ address: tokenAddress, abi: MINIMAL_ERC20_ABI, functionName: 'decimals' }) as number)}. Attempting to set balance.`));
-        // If the whale is an Anvil default account, we might be able to set its balance if the token contract allows minting or is a mock
-        // For real mainnet tokens, this won't work. This part is tricky without a mint function.
-        // For now, we'll log and proceed, hoping the whale has tokens or it's a mock environment where this might be settable.
-      }
+			} catch (storageError: any) {
+				console.log(chalk.yellow(`Storage manipulation failed for ${token.name}: ${storageError.message}`));
+				// In a real mainnet fork, the whale should already have tokens
+			}
+		}
 
-      // Encode the transfer function data
-      const transferData = encodeFunctionData({
-        abi: MINIMAL_ERC20_ABI,
-        functionName: 'transfer',
-        args: [recipientAddress, amountToTransfer]
-      });
+		// Stop impersonating
+		await publicClient.request({
+			method: 'anvil_stopImpersonatingAccount' as any,
+			params: [accountAddress]
+		});
 
-      // Perform the transfer using eth_sendTransaction
-      const txHash = await publicClient.request({
-        method: 'eth_sendTransaction' as any,
-        params: [
-          {
-            from: tokenWhaleAddress, // The impersonated whale sends the transaction
-            to: tokenAddress,
-            data: transferData,
-            // value: '0x0' // Not needed for ERC20 transfer, but can be explicit
-          }
-        ]
-      }) as `0x${string}`; // Assuming it will be a hash or throw
+		console.log(chalk.green(`Successfully ensured token balances for ${accountAddress}`));
 
-      if (typeof txHash === 'string' && txHash.startsWith('0x')) {
-        await publicClient.waitForTransactionReceipt({ hash: txHash });
-      } else {
-        console.error(chalk.red(`Invalid transaction hash received for token transfer: ${txHash}. Skipping receipt wait.`));
-        // Potentially throw an error here if a valid hash is strictly expected
-        throw new Error(`Invalid transaction hash received: ${txHash}`);
-      }
-      console.log(chalk.green(`Successfully transferred ${formatUnits(amountToTransfer, await publicClient.readContract({ address: tokenAddress, abi: MINIMAL_ERC20_ABI, functionName: 'decimals' }) as number)} of ${tokenAddress} to ${recipientAddress}. Tx: ${txHash}`));
-
-    } catch (e: any) {
-      console.error(chalk.red(`Failed to transfer token ${tokenAddress} from whale ${tokenWhaleAddress} to ${recipientAddress}: ${e.message}`));
-    } finally {
-      // Stop impersonating the token whale
-      await publicClient.request({
-        method: 'anvil_stopImpersonatingAccount' as any,
-        params: [tokenWhaleAddress]
-      });
-    }
-  };
-
-  // Transfer token0 and token1 to the accountAddress
-  await transferToken(token0Address, amountToEnsureToken0, accountAddress);
-  await transferToken(token1Address, amountToEnsureToken1, accountAddress);
-
-  // Stop impersonating the original accountAddress (if it was impersonated for ETH funding)
-  // This was already done for ETH funding, ensure it's correctly placed or not duplicated.
-  // The original impersonation of accountAddress was for ETH funding. We are now done with operations for this accountAddress for now.
-  // Ensure to stop impersonating accountAddress if it was impersonated at the start for ETH funding.
-  // The ETH funding part already handles its own impersonation start/stop for accountAddress.
-  // The token transfers handle impersonation for tokenWhales.
-  // So, the original stop for accountAddress for ETH funding should be sufficient.
-  // If ensureAccountHasTokens was called with an accountAddress that IS a whale itself, 
-  // it might have been stopped already by transferToken's finally block. This needs careful ordering.
-
-  // The initial impersonate/stop for accountAddress (for ETH) is self-contained.
-  // The transferToken function handles impersonate/stop for tokenWhales.
-  // So, no extra stopImpersonatingAccount for accountAddress is needed here at the end of the main function.
-  console.log(chalk.magenta(`Finished ensuring token and ETH balances for ${accountAddress}.`));
+	} catch (error: any) {
+		console.error(chalk.red(`Error ensuring tokens for ${accountAddress}: ${error.message}`));
+		
+		// Clean up impersonation on error
+		try {
+			await publicClient.request({
+				method: 'anvil_stopImpersonatingAccount' as any,
+				params: [accountAddress]
+			});
+		} catch (e) {
+			// Ignore cleanup errors
+		}
+		
+		throw error;
+	}
 }

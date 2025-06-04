@@ -95,8 +95,8 @@ async function main() {
 
 		// Setup wallets for testing
 		console.log(chalk.yellow('⚙️ Setting up test wallets...'));
-		const { publicClient, adminAccount, userAccounts } = await setupWallets();
-		console.log(chalk.green(`✅ Admin account: ${adminAccount.address}`));
+		const { publicClient, adminClient: adminAccount, userAccounts } = await setupWallets();
+		console.log(chalk.green(`✅ Admin account: ${adminAccount.account.address}`));
 		console.log(chalk.green(`✅ Set up ${userAccounts.length} user accounts`));
 
 		// Setup all accounts for predictions (regular accounts + whale accounts)
