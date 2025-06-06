@@ -7,6 +7,7 @@
     - [IPredictionManagerForDistributor](src/interfaces/IPredictionManagerForDistributor.sol/interface.IPredictionManagerForDistributor.md)
     - [IPredictionManagerForResolver](src/interfaces/IPredictionManagerForResolver.sol/interface.IPredictionManagerForResolver.md)
     - [ISwapCastNFT](src/interfaces/ISwapCastNFT.sol/interface.ISwapCastNFT.md)
+    - [IUniversalRouter](src/interfaces/IUniversalRouter.sol/interface.IUniversalRouter.md)
   - [❱ types](src/types/README.md)
     - [PredictionTypes](src/types/PredictionTypes.sol/contract.PredictionTypes.md)
   - [MarketLogic](src/MarketLogic.sol/library.MarketLogic.md)

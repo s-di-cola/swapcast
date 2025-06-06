@@ -1,5 +1,5 @@
 # SwapCastNFT
-[Git Source](https://github.com/s-di-cola/swapcast/blob/24f1d97376f2e8f564ca3649ab8e61b568c5788e/src/SwapCastNFT.sol)
+[Git Source](https://github.com/s-di-cola/swapcast/blob/10bd380d3ca954e00d476d112e2195c2a1a31bee/src/SwapCastNFT.sol)
 
 **Inherits:**
 ERC721, Ownable, [ISwapCastNFT](/src/interfaces/ISwapCastNFT.sol/interface.ISwapCastNFT.md)
