@@ -19,7 +19,8 @@ const TARGET_CONTRACTS = [
   'Treasury',
   'MarketLogic',
   'PoolManager',
-  'StateView'
+  'StateView',
+  'IUniversalRouter'
 ];
 
 if (!existsSync(generatedDir)) {
