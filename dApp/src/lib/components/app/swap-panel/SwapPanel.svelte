@@ -9,12 +9,14 @@
     import {ArrowUpDown} from 'lucide-svelte';
     import {Spinner} from 'flowbite-svelte';
     import {getTokenBalance} from "$lib/services/balance";
-    import { executeSwapWithPrediction } from '$lib/services/swap/universalRouter';
-    import { parseUnits } from 'viem';
+    import { executeSwapWithPrediction } from '$lib/services/swap';
+    import { parseUnits, createPublicClient, http, formatUnits, type Address } from 'viem';
     import { fetchPoolPrices, getSwapQuote } from '$lib/services/swap';
     import { getPoolKey } from '$lib/services/market/operations';
     import { toastStore } from '$lib/stores/toastStore';
-	import { appKit } from '$lib/configs/wallet.config';
+    import { appKit } from '$lib/configs/wallet.config';
+    import { getCurrentNetworkConfig } from '$lib/utils/network';
+    import { getPredictionManager } from '$generated/types/PredictionManager';
 
     // Props
     let {
@@ -29,11 +31,40 @@
         disabled?: boolean;
     } = $props();
 
+    // Native ETH address for Uniswap V4
+    const NATIVE_ETH_ADDRESS = '0x0000000000000000000000000000000000000000';
+
+    // Token address mapping for native ETH support
+    function getTokenAddress(symbol: string): Address {
+        switch (symbol.toUpperCase()) {
+            case 'ETH':
+                return NATIVE_ETH_ADDRESS; // Native ETH
+            case 'USDC':
+                return '0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48';
+            case 'USDT':
+                return '0xdAC17F958D2ee523a2206206994597C13D831ec7';
+            case 'DAI':
+                return '0x6B175474E89094C44Da98b954EedeAC495271d0F';
+            case 'BTC':
+            case 'WBTC':
+                return '0x2260FAC5E5542a773Aa44fBCfeDf7C193bc2C599';
+            default:
+                throw new Error(`Unknown token symbol: ${symbol}`);
+        }
+    }
+
+    // Get token decimals
+    function getTokenDecimals(address: Address): number {
+        if (address === NATIVE_ETH_ADDRESS) return 18; // ETH
+        if (address === '0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48') return 6; // USDC
+        return 18; // Default for most tokens
+    }
+
     // Internal state
     let payAmount = $state(0);
     let receiveAmount = $state(0);
     let payToken = $state<Token>({symbol: 'ETH', name: 'Ethereum'});
-    let receiveToken = $state<Token>({symbol: 'USDC', name: 'USD Coin'});
+    let receiveToken = $state<Token>({symbol: 'USDT', name: 'Tether'});
     let predictionSide = $state<PredictionSide>(undefined);
     let predictedTargetPrice = $state<number | undefined>(undefined);
     let showConfirmationModal = $state(false);
@@ -67,56 +98,79 @@
     let totalBearWeight = $state(0);
     let protocolFeeRate = $state(0.003);
 
-    // Check wallet connection status
+    // FIXED: Wallet connection check (prevents infinite loop)
     $effect(() => {
+        let mounted = true;
+
         const checkConnection = () => {
+            if (!mounted) return;
+
             const account = appKit.getAccount();
             const newAddress = account?.address || null;
             const connected = appKit.getIsConnectedState();
 
-            connectedAddress = newAddress;
-            isConnected = connected && !!newAddress;
+            // Only update if values actually changed
+            if (newAddress !== connectedAddress || connected !== isConnected) {
+                connectedAddress = newAddress;
+                isConnected = connected && !!newAddress;
 
-            console.log('Wallet status:', { connected, newAddress, isConnected });
+                console.log('Wallet status:', { connected, newAddress, isConnected });
+            }
         };
 
+        // Check immediately
         checkConnection();
-        // Listen for connection changes if available
-        const interval = setInterval(checkConnection, 1000);
-        return () => clearInterval(interval);
+
+        // Set up interval with longer delay to reduce frequency
+        const interval = setInterval(checkConnection, 2000); // Every 2 seconds instead of 1
+
+        // Cleanup function
+        return () => {
+            mounted = false;
+            clearInterval(interval);
+        };
     });
 
-    // Fetch balances when wallet connects or tokens change
+    /**
+     * Fetches token balances for the connected wallet
+     * @returns Promise that resolves when balances are updated
+     */
+    async function fetchBalances() {
+        if (!isConnected || !connectedAddress || !payToken?.symbol || !receiveToken?.symbol) {
+            console.log('Skipping balance fetch:', { isConnected, connectedAddress, payToken: payToken?.symbol, receiveToken: receiveToken?.symbol });
+            payTokenBalance = 0;
+            receiveTokenBalance = 0;
+            return;
+        }
+
+        isLoadingBalances = true;
+        console.log('Fetching balances for:', payToken.symbol, receiveToken.symbol);
+
+        try {
+            const [payBalance, receiveBalance] = await Promise.all([
+                getTokenBalance(connectedAddress, payToken.symbol),
+                getTokenBalance(connectedAddress, receiveToken.symbol)
+            ]);
+
+            payTokenBalance = payBalance;
+            receiveTokenBalance = receiveBalance;
+
+            console.log('Balances fetched:', { payBalance, receiveBalance });
+        } catch (error) {
+            console.error('Failed to fetch balances:', error);
+            payTokenBalance = 0;
+            receiveTokenBalance = 0;
+        } finally {
+            isLoadingBalances = false;
+        }
+    }
+
     $effect(() => {
-        const fetchBalances = async () => {
-            if (!isConnected || !connectedAddress || !payToken?.symbol || !receiveToken?.symbol) {
-                console.log('Skipping balance fetch:', { isConnected, connectedAddress, payToken: payToken?.symbol, receiveToken: receiveToken?.symbol });
-                payTokenBalance = 0;
-                receiveTokenBalance = 0;
-                return;
-            }
-
-            isLoadingBalances = true;
-            console.log('Fetching balances for:', payToken.symbol, receiveToken.symbol);
-
-            try {
-                const [payBalance, receiveBalance] = await Promise.all([
-                    getTokenBalance(connectedAddress, payToken.symbol),
-                    getTokenBalance(connectedAddress, receiveToken.symbol)
-                ]);
-
-                payTokenBalance = payBalance;
-                receiveTokenBalance = receiveBalance;
-
-                console.log('Balances fetched:', { payBalance, receiveBalance });
-            } catch (error) {
-                console.error('Failed to fetch balances:', error);
-                payTokenBalance = 0;
-                receiveTokenBalance = 0;
-            } finally {
-                isLoadingBalances = false;
-            }
-        };
+        if (!isConnected || !connectedAddress) {
+            payTokenBalance = 0;
+            receiveTokenBalance = 0;
+            return;
+        }
 
         fetchBalances();
     });
@@ -145,12 +199,12 @@
                     payToken = {
                         symbol: baseSymbol,
                         name: baseSymbol,
-                        balance: payTokenBalance // Set current balance
+                        balance: payTokenBalance
                     };
                     receiveToken = {
                         symbol: quoteSymbol,
                         name: quoteSymbol,
-                        balance: receiveTokenBalance // Set current balance
+                        balance: receiveTokenBalance
                     };
                 }
             } catch (error) {
@@ -229,7 +283,7 @@
 
     // FIXED: Use 1% instead of 10% for prediction stake
     let predictionStakeAmount = $derived(() => {
-        // 1% of pay amount, minimum 0.001 ETH (not 0.01)
+        // 1% of pay amount, minimum 0.001 ETH
         return Math.max(0.001, payAmount * 0.01);
     });
 
@@ -268,8 +322,6 @@
                 }
             }
         }
-
-        // Don't validate receive amount - it's calculated automatically
 
         if (!predictionSide) {
             errors.push('Select a price prediction');
@@ -312,69 +364,226 @@
         onPredictionSelect?.(side, targetPrice);
     }
 
+    /**
+     * FIXED: Executes the swap and prediction transaction with native ETH support
+     */
     async function executeSwapAndPredict() {
-        if (!isFormValid()) return;
+        console.log('=== FIXED executeSwapAndPredict called ===');
+        if (!isFormValid()) {
+            console.error('Form is not valid');
+            return;
+        }
 
         isSubmitting = true;
         try {
+            console.log('Starting swap and prediction execution with:', {
+                marketData: marketData?.id,
+                payToken: payToken?.symbol,
+                receiveToken: receiveToken?.symbol,
+                predictionSide,
+                predictedTargetPrice,
+                payAmount,
+                receiveAmount,
+                predictionStakeAmount: predictionStakeAmount()
+            });
+
             if (!marketData || !payToken || !receiveToken || !predictionSide || !predictedTargetPrice) {
                 throw new Error('Missing required parameters for swap and prediction');
             }
 
             // Get the pool key for the swap using the market ID
+            console.log('Getting pool key for market ID:', marketData.id);
             const poolKey = await getPoolKey(marketData.id);
             if (!poolKey) {
                 throw new Error('Failed to get pool key');
             }
+            console.log('Pool key retrieved:', poolKey);
 
-            // Determine swap direction (zeroForOne)
-            // Default to true if address is undefined
-            const zeroForOne = poolKey.currency0.toLowerCase() === (payToken?.address?.toLowerCase() || poolKey.currency0.toLowerCase());
+            // FIXED: Get actual token addresses for native ETH support
+            const actualPayTokenAddress = getTokenAddress(payToken.symbol);
+            const actualReceiveTokenAddress = getTokenAddress(receiveToken.symbol);
 
-            // Convert amounts to bigint with proper decimals
-            const amountIn = parseUnits(
-                payAmount.toString(),
-                payToken?.decimals || 18
+            // FIXED: Determine swap direction based on ACTUAL pool configuration
+            const isPayTokenCurrency0 = actualPayTokenAddress.toLowerCase() === poolKey.currency0.toLowerCase();
+            const zeroForOne = isPayTokenCurrency0;
+
+            console.log('NATIVE ETH Swap direction analysis:', {
+                payTokenSymbol: payToken.symbol,
+                receiveTokenSymbol: receiveToken.symbol,
+                actualPayTokenAddress,
+                actualReceiveTokenAddress,
+                poolCurrency0: poolKey.currency0,
+                poolCurrency1: poolKey.currency1,
+                isPayTokenCurrency0,
+                zeroForOne,
+                isNativeETH: actualPayTokenAddress === NATIVE_ETH_ADDRESS
+            });
+
+            // VALIDATION: Ensure both tokens are actually in this pool
+            const isValidPair = (
+                (actualPayTokenAddress.toLowerCase() === poolKey.currency0.toLowerCase() &&
+                    actualReceiveTokenAddress.toLowerCase() === poolKey.currency1.toLowerCase()) ||
+                (actualPayTokenAddress.toLowerCase() === poolKey.currency1.toLowerCase() &&
+                    actualReceiveTokenAddress.toLowerCase() === poolKey.currency0.toLowerCase())
             );
-            
+
+            if (!isValidPair) {
+                throw new Error(`Token pair mismatch: trying to swap ${payToken.symbol}→${receiveToken.symbol} but pool is ${poolKey.currency0}/${poolKey.currency1}`);
+            }
+
+            // FIXED: Use correct decimals for each token
+            const payTokenDecimals = getTokenDecimals(actualPayTokenAddress);
+            const receiveTokenDecimals = getTokenDecimals(actualReceiveTokenAddress);
+
+            const amountIn = parseUnits(payAmount.toString(), payTokenDecimals);
+            console.log('Amount in (parsed):', amountIn.toString(), `(${payTokenDecimals} decimals)`);
+
             // Calculate minimum amount out (with 0.5% slippage)
             const slippage = 0.005; // 0.5%
             const amountOutMinimum = parseUnits(
                 (receiveAmount * (1 - slippage)).toString(),
-                receiveToken?.decimals || 18
+                receiveTokenDecimals
             );
+            console.log('Amount out minimum (parsed):', amountOutMinimum.toString(), `(${receiveTokenDecimals} decimals)`);
 
-            // Map prediction side to outcome
-            // Convert from PredictionSide type to numeric outcome
+            // FIXED: Map prediction side to outcome correctly
             const outcome = predictionSide === 'above_target' ? 1 : 0;
+            console.log('Prediction outcome:', outcome, '(', predictionSide, ')');
 
-            // Calculate conviction stake (for now, use a fixed amount)
-            const convictionStake = parseUnits('0.01', 18); // 0.01 ETH
+            // FIXED: Use the actual prediction stake amount from the UI (always in ETH)
+            const convictionStakeWei = parseUnits(predictionStakeAmount().toString(), 18);
+            console.log('Conviction stake:', {
+                amount: predictionStakeAmount(),
+                wei: convictionStakeWei.toString()
+            });
+
+            // VALIDATION: Check if user has enough ETH for the conviction stake + protocol fee
+            if (connectedAddress) {
+                const { rpcUrl, chain } = getCurrentNetworkConfig();
+                const publicClient = createPublicClient({
+                    chain,
+                    transport: http(rpcUrl)
+                });
+
+                const balance = await publicClient.getBalance({ address: connectedAddress as `0x${string}` });
+
+                // Get protocol fee
+                const predictionManager = getPredictionManager({
+                    address: process.env.PUBLIC_PREDICTIONMANAGER_ADDRESS as Address,
+                    chain,
+                    transport: http(rpcUrl)
+                });
+                const protocolFeeBps = await predictionManager.read.protocolFeeBasisPoints();
+                const protocolFee = (convictionStakeWei * protocolFeeBps) / 10000n;
+                const totalRequired = convictionStakeWei + protocolFee;
+
+                console.log('ETH Balance Check:', {
+                    userBalance: formatUnits(balance, 18),
+                    convictionStake: formatUnits(convictionStakeWei, 18),
+                    protocolFee: formatUnits(protocolFee, 18),
+                    totalRequired: formatUnits(totalRequired, 18)
+                });
+
+                if (balance < totalRequired) {
+                    throw new Error(`Insufficient ETH for prediction. Need ${formatUnits(totalRequired, 18)} ETH, have ${formatUnits(balance, 18)} ETH`);
+                }
+            }
 
             // Execute the swap with prediction
-            const txHash = await executeSwapWithPrediction(
-                poolKey,
-                zeroForOne,
-                amountIn,
-                amountOutMinimum,
-                BigInt(marketData.id),
-                outcome,
-                convictionStake
-            );
+            console.log('Executing swap with prediction (FIXED)...');
+            try {
+                console.log('Sending transaction and waiting for confirmation...');
+                const txHash = await executeSwapWithPrediction(
+                    poolKey,
+                    zeroForOne,
+                    amountIn,
+                    amountOutMinimum,
+                    BigInt(marketData.id),
+                    outcome,
+                    convictionStakeWei
+                );
 
-            // Show success message
-            toastStore.success('Swap and prediction executed successfully!');
+                console.log('Transaction confirmed successfully! Hash:', txHash);
 
-            // Reset form
-            showConfirmationModal = false;
-            payAmount = 0;
-            receiveAmount = 0;
-            predictionSide = undefined;
-            predictedTargetPrice = undefined;
+                // Show success message only after transaction is confirmed
+                toastStore.success('Swap and prediction executed successfully!', {
+                    duration: 5000
+                });
+
+                // Refresh balances and market data immediately
+                console.log('Refreshing data after successful transaction...');
+                try {
+                    // Refresh balances
+                    console.log('Refreshing balances...');
+                    await fetchBalances();
+
+                    // Refresh market data to get updated pool state
+                    if (marketId) {
+                        console.log('Refreshing market data...');
+                        marketData = await getMarketDetails(marketId);
+                    }
+
+                    // Refresh pool prices
+                    if (marketId) {
+                        console.log('Refreshing pool prices...');
+                        const result = await fetchPoolPrices(marketId);
+                        if (result.success && result.prices) {
+                            poolPrices = result.prices;
+                            console.log('New pool prices:', poolPrices);
+                        }
+                    }
+
+                    console.log('Balances and market data refreshed after swap');
+                } catch (refreshError) {
+                    console.error('Failed to refresh data after swap:', refreshError);
+                }
+
+                // Reset form
+                console.log('Resetting form...');
+                showConfirmationModal = false;
+                payAmount = 0;
+                receiveAmount = 0;
+                predictionSide = undefined;
+                predictedTargetPrice = undefined;
+
+            } catch (error) {
+                const txError = error as Error;
+                console.error('Transaction execution failed:', txError);
+
+                // FIXED: Better error messages based on the actual errors
+                let errorMessage = '';
+                if (txError.message?.includes('InvalidHookDataLength')) {
+                    errorMessage = 'Transaction failed: Invalid hook data format. Please try again.';
+                } else if (txError.message?.includes('NoConvictionStakeDeclaredInHookData')) {
+                    errorMessage = 'Transaction failed: No prediction stake declared. Please set a prediction amount.';
+                } else if (txError.message?.includes('MarketDoesNotExist')) {
+                    errorMessage = 'Transaction failed: This prediction market does not exist.';
+                } else if (txError.message?.includes('MarketAlreadyResolved')) {
+                    errorMessage = 'Transaction failed: This market has already been resolved.';
+                } else if (txError.message?.includes('MarketExpired')) {
+                    errorMessage = 'Transaction failed: This market has expired and no longer accepts predictions.';
+                } else if (txError.message?.includes('user rejected')) {
+                    errorMessage = 'Transaction was cancelled by the user.';
+                } else if (txError.message?.includes('insufficient funds')) {
+                    errorMessage = 'Transaction failed: Insufficient ETH balance.';
+                } else if (txError.message?.includes('Insufficient ETH')) {
+                    errorMessage = txError.message; // Use the detailed balance error message
+                } else {
+                    errorMessage = `Transaction failed: ${txError.message || 'Unknown error'}`;
+                }
+
+                toastStore.error(errorMessage, {
+                    duration: 8000,
+                    position: 'top-center'
+                });
+            }
         } catch (error) {
             console.error('Failed to execute swap and prediction:', error);
-            toastStore.error(`Failed to execute swap: ${error instanceof Error ? error.message : 'Unknown error'}`);
+            toastStore.error(`Failed to execute swap: ${error instanceof Error ? error.message : 'Unknown error'}`, {
+                duration: 8000
+            });
         } finally {
+            console.log('Swap execution completed (success or failure)');
             isSubmitting = false;
         }
     }
@@ -429,21 +638,18 @@
         }
 
         try {
-            // Convert payAmount to bigint (assuming 18 decimals)
-            const amountBigInt = BigInt(Math.floor(payAmount * 10**18));
+            // Get actual token address for the pay token
+            const actualPayTokenAddress = getTokenAddress(payToken.symbol);
+            const payTokenDecimals = getTokenDecimals(actualPayTokenAddress);
 
-            // Get token addresses from market data
+            // Convert payAmount to bigint with correct decimals
+            const amountBigInt = parseUnits(payAmount.toString(), payTokenDecimals);
+
             // Make sure we have market data
             if (!marketData) {
                 console.error('Market data not available');
                 return;
             }
-
-            // Get the market data from the contract
-            const [baseSymbol, quoteSymbol] = marketData.assetPair.split('/');
-
-            // Determine which token is being paid
-            const isToken0 = payToken.symbol === baseSymbol;
 
             // Get the pool key to access the actual token addresses
             const poolKey = await getPoolKey(marketId);
@@ -451,24 +657,21 @@
                 throw new Error('Failed to get pool key for market');
             }
 
-            // Use the correct token address from the pool key
-            const tokenInAddress = isToken0 ? poolKey.currency0 : poolKey.currency1;
-
             // Log the token information for debugging
             console.log('Using token addresses for swap quote:', {
-                isBaseToken: isToken0,
-                baseSymbol,
-                quoteSymbol,
-                tokenInAddress,
+                payTokenSymbol: payToken.symbol,
+                actualPayTokenAddress,
                 poolKey
             });
 
             // Get swap quote from service
-            const quoteResult = await getSwapQuote(marketId, tokenInAddress, amountBigInt);
+            const quoteResult = await getSwapQuote(marketId, actualPayTokenAddress, amountBigInt);
 
             if (quoteResult.success && quoteResult.quote) {
-                // Convert the output amount from bigint to number
-                receiveAmount = Number(quoteResult.quote.amountOut) / 10**18;
+                // Convert the output amount from bigint to number with correct decimals
+                const receiveTokenAddress = quoteResult.quote.tokenOut;
+                const receiveTokenDecimals = getTokenDecimals(receiveTokenAddress);
+                receiveAmount = Number(quoteResult.quote.amountOut) / (10 ** receiveTokenDecimals);
                 console.log('Swap quote received:', quoteResult.quote);
             } else {
                 console.error('Failed to get swap quote:', quoteResult.error);
@@ -634,6 +837,7 @@
                     {/if}
 
                     <button
+                            type="button"
                             onclick={() => (showConfirmationModal = true)}
                             class="w-full rounded-xl bg-gradient-to-r from-blue-600 to-indigo-600 py-4 text-lg font-semibold text-white shadow-lg transition-all hover:from-blue-700 hover:to-indigo-700 hover:shadow-xl disabled:opacity-50 disabled:cursor-not-allowed"
                             disabled={!isFormValid()}

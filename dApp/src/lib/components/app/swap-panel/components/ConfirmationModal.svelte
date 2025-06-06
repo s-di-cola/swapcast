@@ -89,17 +89,16 @@
 							<div class="text-2xl font-semibold text-gray-900">{formatNumber(payAmount)}</div>
 							<div class="text-sm text-gray-500">{payToken?.symbol}</div>
 						</div>
-						<div class="text-right">
-							<div class="text-2xl font-semibold text-gray-900">→</div>
-							<div class="text-sm text-gray-500">
-								1 {payToken?.symbol} = {displayExchangeRate}
-								{receiveToken?.symbol}
-							</div>
+						<div class="flex-shrink-0 mx-2">
+							<div class="text-2xl font-semibold text-gray-900 text-center">→</div>
 						</div>
 						<div class="text-right">
 							<div class="text-2xl font-semibold text-gray-900">{formatNumber(receiveAmount)}</div>
 							<div class="text-sm text-gray-500">{receiveToken?.symbol}</div>
 						</div>
+					</div>
+					<div class="mt-2 text-center text-sm text-gray-500">
+						<span class="whitespace-nowrap">1 {payToken?.symbol} = {displayExchangeRate} {receiveToken?.symbol}</span>
 					</div>
 				</div>
 			</div>

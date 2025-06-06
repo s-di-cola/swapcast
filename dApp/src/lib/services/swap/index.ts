@@ -7,4 +7,10 @@
 export type { PriceFetchResult, SwapQuoteResult, PoolPrices, SwapQuote } from './types.js';
 
 // Import and re-export operations
-export { fetchPoolPrices, getSwapQuote } from './operations.js';
+export { 
+  fetchPoolPrices, 
+  getSwapQuote, 
+  executeSwapWithPrediction,
+  encodePredictionHookData,
+  PredictionTypes
+} from './operations.js';
