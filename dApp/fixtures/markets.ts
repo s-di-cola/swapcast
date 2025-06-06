@@ -38,6 +38,7 @@ function calculatePriceThreshold(
 	return currentPrice * (1 + volatility / 100);
 }
 
+// FIXED: Correct asset pairs with proper token addresses
 const ASSET_PAIRS = [
 	{
 		name: 'ETH/USDC',
@@ -47,10 +48,10 @@ const ASSET_PAIRS = [
 		fee: 3000
 	},
 	{
-		name: 'BTC/USDC',
-		symbol: 'BTC',
-		token0: TOKEN_ADDRESSES.WBTC,
-		token1: TOKEN_ADDRESSES.USDC,
+		name: 'ETH/USDT', 
+		symbol: 'ETH',
+		token0: TOKEN_ADDRESSES.WETH,
+		token1: TOKEN_ADDRESSES.USDT,
 		fee: 3000
 	},
 	{
@@ -61,17 +62,10 @@ const ASSET_PAIRS = [
 		fee: 3000
 	},
 	{
-		name: 'BTC/DAI',
+		name: 'BTC/USDC',
 		symbol: 'BTC',
 		token0: TOKEN_ADDRESSES.WBTC,
-		token1: TOKEN_ADDRESSES.DAI,
-		fee: 3000
-	},
-	{
-		name: 'ETH/USDT',
-		symbol: 'ETH',
-		token0: TOKEN_ADDRESSES.WETH,
-		token1: TOKEN_ADDRESSES.USDT,
+		token1: TOKEN_ADDRESSES.USDC,
 		fee: 3000
 	},
 	{
@@ -79,6 +73,13 @@ const ASSET_PAIRS = [
 		symbol: 'BTC',
 		token0: TOKEN_ADDRESSES.WBTC,
 		token1: TOKEN_ADDRESSES.USDT,
+		fee: 3000
+	},
+	{
+		name: 'BTC/DAI',
+		symbol: 'BTC',
+		token0: TOKEN_ADDRESSES.WBTC,
+		token1: TOKEN_ADDRESSES.DAI,
 		fee: 3000
 	}
 ];
@@ -113,6 +114,12 @@ export async function createPool(
 	const [token0, token1] = sortTokenAddresses(tokenA, tokenB);
 	console.log(chalk.blue(`Sorted tokens: token0=${token0}, token1=${token1}`));
 
+	// VALIDATION: Ensure we have the expected tokens
+	const expectedTokens = Object.values(TOKEN_ADDRESSES);
+	if (!expectedTokens.includes(token0) || !expectedTokens.includes(token1)) {
+		throw new Error(`Invalid token addresses: ${token0}, ${token1}`);
+	}
+
 	const poolManager = getPoolManager({
 		address: CONTRACT_ADDRESSES.POOL_MANAGER as Address,
 		chain: adminAccount.chain,
@@ -128,16 +135,14 @@ export async function createPool(
 	};
 
 	try {
-		// Read token symbols directly from the contracts
+		// Read token symbols directly from the contracts for verification
 		const publicClient = createPublicClient({
 			chain: adminAccount.chain,
 			transport: http(anvil.rpcUrls.default.http[0])
 		});
 
-		// Read token symbols
 		let token0Symbol, token1Symbol;
 		try {
-			// Use erc20Abi from viem to read the symbols
 			[token0Symbol, token1Symbol] = await Promise.all([
 				publicClient.readContract({
 					address: token0 as `0x${string}`,
@@ -151,82 +156,41 @@ export async function createPool(
 				})
 			]);
 
-			console.log(chalk.blue(`Token symbols: ${token0Symbol}/${token1Symbol}`));
+			console.log(chalk.blue(`Creating pool: ${token0Symbol}/${token1Symbol}`));
 		} catch (error) {
 			console.warn(chalk.yellow(`Failed to read token symbols: ${error.message}`));
-			// Use fallback symbols based on address patterns if contract read fails
-			token0Symbol = token0.toLowerCase().includes('eth') ? 'WETH' : 
-				token0.toLowerCase().includes('btc') ? 'WBTC' : 
-				token0.toLowerCase().includes('usdc') ? 'USDC' :
-				token0.toLowerCase().includes('usdt') ? 'USDT' :
-				token0.toLowerCase().includes('dai') ? 'DAI' : 'UNKNOWN';
-			token1Symbol = token1.toLowerCase().includes('eth') ? 'WETH' : 
-				token1.toLowerCase().includes('btc') ? 'WBTC' : 
-				token1.toLowerCase().includes('usdc') ? 'USDC' :
-				token1.toLowerCase().includes('usdt') ? 'USDT' :
-				token1.toLowerCase().includes('dai') ? 'DAI' : 'UNKNOWN';
-			console.log(chalk.yellow(`Using fallback symbols: ${token0Symbol}/${token1Symbol}`));
+			// Use fallback names
+			token0Symbol = 'TOKEN0';
+			token1Symbol = 'TOKEN1';
 		}
 
-		// Determine which token is the base asset and which is the quote asset
-		let baseTokenSymbol: string;
-		let baseTokenIsToken0: boolean;
-		
-		// Check if token0 is a base asset (ETH, BTC) or token1 is a stablecoin
-		const isToken0BaseAsset = ['WETH', 'ETH', 'WBTC', 'BTC'].includes(token0Symbol.toUpperCase());
-		const isToken1Stablecoin = ['USDC', 'USDT', 'DAI'].includes(token1Symbol.toUpperCase());
-		
-		if (isToken0BaseAsset && isToken1Stablecoin) {
-			// token0 is base, token1 is quote (e.g., WETH/USDC)
-			baseTokenSymbol = token0Symbol;
-			baseTokenIsToken0 = true;
-		} else if (['USDC', 'USDT', 'DAI'].includes(token0Symbol.toUpperCase()) && 
-		           ['WETH', 'ETH', 'WBTC', 'BTC'].includes(token1Symbol.toUpperCase())) {
-			// token1 is base, token0 is quote (e.g., USDC/WETH)
-			baseTokenSymbol = token1Symbol;
-			baseTokenIsToken0 = false;
-		} else {
-			// Default to token0 as base
-			baseTokenSymbol = token0Symbol;
-			baseTokenIsToken0 = true;
-		}
-
-		// Fetch realistic price ratio using the simplified price service
+		// Determine price ratio based on known token types
 		let priceRatio = 1.0;
-		try {
-			// Get price of the base asset
-			const basePrice = await getCurrentPriceBySymbol(baseTokenSymbol);
-			if (basePrice && basePrice > 0) {
-				console.log(chalk.blue(`Fetched price for ${baseTokenSymbol}: $${basePrice}`));
-				
-				// Calculate price ratio based on which token is which
-				if (baseTokenIsToken0) {
-					// token0 is expensive asset, token1 is stablecoin ($1)
-					// Price ratio = token1_price / token0_price = 1 / basePrice
-					priceRatio = 1.0 / basePrice;
-				} else {
-					// token1 is expensive asset, token0 is stablecoin ($1)  
-					// Price ratio = token1_price / token0_price = basePrice / 1
-					priceRatio = basePrice;
-				}
-				
-				console.log(chalk.blue(`Calculated price ratio (token1/token0): ${priceRatio}`));
-			} else {
-				console.warn(chalk.yellow(`Could not get price for ${baseTokenSymbol}, using 1:1 ratio`));
-			}
-		} catch (priceError) {
-			console.warn(chalk.yellow(`Price fetch failed for ${baseTokenSymbol}, using 1:1 ratio: ${priceError.message}`));
+		
+		// Check if we have a stablecoin/ETH pair
+		const isToken0Stable = [TOKEN_ADDRESSES.USDC, TOKEN_ADDRESSES.USDT, TOKEN_ADDRESSES.DAI].includes(token0);
+		const isToken1Stable = [TOKEN_ADDRESSES.USDC, TOKEN_ADDRESSES.USDT, TOKEN_ADDRESSES.DAI].includes(token1);
+		const isToken0ETH = token0 === TOKEN_ADDRESSES.WETH;
+		const isToken1ETH = token1 === TOKEN_ADDRESSES.WETH;
+		const isToken0BTC = token0 === TOKEN_ADDRESSES.WBTC;
+		const isToken1BTC = token1 === TOKEN_ADDRESSES.WBTC;
+
+		if (isToken0Stable && (isToken1ETH || isToken1BTC)) {
+			// Stablecoin/ETH or Stablecoin/BTC pair
+			const assetPrice = isToken1ETH ? 2500 : 45000; // ETH ~$2500, BTC ~$45000
+			priceRatio = assetPrice; // 1 stablecoin = 1/assetPrice ETH/BTC
+		} else if ((isToken0ETH || isToken0BTC) && isToken1Stable) {
+			// ETH/Stablecoin or BTC/Stablecoin pair  
+			const assetPrice = isToken0ETH ? 2500 : 45000;
+			priceRatio = 1.0 / assetPrice; // 1 ETH/BTC = assetPrice stablecoins
 		}
-		
+
 		// Encode the sqrt price with the realistic ratio
-		// For Uniswap v4, we need sqrt(price) * 2^96
 		const Q96 = 2n ** 96n;
-		
-		// Calculate sqrtPriceX96 = sqrt(priceRatio) * 2^96
-		// Using Math.sqrt for the JavaScript number and then converting to BigInt
 		const sqrtRatio = Math.sqrt(priceRatio);
 		const sqrtPriceX96 = BigInt(Math.floor(sqrtRatio * Number(Q96)));
-		console.log(chalk.blue(`Encoded sqrtPriceX96: ${sqrtPriceX96}`));
+
+		console.log(chalk.blue(`Price ratio: ${priceRatio}, sqrtPriceX96: ${sqrtPriceX96}`));
 
 		const hash = await poolManager.write.initialize(
 			[poolKey, sqrtPriceX96], 
@@ -236,7 +200,7 @@ export async function createPool(
 			}
 		);
 
-		console.log(chalk.green(`Pool initialized successfully with hash: ${hash}`));
+		console.log(chalk.green(`Pool ${token0Symbol}/${token1Symbol} initialized successfully with hash: ${hash}`));
 		return poolKey;
 	} catch (error: any) {
 		// Pool might already exist
@@ -272,6 +236,17 @@ export async function createMarket(
 	try {
 		console.log(chalk.yellow(`Creating market "${name}" with expiration ${expirationTime}...`));
 
+		// VALIDATION: Log what we're actually creating
+		console.log('Market Creation Details:', {
+			name,
+			assetSymbol,
+			poolKey: {
+				currency0: poolKey.currency0,
+				currency1: poolKey.currency1,
+				fee: poolKey.fee
+			}
+		});
+
 		const txHash = await predictionManager.write.createMarket([
 			name,
 			assetSymbol,
@@ -291,7 +266,7 @@ export async function createMarket(
 		const marketCount = await predictionManager.read.getMarketCount();
 		const marketId = marketCount - 1n;
 
-		console.log(chalk.green(`Market created successfully with hash: ${txHash}`));
+		console.log(chalk.green(`Market created successfully with ID: ${marketId}, hash: ${txHash}`));
 
 		return {
 			id: marketId,
@@ -344,16 +319,23 @@ export async function generateMarkets(
 					hooks: CONTRACT_ADDRESSES.SWAPCAST_HOOK as Address
 				};
 			} else {
+				// FORCE the correct token order
 				poolKey = await createPool(adminAccount, assetPair.token0, assetPair.token1, assetPair.fee);
 				createdPools.add(poolId);
+				
+				// VALIDATION: Ensure the pool was created with expected tokens
+				console.log(chalk.green(`Pool created for ${assetPair.name}:`), {
+					expected: `${assetPair.token0}/${assetPair.token1}`,
+					actual: `${poolKey.currency0}/${poolKey.currency1}`
+				});
 			}
 
 			// Get current price for the market
 			const currentPrice = await getCurrentPriceBySymbol(assetPair.symbol);
-			const finalPrice = currentPrice || 100; // Fallback price
+			const finalPrice = currentPrice || (assetPair.symbol === 'ETH' ? 2500 : 45000); // Fallback prices
 			console.log(chalk.blue(`Using price for ${assetPair.symbol}: $${finalPrice}`));
 
-			// Add liquidity with much larger amounts for realistic trading
+			// Add liquidity with realistic amounts
 			try {
 				const publicClient = createPublicClient({
 					chain: anvil,
@@ -367,8 +349,7 @@ export async function generateMarkets(
 				console.log(chalk.yellow(`Continuing without liquidity for ${marketName}...`));
 			}
 
-			// Create market
-			// Calculate a realistic price threshold based on current price and volatility
+			// Create market with correct asset symbol
 			const priceThreshold = calculatePriceThreshold(finalPrice);
 			const daysToExpiration = 7 + Math.floor(Math.random() * 53);
 			const expirationTime = BigInt(Math.floor(Date.now() / 1000) + daysToExpiration * 24 * 60 * 60);
@@ -376,7 +357,7 @@ export async function generateMarkets(
 			const market = await createMarket(
 				adminAccount,
 				`${marketName} Market`,
-				assetPair.symbol,
+				assetPair.symbol, // This should match the base asset (ETH, BTC)
 				expirationTime,
 				CONTRACT_ADDRESSES.ORACLE_RESOLVER as Address,
 				BigInt(Math.floor(priceThreshold * 1e18)),

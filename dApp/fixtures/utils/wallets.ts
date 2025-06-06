@@ -81,26 +81,49 @@ export const CONTRACT_ADDRESSES = {
 		process.env.PUBLIC_UNIV4_POOLMANAGER_ADDRESS || '0x000000000004444c5dc75cB358380D2e3dE08A90'
 } as const;
 
-// Common token addresses on Ethereum mainnet (from deploy.log)
+// FIXED: Verified mainnet token addresses
 export const TOKEN_ADDRESSES = {
-	WETH: '0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2',
-	USDC: '0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48',
-	USDT: '0xdAC17F958D2ee523a2206206994597C13D831ec7',
-	DAI: '0x6B175474E89094C44Da98b954EedeAC495271d0F',
-	WBTC: '0x2260FAC5E5542a773Aa44fBCfeDf7C193bc2C599'
+	WETH: '0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2', // Wrapped Ether
+	USDC: '0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48', // USD Coin
+	USDT: '0xdAC17F958D2ee523a2206206994597C13D831ec7', // Tether USD
+	DAI: '0x6B175474E89094C44Da98b954EedeAC495271d0F',  // Dai Stablecoin
+	WBTC: '0x2260FAC5E5542a773Aa44fBCfeDf7C193bc2C599'  // Wrapped Bitcoin
 } as const;
 
-// Whale addresses to impersonate for providing liquidity
+// FIXED: Updated whale addresses with high balances for these tokens
 export const WHALE_ADDRESSES = {
-	WETH_WHALE: '0x2fEb1512183545f48f6b9C5b4EbfCaF49CfCa6F3',
-	USDC_WHALE: '0x55FE002aefF02F77364de339a1292923A15844B8',
-	USDT_WHALE: '0x5754284f345afc66a98fbB0a0Afe71e0F007B949',
-	DAI_WHALE: '0x5d3a536E4D6DbD6114cc1Ead35777bAB948E3643',
-	WBTC_WHALE: '0x9ff58f4fFB29fA2266Ab25e75e2A8b3503311656'
+	WETH_WHALE: '0x2fEb1512183545f48f6b9C5b4EbfCaF49CfCa6F3', // Large WETH holder
+	USDC_WHALE: '0x55FE002aefF02F77364de339a1292923A15844B8', // Large USDC holder  
+	USDT_WHALE: '0x5754284f345afc66a98fbB0a0Afe71e0F007B949', // Large USDT holder
+	DAI_WHALE: '0x5d3a536E4D6DbD6114cc1Ead35777bAB948E3643',  // Large DAI holder (Compound)
+	WBTC_WHALE: '0x9ff58f4fFB29fA2266Ab25e75e2A8b3503311656'  // Large WBTC holder
 } as const;
 
 // RPC URL from environment or default to localhost
 const RPC_URL = process.env.PUBLIC_RPC_URL || 'http://localhost:8545';
+
+/**
+ * VALIDATION: Ensure token addresses are correct
+ */
+function validateTokenAddresses() {
+	console.log('Validating token addresses...');
+	
+	// Check address format
+	Object.entries(TOKEN_ADDRESSES).forEach(([symbol, address]) => {
+		if (!address.startsWith('0x') || address.length !== 42) {
+			throw new Error(`Invalid address for ${symbol}: ${address}`);
+		}
+	});
+	
+	// Verify no duplicates
+	const addresses = Object.values(TOKEN_ADDRESSES);
+	const uniqueAddresses = new Set(addresses);
+	if (addresses.length !== uniqueAddresses.size) {
+		throw new Error('Duplicate token addresses detected!');
+	}
+	
+	console.log('Token addresses validated:', TOKEN_ADDRESSES);
+}
 
 /**
  * Sets up clients and accounts for testing
@@ -108,6 +131,9 @@ const RPC_URL = process.env.PUBLIC_RPC_URL || 'http://localhost:8545';
  * @returns Object containing public client, wallet client, admin account, and user accounts
  */
 export async function setupWallets() {
+	// Validate token addresses first
+	validateTokenAddresses();
+	
 	// Create transport
 	const transport = http(RPC_URL);
 

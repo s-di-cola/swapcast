@@ -26,6 +26,8 @@ export function getTickSpacing(fee: number): number {
 /**
  * Sorts token addresses in canonical order (lower address first)
  * CRITICAL: Required for Uniswap v4 pool creation
+ * 
+ * FIXED: Added detailed logging to debug token sorting issues
  */
 export function sortTokenAddresses(tokenA: Address, tokenB: Address): [Address, Address] {
 	const addressA = tokenA.toLowerCase();
@@ -35,7 +37,16 @@ export function sortTokenAddresses(tokenA: Address, tokenB: Address): [Address, 
 		throw new Error(`Cannot create pool with identical tokens: ${tokenA}`);
 	}
 	
-	return addressA < addressB ? [tokenA, tokenB] : [tokenB, tokenA];
+	const sorted: [Address, Address] = addressA < addressB ? [tokenA, tokenB] : [tokenB, tokenA];
+	
+	// DEBUG: Log sorting for troubleshooting
+	console.log('Token sorting:', {
+		input: { tokenA, tokenB },
+		comparison: `${addressA} < ${addressB} = ${addressA < addressB}`,
+		output: sorted
+	});
+	
+	return sorted;
 }
 
 /**
