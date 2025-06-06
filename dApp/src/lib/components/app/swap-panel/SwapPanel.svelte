@@ -31,26 +31,31 @@
         disabled?: boolean;
     } = $props();
 
+    console.log('=== SWAPPANEL V2 INITIALIZATION ===');
+    console.log('Props:', { marketId, disabled });
+
     // Native ETH address for Uniswap V4
     const NATIVE_ETH_ADDRESS = '0x0000000000000000000000000000000000000000';
 
     // Token address mapping for native ETH support
     function getTokenAddress(symbol: string): Address {
-        switch (symbol.toUpperCase()) {
-            case 'ETH':
-                return NATIVE_ETH_ADDRESS; // Native ETH
-            case 'USDC':
-                return '0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48';
-            case 'USDT':
-                return '0xdAC17F958D2ee523a2206206994597C13D831ec7';
-            case 'DAI':
-                return '0x6B175474E89094C44Da98b954EedeAC495271d0F';
-            case 'BTC':
-            case 'WBTC':
-                return '0x2260FAC5E5542a773Aa44fBCfeDf7C193bc2C599';
-            default:
-                throw new Error(`Unknown token symbol: ${symbol}`);
+        const addressMap: Record<string, string> = {
+            'ETH': NATIVE_ETH_ADDRESS,
+            'USDC': '0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48',
+            'USDT': '0xdAC17F958D2ee523a2206206994597C13D831ec7',
+            'DAI': '0x6B175474E89094C44Da98b954EedeAC495271d0F',
+            'BTC': '0x2260FAC5E5542a773Aa44fBCfeDf7C193bc2C599',
+            'WBTC': '0x2260FAC5E5542a773Aa44fBCfeDf7C193bc2C599'
+        };
+
+        const address = addressMap[symbol.toUpperCase()];
+        if (!address) {
+            console.error(`Unknown token symbol: ${symbol}`);
+            throw new Error(`Unknown token symbol: ${symbol}`);
         }
+
+        console.log(`Token address mapping: ${symbol} → ${address}`);
+        return address as Address;
     }
 
     // Get token decimals
@@ -98,6 +103,10 @@
     let totalBearWeight = $state(0);
     let protocolFeeRate = $state(0.003);
 
+    console.log('=== INITIAL STATE ===');
+    console.log('payToken:', payToken);
+    console.log('receiveToken:', receiveToken);
+
     // FIXED: Wallet connection check (prevents infinite loop)
     $effect(() => {
         let mounted = true;
@@ -114,6 +123,7 @@
                 connectedAddress = newAddress;
                 isConnected = connected && !!newAddress;
 
+                console.log('=== WALLET STATUS UPDATE ===');
                 console.log('Wallet status:', { connected, newAddress, isConnected });
             }
         };
@@ -136,8 +146,16 @@
      * @returns Promise that resolves when balances are updated
      */
     async function fetchBalances() {
+        console.log('=== FETCH BALANCES CALLED ===');
+        console.log('Check requirements:', {
+            isConnected,
+            connectedAddress,
+            payTokenSymbol: payToken?.symbol,
+            receiveTokenSymbol: receiveToken?.symbol
+        });
+
         if (!isConnected || !connectedAddress || !payToken?.symbol || !receiveToken?.symbol) {
-            console.log('Skipping balance fetch:', { isConnected, connectedAddress, payToken: payToken?.symbol, receiveToken: receiveToken?.symbol });
+            console.log('Skipping balance fetch - missing requirements');
             payTokenBalance = 0;
             receiveTokenBalance = 0;
             return;
@@ -155,6 +173,7 @@
             payTokenBalance = payBalance;
             receiveTokenBalance = receiveBalance;
 
+            console.log('=== BALANCES FETCHED ===');
             console.log('Balances fetched:', { payBalance, receiveBalance });
         } catch (error) {
             console.error('Failed to fetch balances:', error);
@@ -166,7 +185,9 @@
     }
 
     $effect(() => {
+        console.log('=== BALANCE EFFECT TRIGGERED ===');
         if (!isConnected || !connectedAddress) {
+            console.log('Not connected, clearing balances');
             payTokenBalance = 0;
             receiveTokenBalance = 0;
             return;
@@ -177,7 +198,11 @@
 
     // Fetch market data when marketId changes
     $effect(() => {
+        console.log('=== MARKET DATA EFFECT ===');
+        console.log('MarketId:', marketId);
+
         if (!marketId) {
+            console.log('No marketId, clearing market data');
             marketData = null;
             return;
         }
@@ -187,25 +212,37 @@
             marketError = null;
 
             try {
+                console.log('Fetching market data for ID:', marketId);
                 marketData = await getMarketDetails(marketId);
+                console.log('Market data received:', marketData);
 
                 // Update internal state based on market data
                 totalBullWeight = Number(marketData?.totalStake1 || 0) / 1e18;
                 totalBearWeight = Number(marketData?.totalStake0 || 0) / 1e18;
 
-                // Set default tokens based on market asset pair
+                // FIXED: Set tokens based on market asset pair with debug
                 if (marketData?.assetPair) {
+                    console.log('=== SETTING TOKENS FROM MARKET ===');
+                    console.log('Asset pair from market:', marketData.assetPair);
+                    
                     const [baseSymbol, quoteSymbol] = marketData.assetPair.split('/');
+                    console.log('Parsed symbols:', { baseSymbol, quoteSymbol });
+                    
                     payToken = {
-                        symbol: baseSymbol,
-                        name: baseSymbol,
+                        symbol: baseSymbol.trim(),
+                        name: baseSymbol.trim(),
                         balance: payTokenBalance
                     };
                     receiveToken = {
-                        symbol: quoteSymbol,
-                        name: quoteSymbol,
+                        symbol: quoteSymbol.trim(),
+                        name: quoteSymbol.trim(),
                         balance: receiveTokenBalance
                     };
+
+                    console.log('Updated tokens:', {
+                        payToken: payToken.symbol,
+                        receiveToken: receiveToken.symbol
+                    });
                 }
             } catch (error) {
                 console.error('Failed to fetch market data:', error);
@@ -221,7 +258,11 @@
 
     // Fetch pool prices when market data changes
     $effect(() => {
+        console.log('=== POOL PRICES EFFECT ===');
+        console.log('Conditions:', { marketId, hasMarketData: !!marketData });
+
         if (!marketId || !marketData) {
+            console.log('No market data, clearing pool prices');
             poolPrices = null;
             return;
         }
@@ -236,6 +277,7 @@
 
                 if (result.success && result.prices) {
                     poolPrices = result.prices;
+                    console.log('=== POOL PRICES RECEIVED ===');
                     console.log('Pool prices received:', poolPrices);
 
                     // Check if the pool has no liquidity (sqrtPriceX96 is 0)
@@ -247,7 +289,8 @@
                         hasShownLiquidityWarning = true;
                     }
 
-                    // Update exchange rate based on real pool prices
+                    // FIXED: Update receive amount using REAL pool prices, not bullshit calculations
+                    console.log('Triggering receive amount update with real pool prices');
                     updateReceiveAmount();
                 } else {
                     priceError = result.error || 'Failed to fetch pool prices';
@@ -264,20 +307,40 @@
         fetchPrices();
     });
 
-    // Real exchange rate calculation based on pool prices
+    // FIXED: Real exchange rate from pool prices, no more bullshit calculations
     let exchangeRate = $derived(() => {
-        if (!poolPrices || payAmount === 0) return 0;
-
-        // Use the correct price based on which token is being paid
-        if (payToken?.symbol === marketData?.assetPair?.split('/')[0]) {
-            return poolPrices.token0Price;
-        } else {
-            return poolPrices.token1Price;
+        console.log('=== CALCULATING EXCHANGE RATE ===');
+        
+        if (!poolPrices || !marketData?.assetPair) {
+            console.log('No pool prices or asset pair available');
+            return 0;
         }
+
+        console.log('Pool prices available:', {
+            token0Price: poolPrices.token0Price,
+            token1Price: poolPrices.token1Price,
+            assetPair: marketData.assetPair
+        });
+
+        // Determine which token is token0 in the pool
+        const [baseSymbol] = marketData.assetPair.split('/');
+        const isPayTokenBase = payToken?.symbol === baseSymbol;
+        
+        const rate = isPayTokenBase ? poolPrices.token0Price : poolPrices.token1Price;
+        
+        console.log('Exchange rate calculation:', {
+            baseSymbol,
+            payTokenSymbol: payToken?.symbol,
+            isPayTokenBase,
+            selectedRate: rate
+        });
+
+        return rate || 0;
     });
 
     let displayExchangeRate = $derived(() => {
         const rate = exchangeRate();
+        console.log('Display exchange rate:', rate);
         return rate > 0 ? rate.toFixed(6) : '0.000000';
     });
 
@@ -344,6 +407,14 @@
 
     // Event handlers
     function handleTokenSwap() {
+        console.log('=== TOKEN SWAP ===');
+        console.log('Before swap:', {
+            payToken: payToken.symbol,
+            receiveToken: receiveToken.symbol,
+            payAmount,
+            receiveAmount
+        });
+
         const tempToken = payToken;
         const tempAmount = payAmount;
         const tempBalance = payTokenBalance;
@@ -354,9 +425,19 @@
         receiveAmount = tempAmount;
         payTokenBalance = receiveTokenBalance;
         receiveTokenBalance = tempBalance;
+
+        console.log('After swap:', {
+            payToken: payToken.symbol,
+            receiveToken: receiveToken.symbol,
+            payAmount,
+            receiveAmount
+        });
     }
 
     function handlePredictionSelect(side: PredictionSide, targetPrice?: number) {
+        console.log('=== PREDICTION SELECTED ===');
+        console.log('Prediction:', { side, targetPrice });
+        
         predictionSide = side;
         if (targetPrice !== undefined) {
             predictedTargetPrice = targetPrice;
@@ -370,7 +451,7 @@
     async function executeSwapAndPredict() {
         console.log('=== FIXED executeSwapAndPredict called ===');
         if (!isFormValid()) {
-            console.error('Form is not valid');
+            console.error('Form is not valid:', validationErrors());
             return;
         }
 
@@ -403,10 +484,21 @@
             const actualPayTokenAddress = getTokenAddress(payToken.symbol);
             const actualReceiveTokenAddress = getTokenAddress(receiveToken.symbol);
 
+            console.log('=== TOKEN ADDRESS MAPPING ===');
+            console.log('Pay token mapping:', {
+                symbol: payToken.symbol,
+                address: actualPayTokenAddress
+            });
+            console.log('Receive token mapping:', {
+                symbol: receiveToken.symbol,
+                address: actualReceiveTokenAddress
+            });
+
             // FIXED: Determine swap direction based on ACTUAL pool configuration
             const isPayTokenCurrency0 = actualPayTokenAddress.toLowerCase() === poolKey.currency0.toLowerCase();
             const zeroForOne = isPayTokenCurrency0;
 
+            console.log('=== SWAP DIRECTION ANALYSIS ===');
             console.log('NATIVE ETH Swap direction analysis:', {
                 payTokenSymbol: payToken.symbol,
                 receiveTokenSymbol: receiveToken.symbol,
@@ -428,8 +520,13 @@
             );
 
             if (!isValidPair) {
-                throw new Error(`Token pair mismatch: trying to swap ${payToken.symbol}→${receiveToken.symbol} but pool is ${poolKey.currency0}/${poolKey.currency1}`);
+                const errorMsg = `Token pair mismatch: trying to swap ${payToken.symbol}→${receiveToken.symbol} but pool is ${poolKey.currency0}/${poolKey.currency1}`;
+                console.error('=== POOL VALIDATION FAILED ===');
+                console.error(errorMsg);
+                throw new Error(errorMsg);
             }
+
+            console.log('✅ Pool validation passed');
 
             // FIXED: Use correct decimals for each token
             const payTokenDecimals = getTokenDecimals(actualPayTokenAddress);
@@ -589,39 +686,37 @@
     }
 
     function handlePayAmountChange(amount: number) {
+        console.log('=== PAY AMOUNT CHANGE ===');
+        console.log('New pay amount:', amount);
         payAmount = amount;
         updateReceiveAmount();
     }
 
     function handleReceiveAmountChange(amount: number) {
+        console.log('=== RECEIVE AMOUNT CHANGE ===');
+        console.log('New receive amount:', amount);
+        
+        // REMOVED: All the bullshit 1:1 ratio calculations
+        // The receive amount should be READ-ONLY and calculated from pool quotes
+        
         receiveAmount = amount;
-
-        // Calculate pay amount based on exchange rate
-        const isBaseToken = payToken?.symbol === 'ETH' || payToken?.symbol === 'BTC';
-        const isStablecoin = ['USDC', 'DAI', 'USDT'].includes(payToken?.symbol || '');
-        const otherIsBaseToken = receiveToken?.symbol === 'ETH' || receiveToken?.symbol === 'BTC';
-        const otherIsStablecoin = ['USDC', 'DAI', 'USDT'].includes(receiveToken?.symbol || '');
-
-        if (isBaseToken && otherIsStablecoin) {
-            // Base token to stablecoin: divide by base token price
-            const price = payToken?.symbol === 'ETH' ? ethPrice : 45000; // Use ethPrice for ETH, mock price for BTC
-            payAmount = price > 0 ? amount / price : 0;
-        } else if (isStablecoin && otherIsBaseToken) {
-            // Stablecoin to base token: multiply by base token price
-            const price = receiveToken?.symbol === 'ETH' ? ethPrice : 45000; // Use ethPrice for ETH, mock price for BTC
-            payAmount = amount * price;
-        } else {
-            // Default 1:1 for other token pairs
-            payAmount = amount;
-        }
+        console.log('Receive amount manually set to:', amount);
     }
 
     /**
-     * Updates the receive amount based on the pay amount and real pool prices
-     * Uses the swap service to calculate accurate swap amounts
+     * FIXED: Updates the receive amount using REAL pool quotes, no more fake calculations
      */
     async function updateReceiveAmount(): Promise<void> {
+        console.log('=== UPDATE RECEIVE AMOUNT ===');
+        console.log('Conditions:', {
+            payAmount,
+            marketId,
+            payTokenSymbol: payToken?.symbol,
+            hasPoolPrices: !!poolPrices
+        });
+
         if (payAmount <= 0 || !marketId || !payToken?.symbol) {
+            console.log('Clearing receive amount - missing requirements');
             receiveAmount = 0;
             return;
         }
@@ -631,9 +726,15 @@
 
         // Early return if we don't have pool prices yet
         if (!poolPrices) {
-            console.log('Pool prices not available yet, using simple calculation');
-            // Fallback to simple calculation
-            receiveAmount = payAmount * (exchangeRate() || 0);
+            console.log('Pool prices not available yet, using exchange rate fallback');
+            // FIXED: Use real exchange rate, not 1:1 bullshit
+            const rate = exchangeRate();
+            receiveAmount = payAmount * rate;
+            console.log('Fallback calculation:', {
+                payAmount,
+                exchangeRate: rate,
+                receiveAmount
+            });
             return;
         }
 
@@ -644,6 +745,16 @@
 
             // Convert payAmount to bigint with correct decimals
             const amountBigInt = parseUnits(payAmount.toString(), payTokenDecimals);
+
+            console.log('=== SWAP QUOTE REQUEST ===');
+            console.log('Quote parameters:', {
+                marketId,
+                payTokenSymbol: payToken.symbol,
+                actualPayTokenAddress,
+                payAmount,
+                amountBigInt: amountBigInt.toString(),
+                decimals: payTokenDecimals
+            });
 
             // Make sure we have market data
             if (!marketData) {
@@ -657,12 +768,7 @@
                 throw new Error('Failed to get pool key for market');
             }
 
-            // Log the token information for debugging
-            console.log('Using token addresses for swap quote:', {
-                payTokenSymbol: payToken.symbol,
-                actualPayTokenAddress,
-                poolKey
-            });
+            console.log('Pool key for quote:', poolKey);
 
             // Get swap quote from service
             const quoteResult = await getSwapQuote(marketId, actualPayTokenAddress, amountBigInt);
@@ -672,7 +778,16 @@
                 const receiveTokenAddress = quoteResult.quote.tokenOut;
                 const receiveTokenDecimals = getTokenDecimals(receiveTokenAddress);
                 receiveAmount = Number(quoteResult.quote.amountOut) / (10 ** receiveTokenDecimals);
-                console.log('Swap quote received:', quoteResult.quote);
+                
+                console.log('=== SWAP QUOTE SUCCESS ===');
+                console.log('Swap quote received:', {
+                    tokenIn: quoteResult.quote.tokenIn,
+                    tokenOut: quoteResult.quote.tokenOut,
+                    amountIn: quoteResult.quote.amountIn.toString(),
+                    amountOut: quoteResult.quote.amountOut.toString(),
+                    receiveTokenDecimals,
+                    calculatedReceiveAmount: receiveAmount
+                });
             } else {
                 console.error('Failed to get swap quote:', quoteResult.error);
 
@@ -685,21 +800,33 @@
                     hasShownZeroLiquidityWarning = true;
                 }
 
-                // Fallback to simple calculation
-                receiveAmount = payAmount * (exchangeRate() || 0);
+                // FIXED: Fallback to real exchange rate, not 1:1 bullshit
+                const rate = exchangeRate();
+                receiveAmount = payAmount * rate;
+                console.log('Quote failed, using exchange rate fallback:', {
+                    exchangeRate: rate,
+                    fallbackReceiveAmount: receiveAmount
+                });
             }
         } catch (error) {
             console.error('Error updating receive amount:', error);
-            // Fallback to simple calculation
-            receiveAmount = payAmount * (exchangeRate() || 0);
+            // FIXED: Fallback to real exchange rate, not 1:1 bullshit
+            const rate = exchangeRate();
+            receiveAmount = payAmount * rate;
+            console.log('Error fallback using exchange rate:', {
+                exchangeRate: rate,
+                fallbackReceiveAmount: receiveAmount
+            });
         }
     }
 
     function handleConnectWallet() {
+        console.log('=== CONNECT WALLET CLICKED ===');
         appKit.open();
     }
 
     function handleRefreshBalances() {
+        console.log('=== MANUAL BALANCE REFRESH ===');
         // Trigger balance refetch by clearing and refetching
         if (connectedAddress && payToken?.symbol && receiveToken?.symbol) {
             console.log('Manually refreshing balances');
@@ -785,7 +912,7 @@
                             amount={receiveAmount}
                             token={{...receiveToken, balance: receiveTokenBalance}}
                             onAmountChange={handleReceiveAmountChange}
-                            readOnly={false}
+                            readOnly={true}
                             {disabled}
                             showExchangeRate={true}
                             exchangeRate={displayExchangeRate()}
@@ -795,6 +922,45 @@
                             onRefreshBalance={handleRefreshBalances}
                     />
                 </div>
+
+                <!-- Pool Information Display -->
+                {#if poolPrices}
+                    <div class="rounded-lg border border-blue-200 bg-blue-50 p-4">
+                        <h4 class="text-sm font-medium text-blue-900 mb-2">Pool Information</h4>
+                        <div class="space-y-1 text-sm">
+                            <div class="flex justify-between">
+                                <span class="text-blue-700">Exchange Rate:</span>
+                                <span class="font-medium text-blue-900">
+                                    1 {payToken?.symbol} = {displayExchangeRate()} {receiveToken?.symbol}
+                                </span>
+                            </div>
+                            <div class="flex justify-between">
+                                <span class="text-blue-700">Pool Fee:</span>
+                                <span class="font-medium text-blue-900">0.3%</span>
+                            </div>
+                            <div class="flex justify-between">
+                                <span class="text-blue-700">Slippage:</span>
+                                <span class="font-medium text-blue-900">0.5%</span>
+                            </div>
+                        </div>
+                    </div>
+                {/if}
+
+                <!-- Debug Information (DEV ONLY - Remove in production) -->
+                {#if poolPrices}
+                    <div class="rounded-lg border border-yellow-200 bg-yellow-50 p-4">
+                        <h4 class="text-sm font-medium text-yellow-900 mb-2">🧪 Debug Info</h4>
+                        <div class="space-y-1 text-xs font-mono">
+                            <div>Market: {marketData?.name || 'Loading...'}</div>
+                            <div>Asset Pair: {marketData?.assetPair || 'Loading...'}</div>
+                            <div>Pay Token: {payToken?.symbol} (Balance: {payTokenBalance})</div>
+                            <div>Receive Token: {receiveToken?.symbol} (Balance: {receiveTokenBalance})</div>
+                            <div>Pool Price (token0): {poolPrices.token0Price}</div>
+                            <div>Pool Price (token1): {poolPrices.token1Price}</div>
+                            <div>Exchange Rate: {exchangeRate()}</div>
+                        </div>
+                    </div>
+                {/if}
 
                 <!-- Prediction Section -->
                 <PredictionSection
