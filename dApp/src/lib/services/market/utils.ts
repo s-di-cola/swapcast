@@ -118,14 +118,8 @@ export function transformMarketDetails(details: MarketDetailsResult): Market {
 	const bullishStake = Number(details.totalConvictionBullish) / 1e18;
 	const totalStakeValue = bearishStake + bullishStake;
 
-	// Format the asset pair to ensure it's always in BASE/QUOTE format
-	// If the asset pair doesn't contain a slash, assume it's the base token and use USDT as quote
-	let formattedAssetPair = details.assetPair;
-	if (!formattedAssetPair.includes('/')) {
-		// Add the default quote token if missing
-		formattedAssetPair = `${formattedAssetPair}/USDT`;
-		console.log(`Fixed asset pair format: ${details.assetPair} → ${formattedAssetPair}`);
-	}
+	// Use the asset pair directly from the contract data
+	const formattedAssetPair = details.assetPair;
 
 	return {
 		id: details.marketId.toString(),
