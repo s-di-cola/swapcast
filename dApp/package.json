@@ -24,7 +24,7 @@
 		"format": "prettier --write .",
 		"lint": "prettier --check .",
 		"generate:types": "tsx scripts/generate-contract-types.ts",
-		"generate:fixtures": "PUBLIC_COINGECKO_API_URL=https://api.coingecko.com/api/v3 tsx -r tsconfig-paths/register fixtures/index.ts"
+		"generate:fixtures": "tsx -r tsconfig-paths/register fixtures/index.ts"
 	},
 	"devDependencies": {
 		"@playwright/test": "^1.52.0",

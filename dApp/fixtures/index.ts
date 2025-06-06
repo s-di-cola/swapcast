@@ -6,6 +6,12 @@
  * - Sets up Uniswap v4 pools for each market
  */
 
+import { config } from 'dotenv';
+import path from 'path';
+
+// Load environment variables from .env first
+config({ path: path.resolve(process.cwd(), '.env') });
+
 import { createPublicClient, http, type Address } from 'viem';
 import { anvil } from 'viem/chains';
 import { generateMarkets, MarketCreationResult } from './markets';
@@ -82,6 +88,10 @@ async function checkAnvilAndContracts() {
 
 async function main() {
 	console.log(chalk.blue('🚀 Starting SwapCast fixture generation'));
+	
+	// Log environment info
+	console.log(chalk.gray(`Using CoinGecko API URL: ${process.env.PUBLIC_COINGECKO_API_URL || 'https://api.coingecko.com/api/v3'}`));
+	console.log(chalk.gray(`CoinGecko API Key: ${process.env.PRIVATE_COINGECKO_API_KEY ? '✅ Loaded' : '❌ Not found (will use free tier)'}`));
 
 	try {
 		// Check if Anvil is running and contracts are deployed
