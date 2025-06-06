@@ -283,7 +283,7 @@ export async function createMarket(
 }
 
 /**
- * Generates markets and pools for testing
+ * Generates markets and pools for testing - FIXED for proper asset pairs
  */
 export async function generateMarkets(
 	adminAccount: any,
@@ -354,17 +354,20 @@ export async function generateMarkets(
 			const daysToExpiration = 7 + Math.floor(Math.random() * 53);
 			const expirationTime = BigInt(Math.floor(Date.now() / 1000) + daysToExpiration * 24 * 60 * 60);
 
+			// FIXED: Use the actual asset pair name, not just the symbol
+			console.log(chalk.blue(`Creating market with asset pair: ${assetPair.name}`));
+
 			const market = await createMarket(
 				adminAccount,
 				`${marketName} Market`,
-				assetPair.symbol, // This should match the base asset (ETH, BTC)
+				assetPair.name, // ✅ FIXED: Use "ETH/USDT" instead of just "ETH"
 				expirationTime,
 				CONTRACT_ADDRESSES.ORACLE_RESOLVER as Address,
 				BigInt(Math.floor(priceThreshold * 1e18)),
 				poolKey
 			);
 
-			console.log(chalk.green(`Successfully created market for ${marketName}`));
+			console.log(chalk.green(`Successfully created market for ${marketName} with asset pair: ${assetPair.name}`));
 			markets.push(market);
 
 		} catch (error: any) {

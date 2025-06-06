@@ -400,8 +400,28 @@ export async function getBatchPrices(
  * @param symbol - Symbol of the asset (e.g., 'BTC', 'ETH')
  * @returns Promise resolving to the current price in USD or null if not found
  */
+/**
+ * Extracts the base asset from an asset pair string
+ * 
+ * @param assetPair - The asset pair string (e.g., "BTC/USDT", "ETH/USDC")
+ * @returns The base asset symbol (e.g., "BTC", "ETH")
+ */
+function extractBaseAsset(assetPair: string): string {
+    // If the symbol contains a slash, it's a trading pair
+    if (assetPair.includes('/')) {
+        // Extract the base asset (first part before the slash)
+        return assetPair.split('/')[0].trim();
+    }
+    
+    // Otherwise, return the symbol as is
+    return assetPair;
+}
+
 export async function getServerPrice(symbol: string): Promise<number | null> {
     if (!symbol) return null;
+    
+    // Extract the base asset if it's a trading pair
+    const baseAsset = extractBaseAsset(symbol);
     
     // Use the cache from the main service
     const cacheKey = `server_price_${symbol.toUpperCase()}`;
@@ -410,8 +430,8 @@ export async function getServerPrice(symbol: string): Promise<number | null> {
         cacheKey,
         async () => {
             try {
-                // Call our server-side API endpoint
-                const response = await fetch(`/api/price?symbol=${encodeURIComponent(symbol)}`);
+                // Call our server-side API endpoint with the base asset
+                const response = await fetch(`/api/price?symbol=${encodeURIComponent(baseAsset)}`);
                 
                 if (!response.ok) {
                     const errorText = await response.text();

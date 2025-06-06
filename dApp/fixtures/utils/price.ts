@@ -34,28 +34,47 @@ const SYMBOL_TO_ID: Record<string, string> = {
 };
 
 /**
+ * Extracts the base asset from an asset pair string
+ * 
+ * @param assetPair - The asset pair string (e.g., "BTC/USDT", "ETH/USDC")
+ * @returns The base asset symbol (e.g., "BTC", "ETH")
+ */
+function extractBaseAsset(assetPair: string): string {
+  // If the symbol contains a slash, it's a trading pair
+  if (assetPair.includes('/')) {
+    // Extract the base asset (first part before the slash)
+    return assetPair.split('/')[0].trim();
+  }
+  
+  // Otherwise, return the symbol as is
+  return assetPair;
+}
+
+/**
  * Gets current price for a cryptocurrency from CoinGecko
  * 
- * @param symbol - Symbol of the asset (e.g., 'BTC', 'ETH')
+ * @param symbol - Symbol of the asset (e.g., 'BTC', 'ETH') or asset pair (e.g., 'BTC/USDT')
  * @returns Promise resolving to the current price in USD or null if not found
  */
 export async function getCurrentPriceBySymbol(symbol: string): Promise<number | null> {
   if (!symbol) return null;
   
-  const upperSymbol = symbol.toUpperCase();
+  // Extract the base asset if it's a trading pair
+  const baseAsset = extractBaseAsset(symbol);
+  const upperSymbol = baseAsset.toUpperCase();
   
   // Check cache first
   const now = Date.now();
-  const cached = priceCache[upperSymbol];
+  const cached = priceCache[symbol.toUpperCase()]; // Keep original symbol for cache key
   if (cached && (now - cached.timestamp) < CACHE_TTL) {
-    console.log(`Using cached price for ${upperSymbol}: $${cached.price}`);
+    console.log(`Using cached price for ${symbol}: $${cached.price}`);
     return cached.price;
   }
   
   // Get CoinGecko ID for the symbol
   const coinId = SYMBOL_TO_ID[upperSymbol];
   if (!coinId) {
-    console.warn(`Unknown symbol: ${symbol}`);
+    console.warn(`Unknown symbol: ${baseAsset}`);
     return null;
   }
   
@@ -92,8 +111,8 @@ export async function getCurrentPriceBySymbol(symbol: string): Promise<number | 
     
     const price = data[coinId].usd;
     
-    // Cache the result
-    priceCache[upperSymbol] = { price, timestamp: now };
+    // Cache the result using the original symbol as the key
+    priceCache[symbol.toUpperCase()] = { price, timestamp: now };
     
     console.log(`Fetched price for ${symbol}: $${price}`);
     return price;
