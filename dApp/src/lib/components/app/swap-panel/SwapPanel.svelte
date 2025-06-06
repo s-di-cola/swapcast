@@ -8,11 +8,13 @@
     import HelpModal from '$lib/components/app/swap-panel/components/HelpModal.svelte';
     import {ArrowUpDown} from 'lucide-svelte';
     import {Spinner} from 'flowbite-svelte';
-    import {appKit} from "$lib/configs/wallet.config";
     import {getTokenBalance} from "$lib/services/balance";
+    import { executeSwapWithPrediction } from '$lib/services/swap/universalRouter';
+    import { parseUnits } from 'viem';
     import { fetchPoolPrices, getSwapQuote } from '$lib/services/swap';
     import { getPoolKey } from '$lib/services/market/operations';
     import { toastStore } from '$lib/stores/toastStore';
+	import { appKit } from '$lib/configs/wallet.config';
 
     // Props
     let {
@@ -315,20 +317,63 @@
 
         isSubmitting = true;
         try {
-            // Simulate API call
-            await new Promise((resolve) => setTimeout(resolve, 2000));
+            if (!marketData || !payToken || !receiveToken || !predictionSide || !predictedTargetPrice) {
+                throw new Error('Missing required parameters for swap and prediction');
+            }
 
-            // Execute the swap and prediction transaction
-            // Implementation will be added when contract integration is complete
+            // Get the pool key for the swap using the market ID
+            const poolKey = await getPoolKey(marketData.id);
+            if (!poolKey) {
+                throw new Error('Failed to get pool key');
+            }
 
-            showConfirmationModal = false;
+            // Determine swap direction (zeroForOne)
+            // Default to true if address is undefined
+            const zeroForOne = poolKey.currency0.toLowerCase() === (payToken?.address?.toLowerCase() || poolKey.currency0.toLowerCase());
+
+            // Convert amounts to bigint with proper decimals
+            const amountIn = parseUnits(
+                payAmount.toString(),
+                payToken?.decimals || 18
+            );
+            
+            // Calculate minimum amount out (with 0.5% slippage)
+            const slippage = 0.005; // 0.5%
+            const amountOutMinimum = parseUnits(
+                (receiveAmount * (1 - slippage)).toString(),
+                receiveToken?.decimals || 18
+            );
+
+            // Map prediction side to outcome
+            // Convert from PredictionSide type to numeric outcome
+            const outcome = predictionSide === 'above_target' ? 1 : 0;
+
+            // Calculate conviction stake (for now, use a fixed amount)
+            const convictionStake = parseUnits('0.01', 18); // 0.01 ETH
+
+            // Execute the swap with prediction
+            const txHash = await executeSwapWithPrediction(
+                poolKey,
+                zeroForOne,
+                amountIn,
+                amountOutMinimum,
+                BigInt(marketData.id),
+                outcome,
+                convictionStake
+            );
+
+            // Show success message
+            toastStore.success('Swap and prediction executed successfully!');
+
             // Reset form
+            showConfirmationModal = false;
             payAmount = 0;
             receiveAmount = 0;
             predictionSide = undefined;
             predictedTargetPrice = undefined;
         } catch (error) {
             console.error('Failed to execute swap and prediction:', error);
+            toastStore.error(`Failed to execute swap: ${error instanceof Error ? error.message : 'Unknown error'}`);
         } finally {
             isSubmitting = false;
         }

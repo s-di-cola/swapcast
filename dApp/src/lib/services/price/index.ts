@@ -7,20 +7,16 @@
  * For production, it's recommended to use CoinGecko Pro with an API key.
  */
 
-// Public API
+// Export all price operations (including server-backed API)
 export {
 	getHistoricalPriceData,
 	searchCoins,
 	fetchCoinList,
 	getCoinIdFromAssetPair,
-	formatPriceDataForChart
-} from './operations';
-
-// Server-backed price API (uses authenticated endpoint)
-export {
+	formatPriceDataForChart,
 	getServerPrice,
 	getBatchServerPrices
-} from './serverPrice';
+} from './operations';
 
 // Type exports
 export type { PriceData, CoinInfo, ChartData, VsCurrency, TimePeriod } from './types';

@@ -7,6 +7,7 @@
 import { makeApiRequest, buildEndpoint, buildQueryString } from './client';
 import { getCachedOrFetch, generateCacheKey } from './cache';
 import { FALLBACK_COIN_MAPPING, PRIORITY_COINS, CACHE_CONFIG } from './config';
+import { toastStore } from '$lib/stores/toastStore';
 import type {
 	PriceData,
 	CoinInfo,
@@ -380,6 +381,122 @@ export async function getBatchPrices(
 		
 		return result;
 	}
+}
+
+/**
+ * Formats raw CoinGecko price data for chart display
+ *
+ * This function transforms the raw price data from CoinGecko's API into a format
+ * suitable for rendering in charts. It extracts timestamps and prices, and formats
+ * the dates for display.
+ *
+ * @param priceData - The raw price data from CoinGecko API
+ * @param timePeriod - Optional time period for formatting date labels
+ * @returns Object containing arrays of formatted date labels and price values
+ */
+/**
+ * Gets the current price for a cryptocurrency using the server API
+ *
+ * @param symbol - Symbol of the asset (e.g., 'BTC', 'ETH')
+ * @returns Promise resolving to the current price in USD or null if not found
+ */
+export async function getServerPrice(symbol: string): Promise<number | null> {
+    if (!symbol) return null;
+    
+    // Use the cache from the main service
+    const cacheKey = `server_price_${symbol.toUpperCase()}`;
+    
+    return getCachedOrFetch<number | null>(
+        cacheKey,
+        async () => {
+            try {
+                // Call our server-side API endpoint
+                const response = await fetch(`/api/price?symbol=${encodeURIComponent(symbol)}`);
+                
+                if (!response.ok) {
+                    const errorText = await response.text();
+                    const errorMessage = `API error (${response.status}): ${errorText}`;
+                    
+                    // Show toast notification for API errors
+                    toastStore.error(`Failed to fetch price for ${symbol}: ${response.status === 429 ? 'Rate limit exceeded' : 'API error'}`);
+                    
+                    throw new Error(errorMessage);
+                }
+
+                const data = await response.json();
+                
+                if (typeof data.price !== 'number') {
+                    console.warn(`Invalid price data for ${symbol}:`, data);
+                    toastStore.warning(`Invalid price data received for ${symbol}`);
+                    return null;
+                }
+                
+                return data.price;
+            } catch (error) {
+                console.error(`Error fetching price for ${symbol}:`, error);
+                
+                // Only show toast if we haven't already shown one for this error
+                // This prevents duplicate toasts for the same error
+                if (!(error instanceof Error && error.message.includes('API error'))) {
+                    toastStore.error(`Failed to fetch price for ${symbol}`);
+                }
+                
+                return null;
+            }
+        },
+        CACHE_CONFIG.TTL_BY_TYPE.current
+    );
+}
+
+/**
+ * Gets current prices for multiple cryptocurrencies in a single batch
+ *
+ * @param symbols - Array of cryptocurrency symbols (e.g., ['BTC', 'ETH'])
+ * @returns Promise with a record of symbol to price mappings
+ */
+export async function getBatchServerPrices(
+    symbols: string[]
+): Promise<Record<string, number | null>> {
+    if (!symbols || symbols.length === 0) {
+        return {};
+    }
+
+    let hasErrors = false;
+    
+    // Process in parallel for better performance
+    const results = await Promise.allSettled(
+        symbols.map(async (symbol) => {
+            try {
+                const price = await getServerPrice(symbol);
+                return { symbol, price, success: true };
+            } catch (error) {
+                hasErrors = true;
+                console.error(`Error in batch price fetch for ${symbol}:`, error);
+                return { symbol, price: null, success: false };
+            }
+        })
+    );
+    
+    // Show a single toast for batch errors instead of multiple individual ones
+    if (hasErrors) {
+        toastStore.warning('Some price data could not be fetched');
+    }
+
+    // Convert to record format, handling both fulfilled and rejected promises
+    return results.reduce(
+        (acc, result) => {
+            if (result.status === 'fulfilled') {
+                const { symbol, price } = result.value;
+                acc[symbol.toUpperCase()] = price;
+            } else {
+                // For rejected promises, we don't have symbol info
+                // This shouldn't happen with our try/catch above, but just in case
+                console.error('Unexpected promise rejection in batch price fetch:', result.reason);
+            }
+            return acc;
+        },
+        {} as Record<string, number | null>
+    );
 }
 
 /**
