@@ -16,6 +16,12 @@ export {
 	formatPriceDataForChart
 } from './operations';
 
+// Server-backed price API (uses authenticated endpoint)
+export {
+	getServerPrice,
+	getBatchServerPrices
+} from './serverPrice';
+
 // Type exports
 export type { PriceData, CoinInfo, ChartData, VsCurrency, TimePeriod } from './types';
 

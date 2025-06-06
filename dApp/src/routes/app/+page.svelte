@@ -1,6 +1,5 @@
 <script lang="ts">
 	// Import component types
-	import type { ComponentProps } from 'svelte';
 	import { onMount } from 'svelte';
 	import { page } from '$app/state';
 	import { replaceState } from '$app/navigation';
@@ -16,10 +15,7 @@
 		type MarketPaginationOptions,
 		type PaginatedMarkets
 	} from '$lib/services/market';
-	import { getCurrentPriceBySymbol, getBatchPrices } from '$lib/services/price/operations';
-
-	type MarketCardProps = ComponentProps<typeof MarketCard>;
-	type CompactMarketCardProps = ComponentProps<typeof CompactMarketCard>;
+	import { getServerPrice, getBatchServerPrices } from '$lib/services/price';
 
 	// Market selection state
 	let selectedMarket: Market | null = $state(null);
@@ -83,8 +79,8 @@
 		const assetSymbols = [...new Set(markets.map((market) => market.assetSymbol))];
 		
 		try {
-			// Use the new batch price fetching function
-			const newPrices = await getBatchPrices(assetSymbols);
+			// Use the server-backed batch price fetching function
+			const newPrices = await getBatchServerPrices(assetSymbols);
 			
 			// Update the prices state
 			marketPrices = { ...marketPrices, ...newPrices };
@@ -94,7 +90,7 @@
 			// Fallback to individual fetches if batch fails
 			const pricePromises = assetSymbols.map(async (symbol) => {
 				try {
-					const price = await getCurrentPriceBySymbol(symbol);
+					const price = await getServerPrice(symbol);
 					return { symbol, price };
 				} catch (error) {
 					console.error(`Error fetching price for ${symbol}:`, error);
