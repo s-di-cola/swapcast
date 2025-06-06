@@ -50,7 +50,6 @@
 	let errorMessage = $state('');
 	let hasExceededBalance = $state(false);
 
-	// FIXED: Only validate for "You pay" inputs, not "You receive"
 	$effect(() => {
 		// Skip validation if component is read-only, disabled, or is a receive input
 		if (readOnly || disabled || label.toLowerCase().includes('receive')) {
