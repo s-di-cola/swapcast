@@ -1,5 +1,5 @@
 /**
- * Helper utilities 
+ * Helper utilities
  * Essential functions only, no dead code
  */
 
@@ -26,26 +26,37 @@ export function getTickSpacing(fee: number): number {
 /**
  * Sorts token addresses in canonical order (lower address first)
  * CRITICAL: Required for Uniswap v4 pool creation
- * 
- * FIXED: Added detailed logging to debug token sorting issues
+ *
+ * FIXED: Handle native ETH (address(0)) properly - it should always be token0
  */
 export function sortTokenAddresses(tokenA: Address, tokenB: Address): [Address, Address] {
+	// Handle native ETH (address(0)) - it should always be first
+	if (tokenA === '0x0000000000000000000000000000000000000000') {
+		console.log('Token sorting: ETH is token0:', { tokenA, tokenB });
+		return [tokenA, tokenB];
+	}
+	if (tokenB === '0x0000000000000000000000000000000000000000') {
+		console.log('Token sorting: ETH is token0:', { tokenA: tokenB, tokenB: tokenA });
+		return [tokenB, tokenA];
+	}
+
+	// Normal sorting for ERC20 tokens
 	const addressA = tokenA.toLowerCase();
 	const addressB = tokenB.toLowerCase();
-	
+
 	if (addressA === addressB) {
 		throw new Error(`Cannot create pool with identical tokens: ${tokenA}`);
 	}
-	
+
 	const sorted: [Address, Address] = addressA < addressB ? [tokenA, tokenB] : [tokenB, tokenA];
-	
+
 	// DEBUG: Log sorting for troubleshooting
 	console.log('Token sorting:', {
 		input: { tokenA, tokenB },
 		comparison: `${addressA} < ${addressB} = ${addressA < addressB}`,
 		output: sorted
 	});
-	
+
 	return sorted;
 }
 

@@ -1,6 +1,6 @@
 /**
- * Pool Test 
- * Simple validation for mainnet fork setup
+ * Pool Test
+ * Simple validation for mainnet fork setup with native ETH support
  */
 
 import { createPublicClient, http, type Address, formatUnits, erc20Abi } from 'viem';
@@ -9,8 +9,54 @@ import { CONTRACT_ADDRESSES, TOKEN_ADDRESSES } from '../utils/wallets';
 import { sortTokenAddresses } from '../utils/helpers';
 import chalk from 'chalk';
 
+// Native ETH address
+const NATIVE_ETH = '0x0000000000000000000000000000000000000000';
+
 /**
- * Quick test to verify a pool has liquidity
+ * FIXED: Gets token balance (handles both native ETH and ERC20)
+ */
+async function getTokenBalance(
+	publicClient: any,
+	tokenAddress: Address,
+	holderAddress: Address
+): Promise<bigint> {
+	if (tokenAddress === NATIVE_ETH) {
+		// Native ETH balance
+		return await publicClient.getBalance({ address: holderAddress });
+	} else {
+		// ERC20 token balance
+		return await publicClient.readContract({
+			address: tokenAddress,
+			abi: erc20Abi,
+			functionName: 'balanceOf',
+			args: [holderAddress]
+		});
+	}
+}
+
+/**
+ * FIXED: Gets token name for display
+ */
+function getTokenName(tokenAddress: Address): string {
+	if (tokenAddress === NATIVE_ETH) return 'ETH';
+	if (tokenAddress === TOKEN_ADDRESSES.USDC) return 'USDC';
+	if (tokenAddress === TOKEN_ADDRESSES.USDT) return 'USDT';
+	if (tokenAddress === TOKEN_ADDRESSES.DAI) return 'DAI';
+	if (tokenAddress === TOKEN_ADDRESSES.WBTC) return 'WBTC';
+	return 'UNKNOWN';
+}
+
+/**
+ * FIXED: Gets token decimals
+ */
+function getTokenDecimals(tokenAddress: Address): number {
+	if (tokenAddress === NATIVE_ETH) return 18; // ETH
+	if (tokenAddress === TOKEN_ADDRESSES.USDC) return 6; // USDC has 6 decimals
+	return 18; // Default for most tokens
+}
+
+/**
+ * Quick test to verify a pool has liquidity (FIXED for native ETH)
  */
 export async function quickPoolTest(
 	tokenA: Address,
@@ -28,26 +74,20 @@ export async function quickPoolTest(
 		// Sort tokens correctly
 		const [token0, token1] = sortTokenAddresses(tokenA, tokenB);
 
-		// Check PoolManager token balances
-		const token0Balance = await publicClient.readContract({
-			address: token0,
-			abi: erc20Abi,
-			functionName: 'balanceOf',
-			args: [CONTRACT_ADDRESSES.POOL_MANAGER as Address]
-		});
+		// FIXED: Check PoolManager token balances (handles native ETH)
+		const token0Balance = await getTokenBalance(publicClient, token0, CONTRACT_ADDRESSES.POOL_MANAGER as Address);
+		const token1Balance = await getTokenBalance(publicClient, token1, CONTRACT_ADDRESSES.POOL_MANAGER as Address);
 
-		const token1Balance = await publicClient.readContract({
-			address: token1,
-			abi: erc20Abi,
-			functionName: 'balanceOf',
-			args: [CONTRACT_ADDRESSES.POOL_MANAGER as Address]
-		});
+		const token0Decimals = getTokenDecimals(token0);
+		const token1Decimals = getTokenDecimals(token1);
+		const token0Name = getTokenName(token0);
+		const token1Name = getTokenName(token1);
 
-		const token0Formatted = formatUnits(token0Balance, 18);
-		const token1Formatted = formatUnits(token1Balance, 18);
+		const token0Formatted = formatUnits(token0Balance, token0Decimals);
+		const token1Formatted = formatUnits(token1Balance, token1Decimals);
 
-		console.log(chalk.cyan(`   Token0 balance: ${token0Formatted}`));
-		console.log(chalk.cyan(`   Token1 balance: ${token1Formatted}`));
+		console.log(chalk.cyan(`   ${token0Name} (${token0}): ${token0Formatted}`));
+		console.log(chalk.cyan(`   ${token1Name} (${token1}): ${token1Formatted}`));
 
 		const hasLiquidity = token0Balance > 0n || token1Balance > 0n;
 
@@ -66,22 +106,22 @@ export async function quickPoolTest(
 }
 
 /**
- * Test all standard pools
+ * FIXED: Test all standard pools with native ETH
  */
 export async function testAllPools(): Promise<void> {
 	console.log(chalk.blue('\n🔍 Testing all pools...'));
 
 	const pools = [
-		{ name: 'ETH/USDC', tokenA: TOKEN_ADDRESSES.WETH, tokenB: TOKEN_ADDRESSES.USDC },
+		{ name: 'ETH/USDC', tokenA: TOKEN_ADDRESSES.ETH, tokenB: TOKEN_ADDRESSES.USDC },
+		{ name: 'ETH/USDT', tokenA: TOKEN_ADDRESSES.ETH, tokenB: TOKEN_ADDRESSES.USDT },
+		{ name: 'ETH/DAI', tokenA: TOKEN_ADDRESSES.ETH, tokenB: TOKEN_ADDRESSES.DAI },
 		{ name: 'BTC/USDC', tokenA: TOKEN_ADDRESSES.WBTC, tokenB: TOKEN_ADDRESSES.USDC },
-		{ name: 'ETH/DAI', tokenA: TOKEN_ADDRESSES.WETH, tokenB: TOKEN_ADDRESSES.DAI },
-		{ name: 'BTC/DAI', tokenA: TOKEN_ADDRESSES.WBTC, tokenB: TOKEN_ADDRESSES.DAI },
-		{ name: 'ETH/USDT', tokenA: TOKEN_ADDRESSES.WETH, tokenB: TOKEN_ADDRESSES.USDT },
-		{ name: 'BTC/USDT', tokenA: TOKEN_ADDRESSES.WBTC, tokenB: TOKEN_ADDRESSES.USDT }
+		{ name: 'BTC/USDT', tokenA: TOKEN_ADDRESSES.WBTC, tokenB: TOKEN_ADDRESSES.USDT },
+		{ name: 'BTC/DAI', tokenA: TOKEN_ADDRESSES.WBTC, tokenB: TOKEN_ADDRESSES.DAI }
 	];
 
 	let successCount = 0;
-	
+
 	for (const pool of pools) {
 		const success = await quickPoolTest(pool.tokenA, pool.tokenB, pool.name);
 		if (success) successCount++;

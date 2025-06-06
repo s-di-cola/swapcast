@@ -1,5 +1,5 @@
 /**
- * Market Generation 
+ * Market Generation
  * For mainnet fork with real whale balances
  */
 
@@ -38,47 +38,47 @@ function calculatePriceThreshold(
 	return currentPrice * (1 + volatility / 100);
 }
 
-// FIXED: Correct asset pairs with proper token addresses
+// FIXED: Use native ETH (address(0)) for true ETH pools
 const ASSET_PAIRS = [
 	{
 		name: 'ETH/USDC',
 		symbol: 'ETH',
-		token0: TOKEN_ADDRESSES.WETH,
+		token0: TOKEN_ADDRESSES.ETH,  // Native ETH
 		token1: TOKEN_ADDRESSES.USDC,
 		fee: 3000
 	},
 	{
-		name: 'ETH/USDT', 
+		name: 'ETH/USDT',
 		symbol: 'ETH',
-		token0: TOKEN_ADDRESSES.WETH,
+		token0: TOKEN_ADDRESSES.ETH,  // Native ETH
 		token1: TOKEN_ADDRESSES.USDT,
 		fee: 3000
 	},
 	{
 		name: 'ETH/DAI',
 		symbol: 'ETH',
-		token0: TOKEN_ADDRESSES.WETH,
+		token0: TOKEN_ADDRESSES.ETH,  // Native ETH
 		token1: TOKEN_ADDRESSES.DAI,
 		fee: 3000
 	},
 	{
 		name: 'BTC/USDC',
 		symbol: 'BTC',
-		token0: TOKEN_ADDRESSES.WBTC,
+		token0: TOKEN_ADDRESSES.WBTC,  // Still use WBTC (no native BTC)
 		token1: TOKEN_ADDRESSES.USDC,
 		fee: 3000
 	},
 	{
 		name: 'BTC/USDT',
 		symbol: 'BTC',
-		token0: TOKEN_ADDRESSES.WBTC,
+		token0: TOKEN_ADDRESSES.WBTC,  // Still use WBTC
 		token1: TOKEN_ADDRESSES.USDT,
 		fee: 3000
 	},
 	{
 		name: 'BTC/DAI',
 		symbol: 'BTC',
-		token0: TOKEN_ADDRESSES.WBTC,
+		token0: TOKEN_ADDRESSES.WBTC,  // Still use WBTC
 		token1: TOKEN_ADDRESSES.DAI,
 		fee: 3000
 	}
@@ -166,12 +166,12 @@ export async function createPool(
 
 		// Determine price ratio based on known token types
 		let priceRatio = 1.0;
-		
+
 		// Check if we have a stablecoin/ETH pair
 		const isToken0Stable = [TOKEN_ADDRESSES.USDC, TOKEN_ADDRESSES.USDT, TOKEN_ADDRESSES.DAI].includes(token0);
 		const isToken1Stable = [TOKEN_ADDRESSES.USDC, TOKEN_ADDRESSES.USDT, TOKEN_ADDRESSES.DAI].includes(token1);
-		const isToken0ETH = token0 === TOKEN_ADDRESSES.WETH;
-		const isToken1ETH = token1 === TOKEN_ADDRESSES.WETH;
+		const isToken0ETH = token0 === TOKEN_ADDRESSES.ETH;  // Native ETH
+		const isToken1ETH = token1 === TOKEN_ADDRESSES.ETH;  // Native ETH
 		const isToken0BTC = token0 === TOKEN_ADDRESSES.WBTC;
 		const isToken1BTC = token1 === TOKEN_ADDRESSES.WBTC;
 
@@ -180,7 +180,7 @@ export async function createPool(
 			const assetPrice = isToken1ETH ? 2500 : 45000; // ETH ~$2500, BTC ~$45000
 			priceRatio = assetPrice; // 1 stablecoin = 1/assetPrice ETH/BTC
 		} else if ((isToken0ETH || isToken0BTC) && isToken1Stable) {
-			// ETH/Stablecoin or BTC/Stablecoin pair  
+			// ETH/Stablecoin or BTC/Stablecoin pair
 			const assetPrice = isToken0ETH ? 2500 : 45000;
 			priceRatio = 1.0 / assetPrice; // 1 ETH/BTC = assetPrice stablecoins
 		}
@@ -193,10 +193,10 @@ export async function createPool(
 		console.log(chalk.blue(`Price ratio: ${priceRatio}, sqrtPriceX96: ${sqrtPriceX96}`));
 
 		const hash = await poolManager.write.initialize(
-			[poolKey, sqrtPriceX96], 
-			{ 
-				account: adminAccount.account, 
-				chain: adminAccount.chain 
+			[poolKey, sqrtPriceX96],
+			{
+				account: adminAccount.account,
+				chain: adminAccount.chain
 			}
 		);
 
@@ -204,12 +204,12 @@ export async function createPool(
 		return poolKey;
 	} catch (error: any) {
 		// Pool might already exist
-		if (error.message.includes('already') || error.message.includes('exists') || 
+		if (error.message.includes('already') || error.message.includes('exists') ||
 			error.signature === '0x61487524') {
 			console.log(chalk.yellow(`Pool already exists, returning pool key...`));
 			return poolKey;
 		}
-		
+
 		console.error(chalk.red(`Failed to initialize pool: ${error.message}`));
 		throw error;
 	}
@@ -322,7 +322,7 @@ export async function generateMarkets(
 				// FORCE the correct token order
 				poolKey = await createPool(adminAccount, assetPair.token0, assetPair.token1, assetPair.fee);
 				createdPools.add(poolId);
-				
+
 				// VALIDATION: Ensure the pool was created with expected tokens
 				console.log(chalk.green(`Pool created for ${assetPair.name}:`), {
 					expected: `${assetPair.token0}/${assetPair.token1}`,
@@ -341,7 +341,7 @@ export async function generateMarkets(
 					chain: anvil,
 					transport: http(anvil.rpcUrls.default.http[0])
 				});
-				
+
 				await addLiquidityToPool(publicClient, adminAccount, poolKey, finalPrice);
 				console.log(chalk.green(`Successfully added liquidity to pool for ${marketName}`));
 			} catch (liquidityError: any) {
