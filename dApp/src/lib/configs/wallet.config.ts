@@ -10,14 +10,28 @@ export const wagmiAdapter = new WagmiAdapter({
 	networks
 });
 
+/**
+ * Determine the current app URL based on environment
+ * This helps avoid WalletConnect metadata URL mismatch warnings
+ */
+const getAppUrl = () => {
+	// Check if we're in a browser environment
+	if (typeof window !== 'undefined') {
+		// Use the current origin (protocol + hostname + port)
+		return window.location.origin;
+	}
+	// Fallback for SSR or non-browser environments
+	return 'https://swapcast.io';
+};
+
 export const appKit = createAppKit({
 	adapters: [wagmiAdapter],
 	networks: [anvil],
 	metadata: {
 		name: 'SwapCast',
 		description: 'SwapCast Prediction Market',
-		url: 'https://swapcast.io',
-		icons: ['https://swapcast.io/favicon.ico']
+		url: getAppUrl(),
+		icons: [`${getAppUrl()}/favicon.ico`]
 	},
 	projectId: PUBLIC_REOWN_PROJECT_ID,
 	features: {
