@@ -1,81 +1,104 @@
-/**
- * Helper utilities
- * Essential functions only, no dead code
- */
-
 import { type Address } from 'viem';
 
 /**
- * Gets the tick spacing for a fee tier
+ * Maps fee tier to tick spacing according to Uniswap standards
+ * @param fee - Fee tier (100, 500, 3000, or 10000)
+ * @returns Tick spacing for the fee tier
+ * @throws Error if fee tier is unsupported
  */
 export function getTickSpacing(fee: number): number {
-	switch (fee) {
-		case 100:
-			return 1;
-		case 500:
-			return 10;
-		case 3000:
-			return 60;
-		case 10000:
-			return 200;
-		default:
-			throw new Error(`Unsupported fee tier: ${fee}`);
+	const feeToSpacing: Record<number, number> = {
+		100: 1,
+		500: 10,
+		3000: 60,
+		10000: 200
+	};
+	
+	const spacing = feeToSpacing[fee];
+	if (spacing === undefined) {
+		throw new Error(`Unsupported fee tier: ${fee}`);
 	}
+	
+	return spacing;
 }
 
 /**
- * Sorts token addresses in canonical order (lower address first)
- * CRITICAL: Required for Uniswap v4 pool creation
- *
- * FIXED: Handle native ETH (address(0)) properly - it should always be token0
+ * Handles native ETH (address(0)) sorting priority
+ * @param tokenA - First token address
+ * @param tokenB - Second token address
+ * @returns True if native ETH is present and sorting is handled
  */
-export function sortTokenAddresses(tokenA: Address, tokenB: Address): [Address, Address] {
-	// Handle native ETH (address(0)) - it should always be first
-	if (tokenA === '0x0000000000000000000000000000000000000000') {
-		console.log('Token sorting: ETH is token0:', { tokenA, tokenB });
+function handleNativeETHSorting(tokenA: Address, tokenB: Address): [Address, Address] | null {
+	const NATIVE_ETH = '0x0000000000000000000000000000000000000000';
+	
+	if (tokenA === NATIVE_ETH) {
 		return [tokenA, tokenB];
 	}
-	if (tokenB === '0x0000000000000000000000000000000000000000') {
-		console.log('Token sorting: ETH is token0:', { tokenA: tokenB, tokenB: tokenA });
+	
+	if (tokenB === NATIVE_ETH) {
 		return [tokenB, tokenA];
 	}
+	
+	return null;
+}
 
-	// Normal sorting for ERC20 tokens
+/**
+ * Performs lexicographical sorting for ERC20 tokens
+ * @param tokenA - First token address
+ * @param tokenB - Second token address
+ * @returns Sorted token addresses
+ */
+function sortERC20Tokens(tokenA: Address, tokenB: Address): [Address, Address] {
 	const addressA = tokenA.toLowerCase();
 	const addressB = tokenB.toLowerCase();
-
+	
 	if (addressA === addressB) {
 		throw new Error(`Cannot create pool with identical tokens: ${tokenA}`);
 	}
-
-	const sorted: [Address, Address] = addressA < addressB ? [tokenA, tokenB] : [tokenB, tokenA];
-
-	// DEBUG: Log sorting for troubleshooting
-	console.log('Token sorting:', {
-		input: { tokenA, tokenB },
-		comparison: `${addressA} < ${addressB} = ${addressA < addressB}`,
-		output: sorted
-	});
-
-	return sorted;
+	
+	return addressA < addressB ? [tokenA, tokenB] : [tokenB, tokenA];
 }
 
 /**
- * Generates a random number between min and max (inclusive)
+ * Sorts token addresses in canonical order for Uniswap v4
+ * Native ETH (address(0)) always comes first, otherwise lexicographical order
+ * @param tokenA - First token address
+ * @param tokenB - Second token address
+ * @returns Sorted token addresses [token0, token1]
+ * @throws Error if tokens are identical
+ */
+export function sortTokenAddresses(tokenA: Address, tokenB: Address): [Address, Address] {
+	const nativeETHResult = handleNativeETHSorting(tokenA, tokenB);
+	if (nativeETHResult) {
+		return nativeETHResult;
+	}
+	
+	return sortERC20Tokens(tokenA, tokenB);
+}
+
+/**
+ * Generates random number between min and max (inclusive)
+ * @param min - Minimum value
+ * @param max - Maximum value
+ * @returns Random integer between min and max
  */
 export function getRandomNumber(min: number, max: number): number {
 	return Math.floor(Math.random() * (max - min + 1)) + min;
 }
 
 /**
- * Generates a random boolean with the given probability
+ * Generates random boolean with given probability
+ * @param probability - Probability of returning true (0-1, default: 0.5)
+ * @returns Random boolean value
  */
 export function getRandomBoolean(probability: number = 0.5): boolean {
 	return Math.random() < probability;
 }
 
 /**
- * Shuffles an array in place
+ * Shuffles array in place using Fisher-Yates algorithm
+ * @param array - Array to shuffle
+ * @returns The same array, shuffled in place
  */
 export function shuffleArray<T>(array: T[]): T[] {
 	for (let i = array.length - 1; i > 0; i--) {
@@ -86,7 +109,9 @@ export function shuffleArray<T>(array: T[]): T[] {
 }
 
 /**
- * Waits for the specified number of milliseconds
+ * Waits for specified number of milliseconds
+ * @param ms - Milliseconds to wait
+ * @returns Promise that resolves after the delay
  */
 export function sleep(ms: number): Promise<void> {
 	return new Promise((resolve) => setTimeout(resolve, ms));

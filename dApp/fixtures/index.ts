@@ -20,7 +20,7 @@ import { CONTRACT_ADDRESSES, WHALE_ADDRESSES, setupWallets } from './utils/walle
 import { getPredictionManager } from '../src/generated/types/PredictionManager';
 import { getPoolManager } from '../src/generated/types/PoolManager';
 import chalk from 'chalk';
-import { validatePools } from './test/pool-test';
+import { validatePools } from './test/diagnostic';
 
 /**
  * Configuration constants for fixtures generation
