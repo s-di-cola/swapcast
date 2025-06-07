@@ -11,6 +11,19 @@ export {
   fetchPoolPrices, 
   getSwapQuote, 
   executeSwapWithPrediction,
-  encodePredictionHookData,
-  PredictionTypes
 } from './operations.js';
+
+// Import and re-export utilities
+export {
+  verifyMarketExists,
+  calculatePredictionStakeAmount,
+  calculateReceiveAmount,
+  calculateExchangeRate
+} from './utils';
+
+// Import and re-export validation
+export {
+  validateSwapForm,
+  isFormValid,
+  getPrimaryError
+} from './validation';

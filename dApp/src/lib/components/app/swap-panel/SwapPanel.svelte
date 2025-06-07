@@ -1,7 +1,8 @@
 <script lang="ts">
     import type {PredictionSide, Token} from '$lib/types';
-    import type {Market} from '$lib/services/market';
+    import type {Market, MarketDetailsResult} from '$lib/services/market';
     import {getMarketDetails} from '$lib/services/market';
+    import { PUBLIC_PREDICTIONMANAGER_ADDRESS } from '$env/static/public';
     import TokenInput from '$lib/components/app/swap-panel/components/TokenInput.svelte';
     import PredictionSection from '$lib/components/app/swap-panel/components/PredictionSection.svelte';
     import ConfirmationModal from '$lib/components/app/swap-panel/components/ConfirmationModal.svelte';
@@ -9,16 +10,17 @@
     import {ArrowUpDown} from 'lucide-svelte';
     import {Spinner} from 'flowbite-svelte';
     import {getTokenBalance} from "$lib/services/balance";
-    import { executeSwapWithPrediction } from '$lib/services/swap';
+    import { executeSwapWithPrediction, verifyMarketExists, calculatePredictionStakeAmount, calculateReceiveAmount, calculateExchangeRate } from '$lib/services/swap';
+    import { validateSwapForm, isFormValid, getPrimaryError } from '$lib/services/swap';
     import { parseUnits, createPublicClient, http, formatUnits, type Address } from 'viem';
-    import { fetchPoolPrices, getSwapQuote } from '$lib/services/swap';
+    import { fetchPoolPrices } from '$lib/services/swap';
     import { getPoolKey } from '$lib/services/market/operations';
     import { toastStore } from '$lib/stores/toastStore';
     import { appKit } from '$lib/configs/wallet.config';
     import { getCurrentNetworkConfig } from '$lib/utils/network';
     import { getPredictionManager } from '$generated/types/PredictionManager';
+    import { getTokenDecimals, getTokenAddress } from '$lib/services/token';
 
-    // Props
     let {
         marketId,
         onPredictionSelect,
@@ -31,41 +33,8 @@
         disabled?: boolean;
     } = $props();
 
-    console.log('=== SWAPPANEL V2 INITIALIZATION ===');
-    console.log('Props:', { marketId, disabled });
-
-    // Native ETH address for Uniswap V4
     const NATIVE_ETH_ADDRESS = '0x0000000000000000000000000000000000000000';
 
-    // Token address mapping for native ETH support
-    function getTokenAddress(symbol: string): Address {
-        const addressMap: Record<string, string> = {
-            'ETH': NATIVE_ETH_ADDRESS,
-            'USDC': '0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48',
-            'USDT': '0xdAC17F958D2ee523a2206206994597C13D831ec7',
-            'DAI': '0x6B175474E89094C44Da98b954EedeAC495271d0F',
-            'BTC': '0x2260FAC5E5542a773Aa44fBCfeDf7C193bc2C599',
-            'WBTC': '0x2260FAC5E5542a773Aa44fBCfeDf7C193bc2C599'
-        };
-
-        const address = addressMap[symbol.toUpperCase()];
-        if (!address) {
-            console.error(`Unknown token symbol: ${symbol}`);
-            throw new Error(`Unknown token symbol: ${symbol}`);
-        }
-
-        console.log(`Token address mapping: ${symbol} → ${address}`);
-        return address as Address;
-    }
-
-    // Get token decimals
-    function getTokenDecimals(address: Address): number {
-        if (address === NATIVE_ETH_ADDRESS) return 18; // ETH
-        if (address === '0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48') return 6; // USDC
-        return 18; // Default for most tokens
-    }
-
-    // Internal state
     let payAmount = $state(0);
     let receiveAmount = $state(0);
     let payToken = $state<Token>({symbol: 'ETH', name: 'Ethereum'});
@@ -75,39 +44,32 @@
     let showConfirmationModal = $state(false);
     let showHelpModal = $state(false);
     let isSubmitting = $state(false);
-
-    // Market data
-    let marketData = $state<Market | null>(null);
+    let isSubmitEnabled = $derived(() => isFormValid(validationErrors()) && !isSubmitting);
+    let marketData = $state<Market | MarketDetailsResult | null>(null);
     let isLoadingMarket = $state(false);
     let marketError = $state<string | null>(null);
 
-    // Wallet connection state
     let connectedAddress = $state<string | null>(null);
     let isConnected = $state(false);
 
-    // Token balances
     let payTokenBalance = $state(0);
     let receiveTokenBalance = $state(0);
     let isLoadingBalances = $state(false);
 
-    // Pool pricing state
     let poolPrices = $state<any>(null);
     let isLoadingPrices = $state(false);
     let hasShownLiquidityWarning = $state(false);
     let priceError = $state<string | null>(null);
 
-    // Mock data for development
     let ethPrice = $state(2500);
     let networkFee = $state(0.002);
     let totalBullWeight = $state(0);
     let totalBearWeight = $state(0);
     let protocolFeeRate = $state(0.003);
 
-    console.log('=== INITIAL STATE ===');
-    console.log('payToken:', payToken);
-    console.log('receiveToken:', receiveToken);
-
-    // FIXED: Wallet connection check (prevents infinite loop)
+    /**
+     * Monitor wallet connection status
+     */
     $effect(() => {
         let mounted = true;
 
@@ -118,23 +80,15 @@
             const newAddress = account?.address || null;
             const connected = appKit.getIsConnectedState();
 
-            // Only update if values actually changed
             if (newAddress !== connectedAddress || connected !== isConnected) {
                 connectedAddress = newAddress;
                 isConnected = connected && !!newAddress;
-
-                console.log('=== WALLET STATUS UPDATE ===');
-                console.log('Wallet status:', { connected, newAddress, isConnected });
             }
         };
 
-        // Check immediately
         checkConnection();
+        const interval = setInterval(checkConnection, 2000);
 
-        // Set up interval with longer delay to reduce frequency
-        const interval = setInterval(checkConnection, 2000); // Every 2 seconds instead of 1
-
-        // Cleanup function
         return () => {
             mounted = false;
             clearInterval(interval);
@@ -142,27 +96,16 @@
     });
 
     /**
-     * Fetches token balances for the connected wallet
-     * @returns Promise that resolves when balances are updated
+     * Fetch token balances for the connected wallet
      */
     async function fetchBalances() {
-        console.log('=== FETCH BALANCES CALLED ===');
-        console.log('Check requirements:', {
-            isConnected,
-            connectedAddress,
-            payTokenSymbol: payToken?.symbol,
-            receiveTokenSymbol: receiveToken?.symbol
-        });
-
         if (!isConnected || !connectedAddress || !payToken?.symbol || !receiveToken?.symbol) {
-            console.log('Skipping balance fetch - missing requirements');
             payTokenBalance = 0;
             receiveTokenBalance = 0;
             return;
         }
 
         isLoadingBalances = true;
-        console.log('Fetching balances for:', payToken.symbol, receiveToken.symbol);
 
         try {
             const [payBalance, receiveBalance] = await Promise.all([
@@ -172,9 +115,6 @@
 
             payTokenBalance = payBalance;
             receiveTokenBalance = receiveBalance;
-
-            console.log('=== BALANCES FETCHED ===');
-            console.log('Balances fetched:', { payBalance, receiveBalance });
         } catch (error) {
             console.error('Failed to fetch balances:', error);
             payTokenBalance = 0;
@@ -184,10 +124,11 @@
         }
     }
 
+    /**
+     * React to wallet connection changes
+     */
     $effect(() => {
-        console.log('=== BALANCE EFFECT TRIGGERED ===');
         if (!isConnected || !connectedAddress) {
-            console.log('Not connected, clearing balances');
             payTokenBalance = 0;
             receiveTokenBalance = 0;
             return;
@@ -196,13 +137,11 @@
         fetchBalances();
     });
 
-    // Fetch market data when marketId changes
+    /**
+     * Fetch market data when marketId changes
+     */
     $effect(() => {
-        console.log('=== MARKET DATA EFFECT ===');
-        console.log('MarketId:', marketId);
-
         if (!marketId) {
-            console.log('No marketId, clearing market data');
             marketData = null;
             return;
         }
@@ -212,21 +151,19 @@
             marketError = null;
 
             try {
-                console.log('Fetching market data for ID:', marketId);
                 marketData = await getMarketDetails(marketId);
-                console.log('Market data received:', marketData);
 
-                // Update internal state based on market data
-                totalBullWeight = Number(marketData?.totalStake1 || 0) / 1e18;
-                totalBearWeight = Number(marketData?.totalStake0 || 0) / 1e18;
+                // Handle both Market and MarketDetailsResult types
+                if ('totalStake1' in marketData) {
+                    totalBullWeight = Number(marketData.totalStake1) / 1e18;
+                    totalBearWeight = Number(marketData.totalStake0) / 1e18;
+                } else if ('totalConvictionBullish' in marketData) {
+                    totalBullWeight = Number(marketData.totalConvictionBullish) / 1e18;
+                    totalBearWeight = Number(marketData.totalConvictionBearish) / 1e18;
+                }
 
-                // FIXED: Set tokens based on market asset pair with debug
                 if (marketData?.assetPair) {
-                    console.log('=== SETTING TOKENS FROM MARKET ===');
-                    console.log('Asset pair from market:', marketData.assetPair);
-                    
                     const [baseSymbol, quoteSymbol] = marketData.assetPair.split('/');
-                    console.log('Parsed symbols:', { baseSymbol, quoteSymbol });
                     
                     payToken = {
                         symbol: baseSymbol.trim(),
@@ -238,11 +175,6 @@
                         name: quoteSymbol.trim(),
                         balance: receiveTokenBalance
                     };
-
-                    console.log('Updated tokens:', {
-                        payToken: payToken.symbol,
-                        receiveToken: receiveToken.symbol
-                    });
                 }
             } catch (error) {
                 console.error('Failed to fetch market data:', error);
@@ -256,13 +188,11 @@
         fetchMarketData();
     });
 
-    // Fetch pool prices when market data changes
+    /**
+     * Fetch pool prices when market data changes
+     */
     $effect(() => {
-        console.log('=== POOL PRICES EFFECT ===');
-        console.log('Conditions:', { marketId, hasMarketData: !!marketData });
-
         if (!marketId || !marketData) {
-            console.log('No market data, clearing pool prices');
             poolPrices = null;
             return;
         }
@@ -272,15 +202,11 @@
             priceError = null;
 
             try {
-                console.log(`Fetching pool prices for marketId: ${marketId}`);
                 const result = await fetchPoolPrices(marketId);
 
                 if (result.success && result.prices) {
                     poolPrices = result.prices;
-                    console.log('=== POOL PRICES RECEIVED ===');
-                    console.log('Pool prices received:', poolPrices);
 
-                    // Check if the pool has no liquidity (sqrtPriceX96 is 0)
                     if (poolPrices.sqrtPriceX96 === 0n && !hasShownLiquidityWarning) {
                         toastStore.warning('This pool has no liquidity. Swap quotes may not be accurate.', {
                             duration: 6000,
@@ -289,8 +215,6 @@
                         hasShownLiquidityWarning = true;
                     }
 
-                    // FIXED: Update receive amount using REAL pool prices, not bullshit calculations
-                    console.log('Triggering receive amount update with real pool prices');
                     updateReceiveAmount();
                 } else {
                     priceError = result.error || 'Failed to fetch pool prices';
@@ -307,114 +231,68 @@
         fetchPrices();
     });
 
-    // FIXED: Real exchange rate from pool prices, no more bullshit calculations
+    /**
+     * Calculate exchange rate between pay and receive tokens
+     */
     let exchangeRate = $derived(() => {
-        console.log('=== CALCULATING EXCHANGE RATE ===');
-        
-        if (!poolPrices || !marketData?.assetPair) {
-            console.log('No pool prices or asset pair available');
-            return 0;
-        }
-
-        console.log('Pool prices available:', {
-            token0Price: poolPrices.token0Price,
-            token1Price: poolPrices.token1Price,
-            assetPair: marketData.assetPair
-        });
-
-        // Determine which token is token0 in the pool
-        const [baseSymbol] = marketData.assetPair.split('/');
-        const isPayTokenBase = payToken?.symbol === baseSymbol;
-        
-        const rate = isPayTokenBase ? poolPrices.token0Price : poolPrices.token1Price;
-        
-        console.log('Exchange rate calculation:', {
-            baseSymbol,
-            payTokenSymbol: payToken?.symbol,
-            isPayTokenBase,
-            selectedRate: rate
-        });
-
-        return rate || 0;
+        return calculateExchangeRate(poolPrices, marketData?.assetPair, payToken, receiveToken);
     });
 
     let displayExchangeRate = $derived(() => {
         const rate = exchangeRate();
-        console.log('Display exchange rate:', rate);
         return rate > 0 ? rate.toFixed(6) : '0.000000';
     });
 
-    // FIXED: Use 1% instead of 10% for prediction stake
+    /**
+     * Calculate prediction stake amount (1% of pay amount, minimum 0.001 ETH)
+     */
     let predictionStakeAmount = $derived(() => {
-        // 1% of pay amount, minimum 0.001 ETH
-        return Math.max(0.001, payAmount * 0.01);
+        return calculatePredictionStakeAmount(payAmount);
     });
 
     let marketName = $derived(() => {
-        return marketData?.name || 'Unknown Market';
+        if (!marketData) return 'Unknown Market';
+        
+        // Handle both Market and MarketDetailsResult types
+        if ('name' in marketData) {
+            return marketData.name;
+        } else if ('description' in marketData) {
+            return marketData.description;
+        }
+        
+        return 'Unknown Market';
     });
 
-    // FIXED: Comprehensive validation - only validate pay amount, not receive
+    /**
+     * Validate form inputs
+     */
     let validationErrors = $derived(() => {
-        const errors: string[] = [];
-
-        if (!isConnected) {
-            errors.push('Please connect your wallet');
-        }
-
-        if (!marketData) {
-            errors.push('Market data not available');
-        }
-
-        if (disabled) {
-            errors.push('Trading is currently disabled');
-        }
-
-        if (payAmount <= 0) {
-            errors.push('Enter an amount to pay');
-        } else {
-            // Only check balance for PAY token, not receive token
-            if (payToken?.symbol && isConnected) {
-                if (payTokenBalance === 0) {
-                    errors.push(`No ${payToken.symbol} balance available`);
-                } else if (payAmount > payTokenBalance) {
-                    // FIXED: Use floor for display consistency
-                    const flooredBalance = Math.floor(payTokenBalance * 1000000) / 1000000;
-                    const flooredAmount = Math.floor(payAmount * 1000000) / 1000000;
-                    errors.push(`Insufficient ${payToken.symbol} balance (need ${flooredAmount.toFixed(6)}, have ${flooredBalance.toFixed(6)})`);
-                }
-            }
-        }
-
-        if (!predictionSide) {
-            errors.push('Select a price prediction');
-        }
-
-        if (!predictedTargetPrice || predictedTargetPrice <= 0) {
-            errors.push('Enter a target price');
-        }
-
-        return errors;
-    });
-
-    let isFormValid = $derived(() => {
-        return validationErrors().length === 0;
-    });
-
-    let primaryError = $derived(() => {
-        return validationErrors().length > 0 ? validationErrors()[0] : '';
-    });
-
-    // Event handlers
-    function handleTokenSwap() {
-        console.log('=== TOKEN SWAP ===');
-        console.log('Before swap:', {
-            payToken: payToken.symbol,
-            receiveToken: receiveToken.symbol,
+        return validateSwapForm({
+            isConnected,
+            marketData,
+            disabled,
             payAmount,
-            receiveAmount
+            payToken,
+            payTokenBalance,
+            predictionSide,
+            predictedTargetPrice,
+            receiveAmount,
+            receiveToken,
+            exchangeRate: exchangeRate()
         });
+    });
 
+    /**
+     * Determine if the form is valid based on validation errors
+     */
+    let formValid = $derived(() => isFormValid(validationErrors()));
+
+    /**
+     * Get the primary error to display to the user
+     */
+    let primaryError = $derived(() => getPrimaryError(validationErrors()));
+
+    function handleTokenSwap() {
         const tempToken = payToken;
         const tempAmount = payAmount;
         const tempBalance = payTokenBalance;
@@ -425,19 +303,9 @@
         receiveAmount = tempAmount;
         payTokenBalance = receiveTokenBalance;
         receiveTokenBalance = tempBalance;
-
-        console.log('After swap:', {
-            payToken: payToken.symbol,
-            receiveToken: receiveToken.symbol,
-            payAmount,
-            receiveAmount
-        });
     }
 
     function handlePredictionSelect(side: PredictionSide, targetPrice?: number) {
-        console.log('=== PREDICTION SELECTED ===');
-        console.log('Prediction:', { side, targetPrice });
-        
         predictionSide = side;
         if (targetPrice !== undefined) {
             predictedTargetPrice = targetPrice;
@@ -445,73 +313,60 @@
         onPredictionSelect?.(side, targetPrice);
     }
 
+    // verifyMarketExists is now imported from swap service
+
     /**
-     * FIXED: Executes the swap and prediction transaction with native ETH support
+     * Execute the swap and prediction transaction
      */
     async function executeSwapAndPredict() {
-        console.log('=== FIXED executeSwapAndPredict called ===');
-        if (!isFormValid()) {
+        // Early validation checks
+        if (!formValid) {
             console.error('Form is not valid:', validationErrors());
+            return;
+        }
+
+        if (!marketId) {
+            toastStore.error('No market ID available. Please select a market.');
+            return;
+        }
+        
+        const marketExists = await verifyMarketExists(marketId);
+        if (!marketExists) {
+            toastStore.error(`Market with ID ${marketId} does not exist on-chain. Please select a different market.`);
+            return;
+        }
+
+        if (!marketData) {
+            toastStore.error('Market data is not available');
+            return;
+        }
+        
+        if (!payToken || !receiveToken) {
+            toastStore.error('Token information is missing');
+            return;
+        }
+        
+        if (!predictionSide || !predictedTargetPrice) {
+            toastStore.error('Prediction details are missing');
             return;
         }
 
         isSubmitting = true;
         try {
-            console.log('Starting swap and prediction execution with:', {
-                marketData: marketData?.id,
-                payToken: payToken?.symbol,
-                receiveToken: receiveToken?.symbol,
-                predictionSide,
-                predictedTargetPrice,
-                payAmount,
-                receiveAmount,
-                predictionStakeAmount: predictionStakeAmount()
-            });
-
-            if (!marketData || !payToken || !receiveToken || !predictionSide || !predictedTargetPrice) {
-                throw new Error('Missing required parameters for swap and prediction');
-            }
-
-            // Get the pool key for the swap using the market ID
-            console.log('Getting pool key for market ID:', marketData.id);
-            const poolKey = await getPoolKey(marketData.id);
+            const poolKey = await getPoolKey(marketId);
             if (!poolKey) {
-                throw new Error('Failed to get pool key');
+                throw new Error(`Could not get pool key for market ${marketId}`);
             }
-            console.log('Pool key retrieved:', poolKey);
-
-            // FIXED: Get actual token addresses for native ETH support
+            
             const actualPayTokenAddress = getTokenAddress(payToken.symbol);
             const actualReceiveTokenAddress = getTokenAddress(receiveToken.symbol);
+            
+            const payTokenDecimals = await getTokenDecimals(actualPayTokenAddress);
+            const receiveTokenDecimals = await getTokenDecimals(actualReceiveTokenAddress);
 
-            console.log('=== TOKEN ADDRESS MAPPING ===');
-            console.log('Pay token mapping:', {
-                symbol: payToken.symbol,
-                address: actualPayTokenAddress
-            });
-            console.log('Receive token mapping:', {
-                symbol: receiveToken.symbol,
-                address: actualReceiveTokenAddress
-            });
-
-            // FIXED: Determine swap direction based on ACTUAL pool configuration
             const isPayTokenCurrency0 = actualPayTokenAddress.toLowerCase() === poolKey.currency0.toLowerCase();
             const zeroForOne = isPayTokenCurrency0;
 
-            console.log('=== SWAP DIRECTION ANALYSIS ===');
-            console.log('NATIVE ETH Swap direction analysis:', {
-                payTokenSymbol: payToken.symbol,
-                receiveTokenSymbol: receiveToken.symbol,
-                actualPayTokenAddress,
-                actualReceiveTokenAddress,
-                poolCurrency0: poolKey.currency0,
-                poolCurrency1: poolKey.currency1,
-                isPayTokenCurrency0,
-                zeroForOne,
-                isNativeETH: actualPayTokenAddress === NATIVE_ETH_ADDRESS
-            });
-
-            // VALIDATION: Ensure both tokens are actually in this pool
             const isValidPair = (
                 (actualPayTokenAddress.toLowerCase() === poolKey.currency0.toLowerCase() &&
                     actualReceiveTokenAddress.toLowerCase() === poolKey.currency1.toLowerCase()) ||
@@ -521,40 +376,21 @@
 
             if (!isValidPair) {
                 const errorMsg = `Token pair mismatch: trying to swap ${payToken.symbol}→${receiveToken.symbol} but pool is ${poolKey.currency0}/${poolKey.currency1}`;
-                console.error('=== POOL VALIDATION FAILED ===');
-                console.error(errorMsg);
                 throw new Error(errorMsg);
             }
 
-            console.log('✅ Pool validation passed');
-
-            // FIXED: Use correct decimals for each token
-            const payTokenDecimals = getTokenDecimals(actualPayTokenAddress);
-            const receiveTokenDecimals = getTokenDecimals(actualReceiveTokenAddress);
-
             const amountIn = parseUnits(payAmount.toString(), payTokenDecimals);
-            console.log('Amount in (parsed):', amountIn.toString(), `(${payTokenDecimals} decimals)`);
 
-            // Calculate minimum amount out (with 0.5% slippage)
-            const slippage = 0.005; // 0.5%
+            const slippage = 0.005;
             const amountOutMinimum = parseUnits(
                 (receiveAmount * (1 - slippage)).toString(),
                 receiveTokenDecimals
             );
-            console.log('Amount out minimum (parsed):', amountOutMinimum.toString(), `(${receiveTokenDecimals} decimals)`);
 
-            // FIXED: Map prediction side to outcome correctly
             const outcome = predictionSide === 'above_target' ? 1 : 0;
-            console.log('Prediction outcome:', outcome, '(', predictionSide, ')');
 
-            // FIXED: Use the actual prediction stake amount from the UI (always in ETH)
             const convictionStakeWei = parseUnits(predictionStakeAmount().toString(), 18);
-            console.log('Conviction stake:', {
-                amount: predictionStakeAmount(),
-                wei: convictionStakeWei.toString()
-            });
 
-            // VALIDATION: Check if user has enough ETH for the conviction stake + protocol fee
             if (connectedAddress) {
                 const { rpcUrl, chain } = getCurrentNetworkConfig();
                 const publicClient = createPublicClient({
@@ -564,9 +400,8 @@
 
                 const balance = await publicClient.getBalance({ address: connectedAddress as `0x${string}` });
 
-                // Get protocol fee
                 const predictionManager = getPredictionManager({
-                    address: process.env.PUBLIC_PREDICTIONMANAGER_ADDRESS as Address,
+                    address: PUBLIC_PREDICTIONMANAGER_ADDRESS as Address,
                     chain,
                     transport: http(rpcUrl)
                 });
@@ -574,69 +409,55 @@
                 const protocolFee = (convictionStakeWei * protocolFeeBps) / 10000n;
                 const totalRequired = convictionStakeWei + protocolFee;
 
-                console.log('ETH Balance Check:', {
-                    userBalance: formatUnits(balance, 18),
-                    convictionStake: formatUnits(convictionStakeWei, 18),
-                    protocolFee: formatUnits(protocolFee, 18),
-                    totalRequired: formatUnits(totalRequired, 18)
-                });
-
                 if (balance < totalRequired) {
                     throw new Error(`Insufficient ETH for prediction. Need ${formatUnits(totalRequired, 18)} ETH, have ${formatUnits(balance, 18)} ETH`);
                 }
             }
 
-            // Execute the swap with prediction
-            console.log('Executing swap with prediction (FIXED)...');
             try {
-                console.log('Sending transaction and waiting for confirmation...');
+                // Handle both Market and MarketDetailsResult types
+                let marketIdBigInt: bigint;
+                if (marketId) {
+                    marketIdBigInt = BigInt(marketId);
+                } else if ('id' in marketData) {
+                    marketIdBigInt = BigInt(marketData.id);
+                } else if ('marketId' in marketData) {
+                    marketIdBigInt = marketData.marketId;
+                } else {
+                    throw new Error('Could not determine market ID');
+                }
+                
                 const txHash = await executeSwapWithPrediction(
                     poolKey,
                     zeroForOne,
                     amountIn,
                     amountOutMinimum,
-                    BigInt(marketData.id),
+                    marketIdBigInt,
                     outcome,
                     convictionStakeWei
                 );
 
-                console.log('Transaction confirmed successfully! Hash:', txHash);
-
-                // Show success message only after transaction is confirmed
                 toastStore.success('Swap and prediction executed successfully!', {
                     duration: 5000
                 });
 
-                // Refresh balances and market data immediately
-                console.log('Refreshing data after successful transaction...');
                 try {
-                    // Refresh balances
-                    console.log('Refreshing balances...');
                     await fetchBalances();
 
-                    // Refresh market data to get updated pool state
                     if (marketId) {
-                        console.log('Refreshing market data...');
                         marketData = await getMarketDetails(marketId);
                     }
 
-                    // Refresh pool prices
                     if (marketId) {
-                        console.log('Refreshing pool prices...');
                         const result = await fetchPoolPrices(marketId);
                         if (result.success && result.prices) {
                             poolPrices = result.prices;
-                            console.log('New pool prices:', poolPrices);
                         }
                     }
-
-                    console.log('Balances and market data refreshed after swap');
                 } catch (refreshError) {
                     console.error('Failed to refresh data after swap:', refreshError);
                 }
 
-                // Reset form
-                console.log('Resetting form...');
                 showConfirmationModal = false;
                 payAmount = 0;
                 receiveAmount = 0;
@@ -647,7 +468,6 @@
                 const txError = error as Error;
                 console.error('Transaction execution failed:', txError);
 
-                // FIXED: Better error messages based on the actual errors
                 let errorMessage = '';
                 if (txError.message?.includes('InvalidHookDataLength')) {
                     errorMessage = 'Transaction failed: Invalid hook data format. Please try again.';
@@ -664,7 +484,7 @@
                 } else if (txError.message?.includes('insufficient funds')) {
                     errorMessage = 'Transaction failed: Insufficient ETH balance.';
                 } else if (txError.message?.includes('Insufficient ETH')) {
-                    errorMessage = txError.message; // Use the detailed balance error message
+                    errorMessage = txError.message;
                 } else {
                     errorMessage = `Transaction failed: ${txError.message || 'Unknown error'}`;
                 }
@@ -680,156 +500,63 @@
                 duration: 8000
             });
         } finally {
-            console.log('Swap execution completed (success or failure)');
             isSubmitting = false;
         }
     }
 
     function handlePayAmountChange(amount: number) {
-        console.log('=== PAY AMOUNT CHANGE ===');
-        console.log('New pay amount:', amount);
         payAmount = amount;
         updateReceiveAmount();
     }
 
     function handleReceiveAmountChange(amount: number) {
-        console.log('=== RECEIVE AMOUNT CHANGE ===');
-        console.log('New receive amount:', amount);
-        
-        // REMOVED: All the bullshit 1:1 ratio calculations
-        // The receive amount should be READ-ONLY and calculated from pool quotes
-        
         receiveAmount = amount;
-        console.log('Receive amount manually set to:', amount);
     }
 
     /**
-     * FIXED: Updates the receive amount using REAL pool quotes, no more fake calculations
+     * Update the receive amount based on the pay amount and pool prices
      */
     async function updateReceiveAmount(): Promise<void> {
-        console.log('=== UPDATE RECEIVE AMOUNT ===');
-        console.log('Conditions:', {
-            payAmount,
-            marketId,
-            payTokenSymbol: payToken?.symbol,
-            hasPoolPrices: !!poolPrices
-        });
-
         if (payAmount <= 0 || !marketId || !payToken?.symbol) {
-            console.log('Clearing receive amount - missing requirements');
             receiveAmount = 0;
             return;
         }
 
-        // Track if we've already shown a zero liquidity warning in this function
-        let hasShownZeroLiquidityWarning = false;
-
-        // Early return if we don't have pool prices yet
         if (!poolPrices) {
-            console.log('Pool prices not available yet, using exchange rate fallback');
-            // FIXED: Use real exchange rate, not 1:1 bullshit
             const rate = exchangeRate();
             receiveAmount = payAmount * rate;
-            console.log('Fallback calculation:', {
-                payAmount,
-                exchangeRate: rate,
-                receiveAmount
-            });
             return;
         }
 
         try {
-            // Get actual token address for the pay token
-            const actualPayTokenAddress = getTokenAddress(payToken.symbol);
-            const payTokenDecimals = getTokenDecimals(actualPayTokenAddress);
-
-            // Convert payAmount to bigint with correct decimals
-            const amountBigInt = parseUnits(payAmount.toString(), payTokenDecimals);
-
-            console.log('=== SWAP QUOTE REQUEST ===');
-            console.log('Quote parameters:', {
-                marketId,
-                payTokenSymbol: payToken.symbol,
-                actualPayTokenAddress,
-                payAmount,
-                amountBigInt: amountBigInt.toString(),
-                decimals: payTokenDecimals
-            });
-
-            // Make sure we have market data
-            if (!marketData) {
-                console.error('Market data not available');
-                return;
-            }
-
-            // Get the pool key to access the actual token addresses
-            const poolKey = await getPoolKey(marketId);
-            if (!poolKey) {
-                throw new Error('Failed to get pool key for market');
-            }
-
-            console.log('Pool key for quote:', poolKey);
-
-            // Get swap quote from service
-            const quoteResult = await getSwapQuote(marketId, actualPayTokenAddress, amountBigInt);
-
-            if (quoteResult.success && quoteResult.quote) {
-                // Convert the output amount from bigint to number with correct decimals
-                const receiveTokenAddress = quoteResult.quote.tokenOut;
-                const receiveTokenDecimals = getTokenDecimals(receiveTokenAddress);
-                receiveAmount = Number(quoteResult.quote.amountOut) / (10 ** receiveTokenDecimals);
-                
-                console.log('=== SWAP QUOTE SUCCESS ===');
-                console.log('Swap quote received:', {
-                    tokenIn: quoteResult.quote.tokenIn,
-                    tokenOut: quoteResult.quote.tokenOut,
-                    amountIn: quoteResult.quote.amountIn.toString(),
-                    amountOut: quoteResult.quote.amountOut.toString(),
-                    receiveTokenDecimals,
-                    calculatedReceiveAmount: receiveAmount
-                });
+            // Use the utility function to calculate receive amount
+            const result = await calculateReceiveAmount(
+                marketId, 
+                marketData, // Pass marketData as the second parameter
+                payAmount, 
+                payToken, 
+                poolPrices
+            );
+            
+            if (result !== null) {
+                receiveAmount = result;
             } else {
-                console.error('Failed to get swap quote:', quoteResult.error);
-
-                // Check for zero liquidity error
-                if (quoteResult.error === 'ZERO_LIQUIDITY_POOL' && !hasShownZeroLiquidityWarning) {
-                    toastStore.warning(quoteResult.details || 'This pool has no liquidity. Swap quotes may not be accurate.', {
-                        duration: 6000,
-                        position: 'top-center'
-                    });
-                    hasShownZeroLiquidityWarning = true;
-                }
-
-                // FIXED: Fallback to real exchange rate, not 1:1 bullshit
-                const rate = exchangeRate();
-                receiveAmount = payAmount * rate;
-                console.log('Quote failed, using exchange rate fallback:', {
-                    exchangeRate: rate,
-                    fallbackReceiveAmount: receiveAmount
-                });
+                receiveAmount = 0;
+                console.error('Failed to get swap quote');
             }
         } catch (error) {
             console.error('Error updating receive amount:', error);
-            // FIXED: Fallback to real exchange rate, not 1:1 bullshit
             const rate = exchangeRate();
             receiveAmount = payAmount * rate;
-            console.log('Error fallback using exchange rate:', {
-                exchangeRate: rate,
-                fallbackReceiveAmount: receiveAmount
-            });
         }
     }
 
     function handleConnectWallet() {
-        console.log('=== CONNECT WALLET CLICKED ===');
         appKit.open();
     }
 
     function handleRefreshBalances() {
-        console.log('=== MANUAL BALANCE REFRESH ===');
-        // Trigger balance refetch by clearing and refetching
         if (connectedAddress && payToken?.symbol && receiveToken?.symbol) {
-            console.log('Manually refreshing balances');
             isLoadingBalances = true;
 
             Promise.all([
@@ -838,7 +565,6 @@
             ]).then(([payBalance, receiveBalance]) => {
                 payTokenBalance = payBalance;
                 receiveTokenBalance = receiveBalance;
-                console.log('Balances refreshed:', { payBalance, receiveBalance });
             }).catch(error => {
                 console.error('Failed to refresh balances:', error);
             }).finally(() => {
@@ -849,9 +575,7 @@
 </script>
 
 <div class="space-y-6">
-    <!-- Main Swap Card -->
     <div class="rounded-2xl border border-gray-200 bg-white shadow-sm {disabled ? 'opacity-60' : ''}">
-        <!-- Header -->
         <div class="border-b border-gray-100 px-6 py-4">
             <h2 class="text-lg font-semibold text-gray-900">Swap & Predict</h2>
             <p class="text-sm text-gray-500">Trade tokens and make price predictions</p>
@@ -859,7 +583,6 @@
 
         <div class="space-y-6 p-6">
             {#if !isConnected}
-                <!-- Wallet Connection Required -->
                 <div class="text-center py-8">
                     <div class="mb-4">
                         <div class="mx-auto h-12 w-12 rounded-full bg-blue-100 flex items-center justify-center">
@@ -879,9 +602,7 @@
                     </button>
                 </div>
             {:else}
-                <!-- Swap Interface -->
                 <div class="space-y-4">
-                    <!-- You Pay Section -->
                     <TokenInput
                             label="You pay"
                             amount={payAmount}
@@ -894,7 +615,6 @@
                             onRefreshBalance={handleRefreshBalances}
                     />
 
-                    <!-- Swap Button -->
                     <div class="relative z-10 -my-2 flex justify-center">
                         <button
                                 onclick={handleTokenSwap}
@@ -906,7 +626,6 @@
                         </button>
                     </div>
 
-                    <!-- You Receive Section -->
                     <TokenInput
                             label="You receive"
                             amount={receiveAmount}
@@ -923,7 +642,6 @@
                     />
                 </div>
 
-                <!-- Pool Information Display -->
                 {#if poolPrices}
                     <div class="rounded-lg border border-blue-200 bg-blue-50 p-4">
                         <h4 class="text-sm font-medium text-blue-900 mb-2">Pool Information</h4>
@@ -946,23 +664,84 @@
                     </div>
                 {/if}
 
-                <!-- Debug Information (DEV ONLY - Remove in production) -->
+                <!-- Enhanced Debug Information -->
                 {#if poolPrices}
                     <div class="rounded-lg border border-yellow-200 bg-yellow-50 p-4">
-                        <h4 class="text-sm font-medium text-yellow-900 mb-2">🧪 Debug Info</h4>
-                        <div class="space-y-1 text-xs font-mono">
-                            <div>Market: {marketData?.name || 'Loading...'}</div>
-                            <div>Asset Pair: {marketData?.assetPair || 'Loading...'}</div>
-                            <div>Pay Token: {payToken?.symbol} (Balance: {payTokenBalance})</div>
-                            <div>Receive Token: {receiveToken?.symbol} (Balance: {receiveTokenBalance})</div>
-                            <div>Pool Price (token0): {poolPrices.token0Price}</div>
-                            <div>Pool Price (token1): {poolPrices.token1Price}</div>
-                            <div>Exchange Rate: {exchangeRate()}</div>
+                        <h4 class="text-sm font-medium text-yellow-900 mb-2">🧪 Complete Debug Info</h4>
+                        <div class="space-y-2 text-xs font-mono">
+                            <div class="border-b border-yellow-300 pb-2">
+                                <div><strong>Market:</strong> {marketName} (ID: {marketId || 'N/A'})</div>
+                                <div><strong>Asset Pair:</strong> {marketData?.assetPair || 'Loading...'}</div>
+                            </div>
+                            
+                            <div class="border-b border-yellow-300 pb-2">
+                                <div><strong>Pay Token:</strong> {payToken?.symbol} (Balance: {payTokenBalance.toFixed(6)})</div>
+                                <div><strong>Receive Token:</strong> {receiveToken?.symbol} (Balance: {receiveTokenBalance.toFixed(6)})</div>
+                                <div><strong>Pay Amount:</strong> {payAmount}</div>
+                                <div><strong>Receive Amount:</strong> {receiveAmount}</div>
+                            </div>
+
+                            <div class="border-b border-yellow-300 pb-2">
+                                <div class="text-yellow-700"><strong>--- Raw Pool Data ---</strong></div>
+                                <div><strong>sqrtPriceX96:</strong> {poolPrices.sqrtPriceX96?.toString() || 'N/A'}</div>
+                                <div><strong>tick:</strong> {poolPrices.tick?.toString() || 'N/A'}</div>
+                                <div><strong>protocolFee:</strong> {poolPrices.protocolFee || 'N/A'}</div>
+                                <div><strong>lpFee:</strong> {poolPrices.lpFee || 'N/A'}</div>
+                            </div>
+
+                            <div class="border-b border-yellow-300 pb-2">
+                                <div class="text-yellow-700"><strong>--- Pool Prices ---</strong></div>
+                                {#if marketData?.assetPair}
+                                    {@const [baseSymbol, quoteSymbol] = marketData.assetPair.split('/')}
+                                    <div><strong>Raw token0Price:</strong> {poolPrices.token0Price}</div>
+                                    <div><strong>Raw token1Price:</strong> {poolPrices.token1Price}</div>
+                                    <div><strong>Interpretation:</strong></div>
+                                    <div class="ml-2">• token0Price = {quoteSymbol} per {baseSymbol}</div>
+                                    <div class="ml-2">• token1Price = {baseSymbol} per {quoteSymbol}</div>
+                                {/if}
+                            </div>
+
+                            <div class="border-b border-yellow-300 pb-2">
+                                <div class="text-yellow-700"><strong>--- Exchange Rate Logic ---</strong></div>
+                                <div><strong>Calculated exchange rate:</strong> {exchangeRate()}</div>
+                                <div><strong>Display exchange rate:</strong> {displayExchangeRate()}</div>
+                                <div><strong>Expected for 1 {payToken?.symbol}:</strong> {payAmount > 0 ? (payAmount * exchangeRate()).toFixed(6) : '0'} {receiveToken?.symbol}</div>
+                                <div><strong>Actual receive amount:</strong> {receiveAmount.toFixed(6)} {receiveToken?.symbol}</div>
+                            </div>
+
+                            <div class="border-b border-yellow-300 pb-2">
+                                <div class="text-yellow-700"><strong>--- Sanity Checks ---</strong></div>
+                                {#if payToken?.symbol === 'ETH' && receiveToken?.symbol === 'USDC'}
+                                    <div><strong>ETH→USDC Check:</strong></div>
+                                    <div class="ml-2">• Should be ~2,400-2,600 USDC per ETH</div>
+                                    <div class="ml-2">• Current rate: {exchangeRate().toFixed(2)} USDC per ETH</div>
+                                    <div class="ml-2 {exchangeRate() > 1000 && exchangeRate() < 5000 ? 'text-green-600' : 'text-red-600'}">
+                                        • Status: {exchangeRate() > 1000 && exchangeRate() < 5000 ? '✅ Reasonable' : '❌ WRONG!'}
+                                    </div>
+                                {:else if payToken?.symbol === 'USDC' && receiveToken?.symbol === 'ETH'}
+                                    <div><strong>USDC→ETH Check:</strong></div>
+                                    <div class="ml-2">• Should be ~0.0004 ETH per USDC</div>
+                                    <div class="ml-2">• Current rate: {exchangeRate().toFixed(8)} ETH per USDC</div>
+                                    <div class="ml-2 {exchangeRate() > 0.0002 && exchangeRate() < 0.0006 ? 'text-green-600' : 'text-red-600'}">
+                                        • Status: {exchangeRate() > 0.0002 && exchangeRate() < 0.0006 ? '✅ Reasonable' : '❌ WRONG!'}
+                                    </div>
+                                {/if}
+                            </div>
+
+                            <div>
+                                <div class="text-yellow-700"><strong>--- Validation Errors ---</strong></div>
+                                {#if validationErrors().length > 0}
+                                    {#each validationErrors() as error}
+                                        <div class="text-red-600">• {error}</div>
+                                    {/each}
+                                {:else}
+                                    <div class="text-green-600">• No validation errors</div>
+                                {/if}
+                            </div>
                         </div>
                     </div>
                 {/if}
 
-                <!-- Prediction Section -->
                 <PredictionSection
                         {predictionSide}
                         predictionStakeAmount={predictionStakeAmount()}
@@ -978,9 +757,7 @@
                         onHelpClick={() => (showHelpModal = true)}
                 />
 
-                <!-- Action Buttons -->
                 <div class="space-y-3">
-                    <!-- Error Messages (show before button) -->
                     {#if validationErrors().length > 0}
                         <div class="space-y-2">
                             {#each validationErrors() as error, i}
@@ -992,7 +769,6 @@
                                         <span class="font-medium">{error}</span>
                                     </div>
                                 </div>
-                                <!-- Show count of additional errors -->
                                 {#if i === 0 && validationErrors().length > 1}
                                     <div class="text-xs text-gray-500 px-2">
                                         + {validationErrors().length - 1} more issue{validationErrors().length > 2 ? 's' : ''} to resolve
@@ -1006,7 +782,7 @@
                             type="button"
                             onclick={() => (showConfirmationModal = true)}
                             class="w-full rounded-xl bg-gradient-to-r from-blue-600 to-indigo-600 py-4 text-lg font-semibold text-white shadow-lg transition-all hover:from-blue-700 hover:to-indigo-700 hover:shadow-xl disabled:opacity-50 disabled:cursor-not-allowed"
-                            disabled={!isFormValid()}
+                            disabled={!formValid || isSubmitting}
                             title={primaryError() || 'Swap & Predict'}
                     >
                         {#if isSubmitting}
@@ -1030,7 +806,6 @@
     </div>
 </div>
 
-<!-- Modals -->
 <ConfirmationModal
         bind:open={showConfirmationModal}
         {payAmount}
