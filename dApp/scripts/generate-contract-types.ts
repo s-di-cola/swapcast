@@ -20,7 +20,8 @@ const TARGET_CONTRACTS = [
   'MarketLogic',
   'PoolManager',
   'StateView',
-  'IUniversalRouter'
+  'IUniversalRouter',
+  'SimpleSwapRouter'
 ];
 
 if (!existsSync(generatedDir)) {

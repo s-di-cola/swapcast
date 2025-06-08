@@ -248,6 +248,7 @@ deploy_contracts() {
   ORACLE_RESOLVER=$(grep -A 10 "SwapCast Deployment Summary" "$LOG_DIR"/deploy.log | grep "OracleResolver:" | awk '{print $2}')
   REWARD_DISTRIBUTOR=$(grep -A 10 "SwapCast Deployment Summary" "$LOG_DIR"/deploy.log | grep "RewardDistributor:" | awk '{print $2}')
   SWAP_CAST_HOOK=$(grep -A 10 "SwapCast Deployment Summary" "$LOG_DIR"/deploy.log | grep "SwapCastHook:" | awk '{print $2}')
+  SIMPLE_SWAP_ROUTER=$(grep -A 10 "SwapCast Deployment Summary" "$LOG_DIR"/deploy.log | grep "SimpleSwapRouter:" | awk '{print $2}')
 
   # Check if we found the PredictionManager address
   if [ -z "$PREDICTION_MANAGER" ]; then
@@ -262,6 +263,7 @@ deploy_contracts() {
   [ -n "$ORACLE_RESOLVER" ] && echo "PUBLIC_ORACLERESOLVER_ADDRESS=$ORACLE_RESOLVER" >> "$DAPP_ENV_FILE"
   [ -n "$REWARD_DISTRIBUTOR" ] && echo "PUBLIC_REWARDDISTRIBUTOR_ADDRESS=$REWARD_DISTRIBUTOR" >> "$DAPP_ENV_FILE"
   [ -n "$SWAP_CAST_HOOK" ] && echo "PUBLIC_SWAPCASTHOOK_ADDRESS=$SWAP_CAST_HOOK" >> "$DAPP_ENV_FILE"
+  [ -n "$SIMPLE_SWAP_ROUTER" ] && echo "PUBLIC_SIMPLESWAPROUTER_ADDRESS=$SIMPLE_SWAP_ROUTER" >> "$DAPP_ENV_FILE"
   
   # Add Uniswap v4 PoolManager address (mainnet)
   echo "PUBLIC_UNIV4_POOLMANAGER_ADDRESS=0x000000000004444c5dc75cB358380D2e3dE08A90" >> "$DAPP_ENV_FILE"

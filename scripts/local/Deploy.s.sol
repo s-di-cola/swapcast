@@ -11,6 +11,7 @@ import {OracleResolver} from "src/OracleResolver.sol";
 import {RewardDistributor} from "src/RewardDistributor.sol";
 import {PredictionManager} from "src/PredictionManager.sol";
 import {SwapCastHook} from "src/SwapCastHook.sol";
+import {SimpleSwapRouter} from "src/SimpleSwapRouter.sol"; // Add this import
 import {IPoolManager} from "v4-core/interfaces/IPoolManager.sol";
 import {PredictionTypes} from "src/types/PredictionTypes.sol";
 import {MarketLogic} from "src/MarketLogic.sol";
@@ -46,6 +47,7 @@ contract DeploySwapCast is Script, StdCheats {
     OracleResolver public oracleResolver;
     RewardDistributor public rewardDistributor;
     SwapCastHook public swapCastHook;
+    SimpleSwapRouter public simpleSwapRouter; // Add this
 
     function run() external {
         // Get the private key from the environment variable
@@ -98,7 +100,7 @@ contract DeploySwapCast is Script, StdCheats {
         swapCastNFT.setPredictionManagerAddress(address(predictionManager));
         console2.log("Set PredictionManager address in SwapCastNFT");
 
-        // 7. Deploy SwapCastHook with the Uniswap v4 PoolManager
+        // 8. Deploy SwapCastHook with the Uniswap v4 PoolManager
         console2.log("Deploying SwapCastHook at an address that encodes its permissions");
         
         // Uniswap v4 PoolManager address
@@ -131,6 +133,11 @@ contract DeploySwapCast is Script, StdCheats {
         require(address(swapCastHook) == hookAddress, "Hook address mismatch");
         
         console2.log("SwapCastHook deployed at:", address(swapCastHook));
+
+        // 9. Deploy SimpleSwapRouter for handling hook external calls
+        console2.log("Deploying SimpleSwapRouter for proper unlock handling...");
+        simpleSwapRouter = new SimpleSwapRouter(IPoolManager(poolManagerAddress));
+        console2.log("SimpleSwapRouter deployed at:", address(simpleSwapRouter));
         
         // The hook is now deployed at the correct address with the proper permissions
         console2.log("SwapCastHook successfully deployed at address:", address(swapCastHook));
@@ -140,7 +147,8 @@ contract DeploySwapCast is Script, StdCheats {
         console2.log("\nTo create a pool with this hook, use the following information:");
         console2.log("1. PoolManager address: ", poolManagerAddress);
         console2.log("2. Hook address: ", address(swapCastHook));
-        console2.log("3. Example token pair: WETH/USDC");
+        console2.log("3. SimpleSwapRouter address: ", address(simpleSwapRouter));
+        console2.log("4. Example token pair: WETH/USDC");
         console2.log("   - WETH: 0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2");
         console2.log("   - USDC: 0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48");
         
@@ -159,21 +167,23 @@ contract DeploySwapCast is Script, StdCheats {
         assembly {
             poolIdBytes := poolId
         }
-        console2.log("4. Expected Pool ID: ", vm.toString(poolIdBytes));
+        console2.log("5. Expected Pool ID: ", vm.toString(poolIdBytes));
         console2.log("\nNote: Pool initialization should be done in a separate transaction");
         console2.log("after ensuring the tokens are properly sorted and the hook is valid.");
+        console2.log("\nIMPORTANT: Use SimpleSwapRouter instead of PoolManager for swaps with predictions!");
 
         // Stop broadcasting transactions
         vm.stopBroadcast();
 
         // Log deployment summary
         console2.log("\n--- SwapCast Deployment Summary ---");
-        console2.log("SwapCastNFT:      ", address(swapCastNFT));
-        console2.log("Treasury:         ", address(treasury));
-        console2.log("PredictionManager:", address(predictionManager));
-        console2.log("OracleResolver:   ", address(oracleResolver));
-        console2.log("RewardDistributor:", address(rewardDistributor));
-        console2.log("SwapCastHook:     ", address(swapCastHook));
+        console2.log("SwapCastNFT:       ", address(swapCastNFT));
+        console2.log("Treasury:          ", address(treasury));
+        console2.log("PredictionManager: ", address(predictionManager));
+        console2.log("OracleResolver:    ", address(oracleResolver));
+        console2.log("RewardDistributor: ", address(rewardDistributor));
+        console2.log("SwapCastHook:      ", address(swapCastHook));
+        console2.log("SimpleSwapRouter:  ", address(simpleSwapRouter));
         console2.log("--------------------------------");
     }
 }
