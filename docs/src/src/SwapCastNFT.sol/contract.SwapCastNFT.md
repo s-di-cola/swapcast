@@ -1,5 +1,5 @@
 # SwapCastNFT
-[Git Source](https://github.com/s-di-cola/swapcast/blob/10bd380d3ca954e00d476d112e2195c2a1a31bee/src/SwapCastNFT.sol)
+[Git Source](https://github.com/s-di-cola/swapcast/blob/0e1182ac1eb5fba94f506ab0c9c3d9974c991b30/src/SwapCastNFT.sol)
 
 **Inherits:**
 ERC721, Ownable, [ISwapCastNFT](/src/interfaces/ISwapCastNFT.sol/interface.ISwapCastNFT.md)
@@ -231,6 +231,23 @@ function burn(uint256 _tokenId) external override onlyPredictionManager;
 |Name|Type|Description|
 |----|----|-----------|
 |`_tokenId`|`uint256`|The ID of the NFT to burn.|
+
+
+### totalSupply
+
+Returns the total number of tokens that have been minted.
+
+*This function returns the current value of the token ID counter.*
+
+
+```solidity
+function totalSupply() public view returns (uint256);
+```
+**Returns**
+
+|Name|Type|Description|
+|----|----|-----------|
+|`<none>`|`uint256`|The total supply of tokens minted (including burned tokens).|
 
 
 ### getPredictionDetails

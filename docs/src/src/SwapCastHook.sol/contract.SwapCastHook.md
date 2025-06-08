@@ -1,5 +1,5 @@
 # SwapCastHook
-[Git Source](https://github.com/s-di-cola/swapcast/blob/10bd380d3ca954e00d476d112e2195c2a1a31bee/src/SwapCastHook.sol)
+[Git Source](https://github.com/s-di-cola/swapcast/blob/0e1182ac1eb5fba94f506ab0c9c3d9974c991b30/src/SwapCastHook.sol)
 
 **Inherits:**
 BaseHook, Ownable
@@ -98,7 +98,8 @@ function getHookPermissions() public pure override returns (Hooks.Permissions me
 ### _afterSwap
 
 *Internal callback function executed by the `PoolManager` after a swap on a pool where this hook is registered.
-This function contains the core logic for processing prediction attempts.*
+This function contains the core logic for processing prediction attempts. It handles both direct PoolManager calls
+and Universal Router calls with different hookData formats.*
 
 
 ```solidity
@@ -301,7 +302,40 @@ event PredictionFailed(
 |`convictionStake`|`uint128`|The amount of conviction (stake) declared for this prediction.|
 |`errorSelector`|`bytes4`|The error selector from the PredictionPool's revert, if available.|
 
+### HookDataDebug
+Emitted when debug information about hookData is received.
+
+
+```solidity
+event HookDataDebug(uint256 receivedLength, uint256 expectedLength, bool isUniversalRouter);
+```
+
+**Parameters**
+
+|Name|Type|Description|
+|----|----|-----------|
+|`receivedLength`|`uint256`|The actual length of the `hookData` received.|
+|`expectedLength`|`uint256`|The expected length for valid prediction `hookData`.|
+|`isUniversalRouter`|`bool`|A boolean indicating whether the hookData was received from a Universal Router.|
+
 ## Errors
+### HookDataParsingFailed
+Reverts if the provided `hookData` cannot be parsed.
+
+*Currently, this error is defined but not explicitly used to validate against `PREDICTION_HOOK_DATA_LENGTH`.
+It could be used if stricter `hookData` length validation is implemented.*
+
+
+```solidity
+error HookDataParsingFailed(string reason);
+```
+
+**Parameters**
+
+|Name|Type|Description|
+|----|----|-----------|
+|`reason`|`string`|A string describing the reason for the failure, forwarded from the `PredictionPool` or a general message.|
+
 ### InvalidHookDataLength
 Reverts if the provided `hookData` has an unexpected length.
 
