@@ -244,7 +244,9 @@ contract SwapCastNFT is ERC721, Ownable, ISwapCastNFT {
      * @custom:reverts NotPredictionManager If called by any address other than the authorized PredictionManager.
      */
     modifier onlyPredictionManager() {
-        if (msg.sender != predictionManagerAddress) revert NotPredictionManager();
+        if (msg.sender != predictionManagerAddress) {
+            revert NotPredictionManager();
+        }
         _;
     }
 
@@ -340,6 +342,15 @@ contract SwapCastNFT is ERC721, Ownable, ISwapCastNFT {
 
         // INTERACTIONS: External call last (CEI pattern) to prevent reentrancy
         _burn(_tokenId);
+    }
+
+    /**
+     * @notice Returns the total number of tokens that have been minted.
+     * @dev This function returns the current value of the token ID counter.
+     * @return The total supply of tokens minted (including burned tokens).
+     */
+    function totalSupply() public view returns (uint256) {
+        return _nextTokenId;
     }
 
     /**
