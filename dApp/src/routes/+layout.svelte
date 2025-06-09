@@ -9,8 +9,6 @@
 	import { appKit } from '$lib/configs/wallet.config';
 	import { isAdmin } from '$lib/utils/admin';
 
-	export const ssr = false; // Disable server-side rendering for this component
-
 	let { children } = $props<{ children: any }>();
 
 	// Determine route types

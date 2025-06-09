@@ -21,6 +21,6 @@ export const appKit = createAppKit({
 	},
 	projectId: PUBLIC_REOWN_PROJECT_ID,
 	features: {
-		analytics: true
+		analytics: false // Disabled to prevent telemetry errors
 	}
 });
