@@ -40,12 +40,14 @@ interface MarketConfig {
 	basePrice: number;
 }
 
+// FIXED: Use BTC instead of WBTC for price API compatibility
 const TOKEN_INFO: Record<string, TokenInfo> = {
 	ETH: { address: TOKEN_ADDRESSES.ETH, symbol: 'ETH', name: 'Ethereum', decimals: 18 },
 	USDC: { address: TOKEN_ADDRESSES.USDC, symbol: 'USDC', name: 'USD Coin', decimals: 6 },
 	USDT: { address: TOKEN_ADDRESSES.USDT, symbol: 'USDT', name: 'Tether USD', decimals: 6 },
 	DAI: { address: TOKEN_ADDRESSES.DAI, symbol: 'DAI', name: 'Dai Stablecoin', decimals: 18 },
-	WBTC: { address: TOKEN_ADDRESSES.WBTC, symbol: 'WBTC', name: 'Wrapped Bitcoin', decimals: 8 },
+	// CHANGED: Use BTC instead of WBTC for API compatibility, but keep WBTC address for contract
+	BTC: { address: TOKEN_ADDRESSES.WBTC, symbol: 'BTC', name: 'Bitcoin', decimals: 8 },
 };
 
 /**
@@ -72,9 +74,10 @@ function createMarketConfigs(ethPrice: number, btcPrice: number): MarketConfig[]
 		{ base: 'ETH', quote: 'USDC', basePrice: ethPrice },
 		{ base: 'ETH', quote: 'USDT', basePrice: ethPrice },
 		{ base: 'ETH', quote: 'DAI', basePrice: ethPrice },
-		{ base: 'WBTC', quote: 'USDC', basePrice: btcPrice },
-		{ base: 'WBTC', quote: 'USDT', basePrice: btcPrice },
-		{ base: 'WBTC', quote: 'DAI', basePrice: btcPrice },
+		// CHANGED: Use BTC instead of WBTC
+		{ base: 'BTC', quote: 'USDC', basePrice: btcPrice },
+		{ base: 'BTC', quote: 'USDT', basePrice: btcPrice },
+		{ base: 'BTC', quote: 'DAI', basePrice: btcPrice },
 	];
 }
 
@@ -188,6 +191,7 @@ async function createPredictionMarket(
 ): Promise<void> {
 	console.log(chalk.yellow(`  📈 Creating prediction market...`));
 	
+	// FIXED: Use BTC instead of WBTC in market name
 	const marketName = `${config.base} Price Prediction`;
 	const expirationTime = BigInt(Math.floor(Date.now() / 1000) + 30 * 24 * 60 * 60);
 	const priceThreshold = parseUnits(String(config.basePrice * 1.15), 8);
@@ -195,7 +199,7 @@ async function createPredictionMarket(
 	
 	const marketHash = await predictionManager.write.createMarket([
 		marketName,
-		config.base,
+		config.base, // This will now be 'BTC' instead of 'WBTC'
 		expirationTime,
 		priceAggregator,
 		priceThreshold,
@@ -300,12 +304,4 @@ export async function generateMarkets(
 	
 	console.log(chalk.blue(`📝 Successfully created ${markets.length}/${configsToUse.length} markets with pools\n`));
 	return markets;
-}
-
-/**
- * @deprecated Use generateMarkets() instead
- */
-export function generateFixtures() {
-	console.warn(chalk.yellow('⚠️ generateFixtures() is deprecated. Use generateMarkets() instead.'));
-	return [];
 }
