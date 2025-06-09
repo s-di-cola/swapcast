@@ -44,6 +44,7 @@ export async function getActiveMarketsCount(): Promise<number> {
 export async function getAllMarkets(options?: MarketPaginationOptions): Promise<PaginatedMarkets> {
 	try {
 		const count = await getMarketCount();
+		console.log('Total market count:', count);
 
 		if (count === 0) {
 			return {
@@ -54,26 +55,35 @@ export async function getAllMarkets(options?: MarketPaginationOptions): Promise<
 			};
 		}
 
-		// Generate market IDs and fetch details in parallel
-		// Include an extra index to check for any newly created markets
-		const marketIds = Array.from({ length: count }, (_, i) => BigInt(i));
+		// FIXED: Generate market IDs starting from 1, not 0
+		// Your fixtures create markets starting from ID 1
+		const marketIds = Array.from({ length: count }, (_, i) => BigInt(i + 1));
+
+		console.log('Fetching markets with IDs:', marketIds.map(id => Number(id)));
 
 		// Fetch all markets in parallel with proper type handling
-		const marketPromises = marketIds.map((id) => {
-			return getMarketDetails(id).catch((error) => {
+		const marketPromises = marketIds.map(async (id) => {
+			try {
+				const market = await getMarketDetails(id);
+				console.log(`Market ${id} exists:`, market.exists);
+				return market;
+			} catch (error) {
 				console.error(`Error fetching market ${id}:`, error);
-				// Return null for failed fetches
 				return null;
-			});
+			}
 		});
 
 		const allMarkets = await Promise.all(marketPromises);
 
 		// Filter out null values and markets that don't exist
-		// TypeScript: Filter out nulls first, then we have an array of Market objects
 		const validMarkets = allMarkets.filter(
-			(market): market is NonNullable<typeof market> => market !== null && market.exists === true
+			(market): market is NonNullable<typeof market> =>
+				market !== null &&
+				market.exists === true &&
+				market.assetSymbol !== 'Unknown' // Also filter out markets with no real data
 		);
+
+		console.log(`Found ${validMarkets.length} valid markets out of ${count} total`);
 
 		// Apply sorting
 		let sortedMarkets = validMarkets;
@@ -138,7 +148,6 @@ export async function getPoolKey(marketId: string | bigint): Promise<PoolKey | u
 		return undefined;
 	}
 }
-
 
 /**
  * Creates a new prediction market

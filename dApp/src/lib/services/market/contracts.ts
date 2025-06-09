@@ -38,10 +38,8 @@ export async function getMarketCount(): Promise<number> {
 		// Get the current count from the contract
 		const count = await predictionManager.read.getMarketCount();
 
-		// Add 1 to account for any newly created markets that might not be indexed yet
-		// This ensures we always check for the latest market
-		const adjustedCount = Number(count) + 1;
-		return adjustedCount;
+		console.log('Raw market count from contract:', count);
+		return Number(count);
 	} catch (error) {
 		console.error('Failed to get market count:', error);
 		return 0;
@@ -60,6 +58,8 @@ export async function getMarketDetails(marketId: string | bigint) {
 	try {
 		const predictionManager = getPredictionManagerContract();
 		const result = await predictionManager.read.getMarketDetails([id]);
+
+		console.log(`Raw market details for ID ${id}:`, result);
 
 		// Destructure the contract response
 		const [
@@ -102,7 +102,15 @@ export async function getMarketDetails(marketId: string | bigint) {
 			priceThreshold
 		};
 
-		return details;
+		console.log(`Processed market details for ID ${id}:`, details);
+
+		// Only return markets that actually exist
+		if (!exists) {
+			console.warn(`Market ${id} does not exist`);
+			return createDefaultMarket(id);
+		}
+
+		return transformMarketDetails(details);
 	} catch (error) {
 		console.error(`Failed to get market details for ID ${id}:`, error);
 		return createDefaultMarket(id);

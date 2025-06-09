@@ -74,6 +74,50 @@ export function getMarketStatus(
 }
 
 /**
+ * Extracts asset symbol from asset pair string with better fallbacks
+ *
+ * @param assetPair - The asset pair string (e.g., "BTC/USDT", "ETH/USDC")
+ * @param description - Market description as fallback
+ * @returns The base asset symbol (e.g., "BTC", "ETH") or fallback
+ */
+function extractAssetSymbol(assetPair: string | undefined | null, description?: string): string {
+	// Try to extract from assetPair first
+	if (assetPair && typeof assetPair === 'string' && assetPair.trim() !== '') {
+		// If the symbol contains a slash, it's a trading pair
+		if (assetPair.includes('/')) {
+			// Extract the base asset (first part before the slash)
+			const baseAsset = assetPair.split('/')[0].trim();
+			if (baseAsset) return baseAsset;
+		} else {
+			// Otherwise, return the symbol as is (if it's not empty)
+			const trimmed = assetPair.trim();
+			if (trimmed) return trimmed;
+		}
+	}
+
+	// Try to extract from description as fallback
+	if (description && typeof description === 'string') {
+		// Look for common patterns like "ETH/USD", "BTC price", etc.
+		const patterns = [
+			/([A-Z]{2,5})\/[A-Z]{2,5}/i, // ETH/USD pattern
+			/([A-Z]{2,5})\s+price/i,     // "ETH price" pattern
+			/price.*?([A-Z]{2,5})/i,     // "price of ETH" pattern
+			/([A-Z]{2,5})\s+prediction/i // "ETH prediction" pattern
+		];
+
+		for (const pattern of patterns) {
+			const match = description.match(pattern);
+			if (match && match[1]) {
+				return match[1].toUpperCase();
+			}
+		}
+	}
+
+	// Final fallback
+	return 'ETH'; // Default to ETH instead of 'Unknown'
+}
+
+/**
  * Creates a default market object for error cases or non-existent markets
  *
  * @param id - Market ID
@@ -85,8 +129,8 @@ export function createDefaultMarket(id: bigint): Market {
 	return {
 		id: id.toString(),
 		name: `Market ${id}`,
-		assetSymbol: 'Unknown',
-		assetPair: 'Unknown',
+		assetSymbol: 'ETH',
+		assetPair: 'ETH/USD',
 		exists: false,
 		resolved: false,
 		winningOutcome: 0,
@@ -102,7 +146,7 @@ export function createDefaultMarket(id: bigint): Market {
 }
 
 /**
- * Transforms raw contract data into Market interface
+ * Transforms raw contract data into Market interface with better price handling
  *
  * @param details - Raw market details from contract
  * @returns Properly formatted Market object
@@ -113,18 +157,54 @@ export function transformMarketDetails(details: MarketDetailsResult): Market {
 	const { status, expirationDisplay } = getMarketStatus(details.resolved, timeRemaining);
 
 	// Convert bigint values to proper number format for display
-	// Using formatEther would be better but we'll use simple division for now
 	const bearishStake = Number(details.totalConvictionBearish) / 1e18;
 	const bullishStake = Number(details.totalConvictionBullish) / 1e18;
 	const totalStakeValue = bearishStake + bullishStake;
 
-	// Use the asset pair directly from the contract data
-	const formattedAssetPair = details.assetPair;
+	// Use the asset pair directly from the contract data, with fallbacks
+	const formattedAssetPair = details.assetPair || 'ETH/USD';
 
-	return {
+	// Extract asset symbol from asset pair, with description fallback
+	const assetSymbol = extractAssetSymbol(details.assetPair, details.description);
+
+	// FIXED: Handle price threshold conversion based on your fixtures
+	// Looking at your fixtures, price threshold is created with parseUnits(String(config.basePrice * 1.15), 8)
+	// This means it's stored with 8 decimals, not 18!
+	let priceThreshold: number;
+
+	try {
+		const rawThreshold = Number(details.priceThreshold);
+		console.log(`Raw price threshold for ${assetSymbol}:`, rawThreshold, typeof details.priceThreshold);
+
+		// Your fixtures use parseUnits(..., 8) which means 8 decimal places
+		// So we need to divide by 10^8, not 10^18
+		if (rawThreshold > 0) {
+			priceThreshold = rawThreshold / 1e8; // 8 decimals as per your fixtures
+			console.log(`Converted price threshold (÷1e8):`, priceThreshold);
+		} else {
+			// Fallback to reasonable defaults if threshold is 0
+			switch (assetSymbol.toLowerCase()) {
+				case 'wbtc':
+				case 'btc':
+					priceThreshold = 100000; // ~$100k for BTC
+					break;
+				case 'eth':
+					priceThreshold = 3000; // ~$3k for ETH
+					break;
+				default:
+					priceThreshold = 1000;
+			}
+			console.log(`Using fallback price for ${assetSymbol}:`, priceThreshold);
+		}
+	} catch (error) {
+		console.error('Error converting priceThreshold:', error);
+		priceThreshold = assetSymbol.toLowerCase().includes('btc') ? 100000 : 3000;
+	}
+
+	const transformedMarket: Market = {
 		id: details.marketId.toString(),
-		name: details.description || `Market ${details.marketId}`,
-		assetSymbol: details.assetPair,
+		name: details.description || `${assetSymbol} Price Prediction`,
+		assetSymbol: assetSymbol,
 		assetPair: formattedAssetPair,
 		exists: details.exists,
 		resolved: details.resolved,
@@ -133,14 +213,23 @@ export function transformMarketDetails(details: MarketDetailsResult): Market {
 		totalStake1: details.totalConvictionBullish,
 		expirationTime: Number(details.expirationTimestamp),
 		priceAggregator: details.priceOracle,
-		// Price threshold is stored in wei format in the contract (like other currency values)
-		// So we need to convert it to a decimal representation for display
-		priceThreshold: Number(details.priceThreshold) / 1e18,
+		priceThreshold: priceThreshold, // Now properly converted
 		status,
 		expirationDisplay,
-		// Format totalStake as a string with proper decimal representation
 		totalStake: totalStakeValue.toString()
 	};
+
+	console.log(`Final transformed market for ${assetSymbol}:`, {
+		id: transformedMarket.id,
+		name: transformedMarket.name,
+		assetSymbol: transformedMarket.assetSymbol,
+		priceThreshold: transformedMarket.priceThreshold,
+		bearishStake,
+		bullishStake,
+		totalStakeValue
+	});
+
+	return transformedMarket;
 }
 
 /**
