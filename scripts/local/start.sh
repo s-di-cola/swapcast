@@ -242,13 +242,14 @@ deploy_contracts() {
 
   # Extract contract addresses from the deployment summary
   log_info "Extracting contract addresses"
-  SWAP_CAST_NFT=$(grep -A 10 "SwapCast Deployment Summary" "$LOG_DIR"/deploy.log | grep "SwapCastNFT:" | awk '{print $2}')
-  TREASURY=$(grep -A 10 "SwapCast Deployment Summary" "$LOG_DIR"/deploy.log | grep "Treasury:" | awk '{print $2}')
-  PREDICTION_MANAGER=$(grep -A 10 "SwapCast Deployment Summary" "$LOG_DIR"/deploy.log | grep "PredictionManager:" | awk '{print $2}')
-  ORACLE_RESOLVER=$(grep -A 10 "SwapCast Deployment Summary" "$LOG_DIR"/deploy.log | grep "OracleResolver:" | awk '{print $2}')
-  REWARD_DISTRIBUTOR=$(grep -A 10 "SwapCast Deployment Summary" "$LOG_DIR"/deploy.log | grep "RewardDistributor:" | awk '{print $2}')
-  SWAP_CAST_HOOK=$(grep -A 10 "SwapCast Deployment Summary" "$LOG_DIR"/deploy.log | grep "SwapCastHook:" | awk '{print $2}')
-  SIMPLE_SWAP_ROUTER=$(grep -A 10 "SwapCast Deployment Summary" "$LOG_DIR"/deploy.log | grep "SimpleSwapRouter:" | awk '{print $2}')
+  SWAP_CAST_NFT=$(grep -A 15 "SwapCast Deployment Summary" "$LOG_DIR"/deploy.log | grep "SwapCastNFT:" | awk '{print $2}')
+  TREASURY=$(grep -A 15 "SwapCast Deployment Summary" "$LOG_DIR"/deploy.log | grep "Treasury:" | awk '{print $2}')
+  PREDICTION_MANAGER=$(grep -A 15 "SwapCast Deployment Summary" "$LOG_DIR"/deploy.log | grep "PredictionManager:" | awk '{print $2}')
+  ORACLE_RESOLVER=$(grep -A 15 "SwapCast Deployment Summary" "$LOG_DIR"/deploy.log | grep "OracleResolver:" | awk '{print $2}')
+  REWARD_DISTRIBUTOR=$(grep -A 15 "SwapCast Deployment Summary" "$LOG_DIR"/deploy.log | grep "RewardDistributor:" | awk '{print $2}')
+  SWAP_CAST_HOOK=$(grep -A 15 "SwapCast Deployment Summary" "$LOG_DIR"/deploy.log | grep "SwapCastHook:" | awk '{print $2}')
+  SIMPLE_SWAP_ROUTER=$(grep -A 15 "SwapCast Deployment Summary" "$LOG_DIR"/deploy.log | grep "SimpleSwapRouter:" | awk '{print $2}')
+  POOL_STATE_READER=$(grep -A 15 "SwapCast Deployment Summary" "$LOG_DIR"/deploy.log | grep "PoolStateReader:" | awk '{print $2}')
 
   # Check if we found the PredictionManager address
   if [ -z "$PREDICTION_MANAGER" ]; then
@@ -267,8 +268,12 @@ deploy_contracts() {
   
   # Add Uniswap v4 PoolManager address (mainnet)
   echo "PUBLIC_UNIV4_POOLMANAGER_ADDRESS=0x000000000004444c5dc75cB358380D2e3dE08A90" >> "$DAPP_ENV_FILE"
-  # Add Uniswap v4 StateView address (mainnet)
-  echo "PUBLIC_UNIV4_STATEVIEW_ADDRESS=0x7ffe42c4a5deea5b0fec41c94c136cf115597227" >> "$DAPP_ENV_FILE"
+  # Add our custom PoolStateReader address (from our local deployment)
+  if [ -n "$POOL_STATE_READER" ]; then
+    echo "PUBLIC_UNIV4_POOLSTATEREADER_ADDRESS=$POOL_STATE_READER" >> "$DAPP_ENV_FILE"
+  else
+    log_warning "Could not find locally deployed PoolStateReader"
+  fi
   # Add Uniswap Universal Router address (mainnet)
   echo "PUBLIC_UNIVERSAL_ROUTER_ADDRESS=0x66a9893cc07d91d95644aedd05d03f95e1dba8af" >> "$DAPP_ENV_FILE"
 
