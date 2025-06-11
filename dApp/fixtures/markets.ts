@@ -6,7 +6,7 @@ import { CONTRACT_ADDRESSES } from './utils/wallets';
 import { sortTokenAddresses, getTickSpacing } from './utils/helpers';
 import { addLiquidityToPool } from './utils/liquidity';
 import { anvil } from 'viem/chains';
-import { http } from 'viem';
+import { http, createPublicClient } from 'viem';
 import { TOKEN_CONFIGS } from './config/tokens';
 import { MarketGenerator, MarketRequest } from './services/marketGenerator';
 import { DEFAULT_MARKET_CONFIG, MarketGenerationConfig } from './config/markets';
@@ -126,9 +126,14 @@ async function addPoolLiquidity(
     console.log(chalk.yellow(`  💧 Adding liquidity to pool...`));
     
     try {
+        // Create a proper publicClient
+        const publicClient = createPublicClient({
+            chain: anvil,
+            transport: http()
+        });
+        
         await addLiquidityToPool(
-            adminClient.transport,
-            adminClient,
+            publicClient,
             poolKey,
             basePrice
         );
