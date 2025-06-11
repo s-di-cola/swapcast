@@ -99,7 +99,6 @@ async function getTokenBalance(
  */
 export async function addLiquidityToPool(
 	publicClient: PublicClient,
-	adminAccount: WalletClient,
 	poolKey: {
 		currency0: Address;
 		currency1: Address;
