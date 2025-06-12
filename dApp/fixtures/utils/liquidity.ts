@@ -2,22 +2,23 @@
  * Liquidity utilities for Uniswap v4 pools
  */
 
+import { Actions } from '@uniswap/v4-sdk';
 import {
   type Address,
   type Hash,
   type WalletClient,
+  encodeAbiParameters,
   encodeFunctionData,
+  encodePacked,
   parseUnits
 } from 'viem';
 import { anvil } from 'viem/chains';
-import { getPositionManager } from '../../src/generated/types/PositionManager';
-import { getContract, getWalletClient, impersonateAccount, stopImpersonatingAccount } from './client';
+import { getWalletClient, impersonateAccount, stopImpersonatingAccount } from './client';
 import { logSuccess, logWarning, withErrorHandling } from './error';
 import { calculateSqrtPriceX96, getTokenSymbolFromAddress } from './math';
 import { approveTokens, findWhaleWithBalance } from './tokens';
 import { CONTRACT_ADDRESSES } from './wallets';
-
-
+import {getIPositionManager} from '../../src/generated/types/IPositionManager';
 /**
  * Setup a whale account for liquidity operations
  */
@@ -34,16 +35,20 @@ const setupWhaleForLiquidity = async (
   await impersonateAccount(whaleAddress);
   const whaleClient = await getWalletClient(whaleAddress);
 
-  // Approve tokens for PositionManager
-  await approveTokens(
-    token0Address,
-    whaleAddress,
-    CONTRACT_ADDRESSES.POSITION_MANAGER as Address,
-    amount0Desired
-  );
+  const NATIVE_ETH_ADDRESS = '0x0000000000000000000000000000000000000000';
 
-  // Approve token1 if it's not native ETH
-  if (token1Address !== '0x0000000000000000000000000000000000000000') {
+  // Only approve token0 if it's not native ETH
+  if (token0Address !== NATIVE_ETH_ADDRESS) {
+    await approveTokens(
+      token0Address,
+      whaleAddress,
+      CONTRACT_ADDRESSES.POSITION_MANAGER as Address,
+      amount0Desired
+    );
+  }
+
+  // Only approve token1 if it's not native ETH
+  if (token1Address !== NATIVE_ETH_ADDRESS) {
     await approveTokens(
       token1Address,
       whaleAddress,
@@ -119,10 +124,146 @@ const createPoolKey = withErrorHandling(
   'CreatePoolKey'
 );
 
+/**
+ * Calculate ETH value and determine if native ETH is involved
+ */
+const calculateETHValue = (
+  poolKey: { currency0: Address; currency1: Address },
+  amount0Desired: bigint,
+  amount1Desired: bigint
+): { value: bigint; hasNativeETH: boolean } => {
+  const NATIVE_ETH_ADDRESS = '0x0000000000000000000000000000000000000000';
+  let value = 0n;
+  let hasNativeETH = false;
+
+  if (poolKey.currency0 === NATIVE_ETH_ADDRESS) {
+    value = amount0Desired;
+    hasNativeETH = true;
+  } else if (poolKey.currency1 === NATIVE_ETH_ADDRESS) {
+    value = amount1Desired;
+    hasNativeETH = true;
+  }
+
+  return { value, hasNativeETH };
+};
 
 /**
- * Initialize pool and mint liquidity in one atomic transaction using multicall
+ * Encode initializePool parameters for multicall using encodeFunctionData
  */
+const encodeInitializePoolParams = (
+  poolKey: { currency0: Address; currency1: Address; fee: number; tickSpacing: number; hooks: Address },
+  sqrtPriceX96: bigint
+): `0x${string}` => {
+  return encodeFunctionData({
+    abi: [{
+      name: 'initializePool',
+      type: 'function',
+      inputs: [
+        {
+          name: 'key',
+          type: 'tuple',
+          components: [
+            { name: 'currency0', type: 'address' },
+            { name: 'currency1', type: 'address' },
+            { name: 'fee', type: 'uint24' },
+            { name: 'tickSpacing', type: 'int24' },
+            { name: 'hooks', type: 'address' }
+          ]
+        },
+        { name: 'sqrtPriceX96', type: 'uint160' }
+      ],
+      outputs: [],
+      stateMutability: 'nonpayable'
+    }],
+    functionName: 'initializePool',
+    args: [poolKey, sqrtPriceX96]
+  });
+};
+
+/**
+ * Encode mint parameters for liquidity provision
+ */
+const encodeMintParams = (
+  poolKey: { currency0: Address; currency1: Address; fee: number; tickSpacing: number; hooks: Address },
+  tickLower: number,
+  tickUpper: number,
+  amount0Desired: bigint,
+  amount1Desired: bigint,
+  whaleAddress: Address
+): `0x${string}`[] => {
+  const mintParams: `0x${string}`[] = [];
+
+  mintParams[0] = encodeAbiParameters(
+    [
+      {
+        name: 'pool',
+        type: 'tuple',
+        components: [
+          { name: 'currency0', type: 'address' },
+          { name: 'currency1', type: 'address' },
+          { name: 'fee', type: 'uint24' },
+          { name: 'tickSpacing', type: 'int24' },
+          { name: 'hooks', type: 'address' }
+        ]
+      },
+      { name: 'tickLower', type: 'int24' },
+      { name: 'tickUpper', type: 'int24' },
+      { name: 'liquidity', type: 'uint128' },
+      { name: 'amount0Max', type: 'uint256' },
+      { name: 'amount1Max', type: 'uint256' },
+      { name: 'recipient', type: 'address' },
+      { name: 'hookData', type: 'bytes' }
+    ],
+    [
+      poolKey,
+      tickLower,
+      tickUpper,
+      1000000n,
+      amount0Desired,
+      amount1Desired,
+      whaleAddress,
+      '0x'
+    ]
+  );
+
+  // SETTLE_PAIR parameters
+  mintParams[1] = encodeAbiParameters(
+    [{ type: 'address' }, { type: 'address' }],
+    [poolKey.currency0, poolKey.currency1]
+  );
+
+  return mintParams;
+};
+
+/**
+ * Encode modifyLiquidities parameters for multicall
+ */
+const encodeModifyLiquiditiesParams = (
+  hasNativeETH: boolean,
+  mintParams: `0x${string}`[]
+): `0x${string}` => {
+  // Create actions based on whether we have native ETH
+  const actions = hasNativeETH 
+    ? encodePacked(['uint8', 'uint8', 'uint8'], [Actions.MINT_POSITION, Actions.SETTLE_PAIR, Actions.SWEEP]) // MINT_POSITION, SETTLE_PAIR, SWEEP
+    : encodePacked(['uint8', 'uint8'], [Actions.MINT_POSITION, Actions.SETTLE_PAIR]); // MINT_POSITION, SETTLE_PAIR
+
+  const deadline = BigInt(Math.floor(Date.now() / 1000) + 60);
+  const modifyLiquiditiesSelector = '0xdd46508f';
+
+  return `${modifyLiquiditiesSelector}${encodeAbiParameters(
+    [
+      { name: 'unlockData', type: 'bytes' },
+      { name: 'deadline', type: 'uint256' }
+    ],
+    [
+      encodeAbiParameters(
+        [{ type: 'bytes' }, { type: 'bytes[]' }],
+        [actions, mintParams]
+      ),
+      deadline
+    ]
+  ).slice(2)}` as `0x${string}`;
+};
 
 /**
  * Initialize pool and mint liquidity in one atomic transaction using multicall
@@ -135,149 +276,49 @@ const mintPool = async (
   amount0: string = '10',
   amount1: string = '10'
 ): Promise<Hash> => {
-  // Find whale with sufficient balance
   const whaleAddress = await findWhaleWithBalance(token0Address);
   await impersonateAccount(whaleAddress);
   
   try {
-    // Get token symbols and create pool key
+    // Setup basic parameters
     const token0Symbol = getTokenSymbolFromAddress(token0Address);
     const token1Symbol = getTokenSymbolFromAddress(token1Address);
     const poolKey = await createPoolKey(token0Address, token1Address);
-    
-    // Calculate price and ticks
     const sqrtPriceX96 = calculateSqrtPriceX96(token0Symbol, token1Symbol, basePrice);
     const { tickLower, tickUpper } = calculateTickRangeFromPrice(basePrice);
-    
-    // Convert amounts to BigInt
     const amount0Desired = parseUnits(amount0, 18);
     const amount1Desired = parseUnits(amount1, 18);
-    
-    // Approve tokens - skip approval for native ETH
-    const NATIVE_ETH_ADDRESS = '0x0000000000000000000000000000000000000000';
-    
-    // Only approve token0 if it's not native ETH
-    if (poolKey.currency0 !== NATIVE_ETH_ADDRESS) {
-      await approveTokens(poolKey.currency0, whaleAddress, CONTRACT_ADDRESSES.POSITION_MANAGER as Address, amount0Desired);
-    }
-    
-    // Only approve token1 if it's not native ETH
-    if (poolKey.currency1 !== NATIVE_ETH_ADDRESS) {
-      await approveTokens(poolKey.currency1, whaleAddress, CONTRACT_ADDRESSES.POSITION_MANAGER as Address, amount1Desired);
-    }
-    
-    // Calculate value for native ETH if needed
-    let value = 0n;
-    if (poolKey.currency0 === NATIVE_ETH_ADDRESS) {
-      value = amount0Desired;
-    } else if (poolKey.currency1 === NATIVE_ETH_ADDRESS) {
-      value = amount1Desired;
-    }
-    
-    // Get position manager contract
-    const positionManager = getContract(getPositionManager, CONTRACT_ADDRESSES.POSITION_MANAGER as Address);
-    
-    // 1. Encode initialize call
-    const calls: `0x${string}`[] = [
-      encodeFunctionData({
-        abi: [{
-          name: 'initialize',
-          type: 'function',
-          inputs: [
-            {
-              name: 'key',
-              type: 'tuple',
-              components: [
-                { name: 'currency0', type: 'address' },
-                { name: 'currency1', type: 'address' },
-                { name: 'fee', type: 'uint24' },
-                { name: 'tickSpacing', type: 'int24' },
-                { name: 'hooks', type: 'address' }
-              ]
-            },
-            { name: 'sqrtPriceX96', type: 'uint160' }
-          ],
-          outputs: [],
-          stateMutability: 'nonpayable'
-        }],
-        functionName: 'initialize',
-        args: [poolKey, sqrtPriceX96]
-      }),
-      
-      // 2. Encode modifyPosition call
-      encodeFunctionData({
-        abi: [{
-          name: 'modifyPosition',
-          type: 'function',
-          inputs: [
-            {
-              name: 'key',
-              type: 'tuple',
-              components: [
-                { name: 'currency0', type: 'address' },
-                { name: 'currency1', type: 'address' },
-                { name: 'fee', type: 'uint24' },
-                { name: 'tickSpacing', type: 'int24' },
-                { name: 'hooks', type: 'address' }
-              ]
-            },
-            {
-              name: 'params',
-              type: 'tuple',
-              components: [
-                { name: 'tickLower', type: 'int24' },
-                { name: 'tickUpper', type: 'int24' },
-                { name: 'liquidityDelta', type: 'int128' }
-              ]
-            },
-            {
-              name: 'data',
-              type: 'tuple',
-              components: [
-                { name: 'amount0Desired', type: 'uint256' },
-                { name: 'amount1Desired', type: 'uint256' },
-                { name: 'amount0Min', type: 'uint256' },
-                { name: 'amount1Min', type: 'uint256' },
-                { name: 'recipient', type: 'address' },
-                { name: 'deadline', type: 'uint256' }
-              ]
-            }
-          ],
-          outputs: [{ name: '', type: 'bytes32' }],
-          stateMutability: 'payable'
-        }],
-        functionName: 'modifyPosition',
-        args: [
-          poolKey,
-          {
-            tickLower,
-            tickUpper,
-            liquidityDelta: 0n // This should probably be calculated based on desired amounts
-          },
-          {
-            amount0Desired,
-            amount1Desired,
-            amount0Min: 0n,
-            amount1Min: 0n,
-            recipient: whaleAddress,
-            deadline: BigInt(Math.floor(Date.now() / 1000) + 1200)
-          }
-        ]
-      })
-    ];
-    
-    // Execute multicall with both account and chain specified
+
+    // Setup whale and approvals
+    const { whaleAddress } = await setupWhaleForLiquidity(token0Address, token1Address, amount0Desired, amount1Desired);
+
+    // Calculate ETH value
+    const { value, hasNativeETH } = calculateETHValue(poolKey, amount0Desired, amount1Desired);
+
+    // Encode multicall parameters using encodeFunctionData
+    const initializeParams = encodeInitializePoolParams(poolKey, sqrtPriceX96);
+    const mintParams = encodeMintParams(poolKey, tickLower, tickUpper, amount0Desired, amount1Desired, whaleAddress);
+    const modifyLiquiditiesParams = encodeModifyLiquiditiesParams(hasNativeETH, mintParams);
+
+    const params = [initializeParams, modifyLiquiditiesParams];
+
+    console.log('Multicall params:', params);
+
+    // Execute multicall with account specified
+    const positionManager = await getIPositionManager({
+      address: CONTRACT_ADDRESSES.POSITION_MANAGER as Address,
+      chain: anvil
+    });
+
     const hash = await positionManager.write.multicall(
-      [calls],
+      [params],
       {
         account: whaleAddress,
-        value,
-        chain: anvil,
-        // Add gas settings to avoid estimation issues
-        gas: 1000000n
-       }
+        ...(hasNativeETH && { value }),
+        chain: anvil
+      }
     );
-    
+
     logSuccess('PoolInitialization', `Pool initialized and liquidity minted with hash: ${hash}`);
     return hash;
   } catch (error) {
@@ -292,5 +333,12 @@ const mintPool = async (
   }
 };
 
-export { calculateTickRange, calculateTickRangeFromPrice, createPoolKey, getTickRange, mintPool };
-
+export {
+  calculateETHValue, calculateTickRange,
+  calculateTickRangeFromPrice,
+  createPoolKey, encodeInitializePoolParams,
+  encodeMintParams,
+  encodeModifyLiquiditiesParams, getTickRange,
+  mintPool,
+  setupWhaleForLiquidity
+};
