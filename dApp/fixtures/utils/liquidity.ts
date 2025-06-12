@@ -2,23 +2,22 @@
  * Liquidity utilities for Uniswap v4 pools
  */
 
+import { Actions } from '@uniswap/v4-sdk';
 import {
   type Address,
   type Hash,
   type WalletClient,
-  encodeFunctionData,
   encodeAbiParameters,
+  encodeFunctionData,
   encodePacked,
   parseUnits
 } from 'viem';
 import { anvil } from 'viem/chains';
-import { getPositionManager } from '../../src/generated/types/PositionManager';
-import { getContract, getWalletClient, impersonateAccount, stopImpersonatingAccount } from './client';
+import { getWalletClient, impersonateAccount, stopImpersonatingAccount } from './client';
 import { logSuccess, logWarning, withErrorHandling } from './error';
 import { calculateSqrtPriceX96, getTokenSymbolFromAddress } from './math';
 import { approveTokens, findWhaleWithBalance } from './tokens';
 import { CONTRACT_ADDRESSES } from './wallets';
-import {Actions} from '@uniswap/v4-sdk'
 /**
  * Setup a whale account for liquidity operations
  */
@@ -193,7 +192,6 @@ const encodeMintParams = (
 ): `0x${string}`[] => {
   const mintParams: `0x${string}`[] = [];
 
-  // MINT_POSITION parameters
   mintParams[0] = encodeAbiParameters(
     [
       {
@@ -334,15 +332,12 @@ const mintPool = async (
   }
 };
 
-export { 
-  calculateTickRange, 
-  calculateTickRangeFromPrice, 
-  createPoolKey, 
-  getTickRange, 
-  mintPool,
-  setupWhaleForLiquidity,
-  calculateETHValue,
-  encodeInitializePoolParams,
+export {
+  calculateETHValue, calculateTickRange,
+  calculateTickRangeFromPrice,
+  createPoolKey, encodeInitializePoolParams,
   encodeMintParams,
-  encodeModifyLiquiditiesParams
+  encodeModifyLiquiditiesParams, getTickRange,
+  mintPool,
+  setupWhaleForLiquidity
 };
