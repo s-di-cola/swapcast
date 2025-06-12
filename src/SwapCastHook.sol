@@ -155,6 +155,18 @@ contract SwapCastHook is BaseHook, Ownable {
     error InsufficientBalance(uint256 requested, uint256 available);
 
     /**
+     * @dev Modifier to restrict function calls to the `PoolManager` only.
+     *      Note: `BaseHook` already provides protection for its hook callback functions (e.g., `_afterSwap`),
+     *      making them callable only by the `poolManager`. This modifier might be redundant for such overrides
+     *      but could be used for other custom external functions if added to this hook.
+     */
+    modifier poolManagerOnly() {
+        // This check is also implicitly handled by BaseHook for overridden hook functions.
+        if (msg.sender != address(poolManager)) revert NotPoolManager();
+        _;
+    }
+
+    /**
      * @notice Contract constructor.
      * @dev Initializes the contract with the PoolManager and PredictionManager addresses.
      *      Also initializes the Ownable contract with the deployer as the initial owner.
@@ -176,15 +188,37 @@ contract SwapCastHook is BaseHook, Ownable {
     }
 
     /**
-     * @dev Modifier to restrict function calls to the `PoolManager` only.
-     *      Note: `BaseHook` already provides protection for its hook callback functions (e.g., `_afterSwap`),
-     *      making them callable only by the `poolManager`. This modifier might be redundant for such overrides
-     *      but could be used for other custom external functions if added to this hook.
+     * @notice Fallback function to allow the hook to receive ETH.
+     * @dev This is crucial because the `PoolManager` forwards `msg.value` (the user's conviction stake)
+     *      to this hook when `_afterSwap` is called. Without a payable fallback or receive function,
+     *      such calls would revert.
      */
-    modifier poolManagerOnly() {
-        // This check is also implicitly handled by BaseHook for overridden hook functions.
-        if (msg.sender != address(poolManager)) revert NotPoolManager();
-        _;
+    receive() external payable {}
+
+     /**
+     * @notice Allows the owner to recover ETH stuck in the contract in case of emergency.
+     * @dev This function provides a safety mechanism to recover ETH that might get stuck in the contract
+     *      due to failed prediction attempts or other unexpected scenarios. It includes the following
+     *      security controls:
+     *
+     *      1. Only the contract owner can call this function (via the onlyOwner modifier)
+     *      2. The recipient address cannot be the zero address
+     *      3. The function reverts if the ETH transfer fails
+     *
+     *      This function should only be used in emergency situations when ETH is genuinely stuck
+     *      and cannot be processed through normal means.
+     *
+     * @param _to The address to send the recovered ETH to.
+     * @param _amount The amount of ETH to recover.
+     */
+    function recoverETH(address _to, uint256 _amount) external onlyOwner {
+        if (_to == address(0)) revert ZeroAddress();
+        if (_amount > address(this).balance) {
+            revert InsufficientBalance(_amount, address(this).balance);
+        }
+
+        (bool success,) = _to.call{value: _amount}("");
+        if (!success) revert ETHTransferFailed();
     }
 
     /**
@@ -413,38 +447,4 @@ contract SwapCastHook is BaseHook, Ownable {
             return "PredictionManager Error: Custom error";
         }
     }
-
-    /**
-     * @notice Allows the owner to recover ETH stuck in the contract in case of emergency.
-     * @dev This function provides a safety mechanism to recover ETH that might get stuck in the contract
-     *      due to failed prediction attempts or other unexpected scenarios. It includes the following
-     *      security controls:
-     *
-     *      1. Only the contract owner can call this function (via the onlyOwner modifier)
-     *      2. The recipient address cannot be the zero address
-     *      3. The function reverts if the ETH transfer fails
-     *
-     *      This function should only be used in emergency situations when ETH is genuinely stuck
-     *      and cannot be processed through normal means.
-     *
-     * @param _to The address to send the recovered ETH to.
-     * @param _amount The amount of ETH to recover.
-     */
-    function recoverETH(address _to, uint256 _amount) external onlyOwner {
-        if (_to == address(0)) revert ZeroAddress();
-        if (_amount > address(this).balance) {
-            revert InsufficientBalance(_amount, address(this).balance);
-        }
-
-        (bool success,) = _to.call{value: _amount}("");
-        if (!success) revert ETHTransferFailed();
-    }
-
-    /**
-     * @notice Fallback function to allow the hook to receive ETH.
-     * @dev This is crucial because the `PoolManager` forwards `msg.value` (the user's conviction stake)
-     *      to this hook when `_afterSwap` is called. Without a payable fallback or receive function,
-     *      such calls would revert.
-     */
-    receive() external payable {}
 }
