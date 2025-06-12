@@ -18,6 +18,7 @@ import { logSuccess, logWarning, withErrorHandling } from './error';
 import { calculateSqrtPriceX96, getTokenSymbolFromAddress } from './math';
 import { approveTokens, findWhaleWithBalance } from './tokens';
 import { CONTRACT_ADDRESSES } from './wallets';
+import {getIPositionManager} from '../../src/generated/types/IPositionManager';
 /**
  * Setup a whale account for liquidity operations
  */
@@ -304,7 +305,7 @@ const mintPool = async (
     console.log('Multicall params:', params);
 
     // Execute multicall with account specified
-    const positionManager = await getPositionManager({
+    const positionManager = await getIPositionManager({
       address: CONTRACT_ADDRESSES.POSITION_MANAGER as Address,
       chain: anvil
     });
