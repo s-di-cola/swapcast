@@ -1,4 +1,5 @@
 import { type Address } from 'viem';
+import { CONTRACT_ADDRESSES } from './wallets';
 
 /**
  * Maps fee tier to tick spacing according to Uniswap standards
@@ -115,4 +116,28 @@ export function shuffleArray<T>(array: T[]): T[] {
  */
 export function sleep(ms: number): Promise<void> {
 	return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+/**
+ * Formats a pool key object for contract calls
+ *
+ * @param currency0 Address of the first token (lower address)
+ * @param currency1 Address of the second token (higher address)
+ * @param fee Fee tier (100, 500, 3000, or 10000)
+ * @param tickSpacing Tick spacing for the fee tier
+ * @returns Formatted pool key object
+ */
+export function formatPoolKey(
+	currency0: string,
+	currency1: string,
+	fee: number,
+	tickSpacing: number
+) {
+	return {
+		currency0,
+		currency1,
+		fee,
+		tickSpacing,
+		hooks: CONTRACT_ADDRESSES.SWAPCAST_HOOK
+	};
 }

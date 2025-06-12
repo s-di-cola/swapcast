@@ -8,10 +8,9 @@ import {
 import { privateKeyToAccount } from 'viem/accounts';
 import { anvil } from 'viem/chains';
 import { config } from 'dotenv';
-import path from 'path';
+import { resolve } from 'path';
 
-
-config({ path: path.resolve(process.cwd(), '.env.local') });
+config({ path: resolve(process.cwd(), '.env.local') });
 
 export const ANVIL_ACCOUNTS = [
 	{
@@ -66,6 +65,7 @@ export const CONTRACT_ADDRESSES = {
 	POOL_MANAGER: process.env.PUBLIC_UNIV4_POOLMANAGER_ADDRESS,
 	POOL_STATE_READER: process.env.PUBLIC_UNIV4_POOLSTATEREADER_ADDRESS,
 	UNIVERSAL_ROUTER_ADDRESS: process.env.PUBLIC_UNIVERSAL_ROUTER_ADDRESS,
+	POSITION_MANAGER: process.env.PUBLIC_UNIV4_POSITIONMANAGER_ADDRESS,
 	SIMPLE_SWAP_ROUTER: process.env.PUBLIC_SIMPLESWAPROUTER_ADDRESS
 } as const;
 

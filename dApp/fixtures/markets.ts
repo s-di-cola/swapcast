@@ -1,23 +1,17 @@
-import { Address, parseUnits, type WalletClient } from 'viem';
-import { calculateSqrtPriceX96 } from './utils/math';
+import { type Address, type Hash, type WalletClient } from 'viem';
+import { anvil } from 'viem/chains';
 import { getPoolManager } from '../src/generated/types/PoolManager';
 import { getPredictionManager } from '../src/generated/types/PredictionManager';
-import { CONTRACT_ADDRESSES } from './utils/wallets';
-import { sortTokenAddresses, getTickSpacing } from './utils/helpers';
-import { addLiquidityToPool } from './utils/liquidity';
-import { anvil } from 'viem/chains';
-import { http, createPublicClient } from 'viem';
+import { DEFAULT_MARKET_CONFIG, MarketGenerationConfig } from './config/markets';
 import { TOKEN_CONFIGS } from './config/tokens';
 import { MarketGenerator, MarketRequest } from './services/marketGenerator';
-import { DEFAULT_MARKET_CONFIG, MarketGenerationConfig } from './config/markets';
-import chalk from 'chalk';
-
-interface TokenInfo {
-    address: Address;
-    symbol: string;
-    name: string;
-    decimals: number;
-}
+import { getContract, getPublicClient } from './utils/client';
+import { logInfo, logSuccess, logWarning, withErrorHandling, withRetry } from './utils/error';
+import { sortTokenAddresses } from './utils/helpers';
+import { createPoolKey, mintPool } from './utils/liquidity';
+import { calculateSqrtPriceX96 } from './utils/math';
+import { TokenInfo } from './utils/tokens';
+import { CONTRACT_ADDRESSES } from './utils/wallets';
 
 export interface MarketCreationResult {
     id: string;
@@ -39,9 +33,16 @@ export interface MarketCreationResult {
 }
 
 /**
- * Convert TokenConfig to TokenInfo
+ * Convert token symbol to TokenInfo
+ * @param symbol The token symbol to convert to TokenInfo
+ * @returns TokenInfo object with token details
  */
-function tokenConfigToInfo(config: any): TokenInfo {
+function tokenConfigToInfo(symbol: string): TokenInfo {
+    const config = TOKEN_CONFIGS[symbol];
+    if (!config) {
+        throw new Error(`Token config not found for: ${symbol}`);
+    }
+    
     return {
         address: config.address as Address,
         symbol: config.symbol,
@@ -51,235 +52,258 @@ function tokenConfigToInfo(config: any): TokenInfo {
 }
 
 /**
- * Gets contract instances
- */
-function getContractInstances() {
-    const poolManager = getPoolManager({
-        address: CONTRACT_ADDRESSES.POOL_MANAGER as Address,
-        chain: anvil,
-        transport: http()
-    });
-    
-    const predictionManager = getPredictionManager({
-        address: CONTRACT_ADDRESSES.PREDICTION_MANAGER as Address,
-        chain: anvil,
-        transport: http()
-    });
-    
-    return { poolManager, predictionManager };
-}
-
-/**
- * Creates pool key for Uniswap v4
- */
-function createPoolKey(token0Address: Address, token1Address: Address) {
-    
-    const poolKey = {
-        currency0: token0Address,
-        currency1: token1Address,
-        fee: 3000,
-        tickSpacing: getTickSpacing(3000),
-        hooks: CONTRACT_ADDRESSES.SWAPCAST_HOOK as Address
-    };
-    
-    console.log(chalk.cyan(`  🔑 Pool key: ${JSON.stringify(poolKey)}`));
-    
-    return poolKey;
-}
-
-/**
- * Initializes a Uniswap v4 pool with starting price
- */
-async function initializePool(
-    poolManager: any,
-    poolKey: any,
-    sqrtPriceX96: bigint,
-    adminClient: WalletClient
-): Promise<void> {
-    console.log(chalk.yellow(`  🔧 Initializing pool with sqrtPriceX96: ${sqrtPriceX96}`));
-    
-    try {
-        const initHash = await poolManager.write.initialize([poolKey, sqrtPriceX96], {
-            account: adminClient.account!,
-            chain: anvil,
-            gas: 1000000n
-        });
-        
-        console.log(chalk.green(`  ✅ Pool initialized: ${initHash.slice(0, 10)}...`));
-    } catch (initError: any) {
-        if (initError.message.includes('AlreadyInitialized') || initError.message.includes('PoolAlreadyInitialized')) {
-            console.log(chalk.yellow(`  ⚠️ Pool already initialized, continuing...`));
-        } else {
-            throw initError;
-        }
-    }
-}
-
-/**
- * Adds liquidity to the initialized pool
- */
-async function addPoolLiquidity(
-    adminClient: WalletClient,
-    poolKey: any,
-    basePrice: number
-): Promise<void> {
-    console.log(chalk.yellow(`  💧 Adding liquidity to pool...`));
-    
-    try {
-        // Create a proper publicClient
-        const publicClient = createPublicClient({
-            chain: anvil,
-            transport: http()
-        });
-        
-        await addLiquidityToPool(
-            publicClient,
-            poolKey,
-            basePrice
-        );
-        console.log(chalk.green(`  ✅ Liquidity added successfully`));
-    } catch (liquidityError: any) {
-        console.log(chalk.yellow(`  ⚠️ Liquidity addition failed, but pool is functional: ${liquidityError.message}`));
-    }
-}
-
-/**
  * Creates prediction market for the pool
+ * @param predictionManager - The prediction manager contract instance
+ * @param request - The market request configuration
+ * @param poolKey - The pool key configuration
+ * @param adminClient - The wallet client with admin permissions
+ * @param token0Info - Information about token0
+ * @param token1Info - Information about token1
+ * @returns Transaction hash
  */
-async function createPredictionMarket(
-    predictionManager: any,
-    request: MarketRequest,
-    poolKey: any,
-    adminClient: WalletClient
-): Promise<void> {
-    console.log(chalk.yellow(`  📈 Creating prediction market...`));
-    
-    const marketName = `${request.base} Price Prediction`;
-    const expirationTime = BigInt(Math.floor(Date.now() / 1000) + request.expirationDays * 24 * 60 * 60);
-    const priceThreshold = parseUnits(String(request.basePrice * request.priceThresholdMultiplier), 8);
-    const priceAggregator = '0x5f4eC3Df9cbd43714FE2740f5E3616155c5b8419' as Address;
-    
-    const fullAssetPair = `${request.base}/${request.quote}`;
-    
-    const marketHash = await predictionManager.write.createMarket([
-        marketName,
-        fullAssetPair,
-        expirationTime,
-        priceAggregator,
-        priceThreshold,
-        poolKey
-    ], {
-        account: adminClient.account!,
-        chain: anvil,
-        gas: 1000000n
-    });
-    
-    console.log(chalk.green(`  ✅ Market created with pair ${fullAssetPair}: ${marketHash.slice(0, 10)}...`));
-}
+const createPredictionMarket = withErrorHandling(
+    async (
+        predictionManager: ReturnType<typeof getPredictionManager>,
+        request: MarketRequest,
+        poolKey: {
+            currency0: Address;
+            currency1: Address;
+            fee: number;
+            tickSpacing: number;
+            hooks: Address;
+        },
+        adminClient: WalletClient,
+        token0Info: TokenInfo,
+        token1Info: TokenInfo
+    ): Promise<Hash> => {
+        logInfo('MarketCreation', `Creating prediction market for ${token0Info.symbol}/${token1Info.symbol}`);
+
+        // Calculate expiration time (7 days from now)
+        const expirationTime = BigInt(Math.floor(Date.now() / 1000) + 7 * 24 * 60 * 60);
+
+        // Calculate price threshold based on priceThresholdMultiplier (e.g., 1.15 = 15% movement)
+        // Convert from multiplier (e.g., 1.15) to percentage points (e.g., 15)
+        const priceThresholdPercentage = Math.floor((request.priceThresholdMultiplier - 1) * 100);
+        const priceThreshold = BigInt(priceThresholdPercentage);
+
+        // Ensure we have a valid account
+        if (!adminClient.account) {
+            throw new Error('No account available in admin client');
+        }
+        
+        // Based on the contract ABI, createMarket expects:
+        // - name (string)
+        // - assetSymbol (string)
+        // - expirationTime (uint256)
+        // - priceAggregator (address)
+        // - priceThreshold (uint256)
+        // - poolKey (tuple)
+        const hash = await predictionManager.write.createMarket(
+            [
+                // Market name
+                `${token0Info.symbol}/${token1Info.symbol} Market`,
+                // Asset symbol
+                token0Info.symbol,
+                // Expiration time
+                expirationTime,
+                // Price aggregator - using zero address as placeholder
+                '0x0000000000000000000000000000000000000000' as Address,
+                // Price threshold
+                priceThreshold,
+                // Pool key
+                poolKey
+            ],
+            { 
+                account: adminClient.account,
+                chain: anvil
+            }
+        );
+
+        const publicClient = getPublicClient();
+        await publicClient.waitForTransactionReceipt({ hash });
+
+        logSuccess('MarketCreation', `Market created successfully!`);
+        
+        return hash;
+    },
+    'CreatePredictionMarket'
+);
 
 /**
  * Creates a single market from a MarketRequest
+ * @param request - The market request configuration
+ * @param marketId - The market ID
+ * @param contracts - The contract instances
+ * @param adminClient - The wallet client with admin permissions
+ * @returns Market creation result or null if failed
  */
-async function createSingleMarketFromRequest(
+const createSingleMarketFromRequest = async (
     request: MarketRequest,
     marketId: number,
-    contracts: { poolManager: any; predictionManager: any },
+    contracts: { 
+        poolManager: ReturnType<typeof getPoolManager>; 
+        predictionManager: ReturnType<typeof getPredictionManager> 
+    },
     adminClient: WalletClient
-): Promise<MarketCreationResult | null> {
-    console.log(chalk.cyan(`\n📊 Creating market ${marketId}: ${request.base}/${request.quote}`));
-    console.log(chalk.gray(`   Price: $${request.basePrice} (${request.priceConfidence} confidence)`));
-    console.log(chalk.gray(`   Category: ${request.category}`));
-    
-    try {
-        const baseTokenConfig = TOKEN_CONFIGS[request.base];
-        const quoteTokenConfig = TOKEN_CONFIGS[request.quote];
-        
-        if (!baseTokenConfig || !quoteTokenConfig) {
-            throw new Error(`Unknown token: ${request.base} or ${request.quote}`);
+): Promise<MarketCreationResult | null> => {
+    // Create a wrapper function that captures the arguments
+    const wrappedFn = async (): Promise<MarketCreationResult | null> => {
+        const { poolManager, predictionManager } = contracts;
+
+        try {
+            // Get token configs first
+            const baseConfig = TOKEN_CONFIGS[request.base];
+            const quoteConfig = TOKEN_CONFIGS[request.quote];
+            
+            if (!baseConfig || !quoteConfig) {
+                throw new Error(`Token config not found for: ${!baseConfig ? request.base : request.quote}`);
+            }
+            
+            // Sort token addresses to match Uniswap's convention
+            const [token0Address, token1Address] = sortTokenAddresses(
+                baseConfig.address as Address,
+                quoteConfig.address as Address
+            );
+
+            // Get token info
+            const token0 = tokenConfigToInfo(
+                token0Address === baseConfig.address ? request.base : request.quote
+            );
+            const token1 = tokenConfigToInfo(
+                token1Address === quoteConfig.address ? request.quote : request.base
+            );
+
+            logInfo('MarketCreation', `Creating market #${marketId}: ${token0.symbol}/${token1.symbol}`);
+
+            // Create pool key - await the Promise to get the actual pool key object
+            const poolKey = await createPoolKey(
+                token0Address, 
+                token1Address,
+                3000,
+                60,
+                CONTRACT_ADDRESSES.SWAPCAST_HOOK as Address
+            );
+
+            // Calculate initial price
+            const basePrice = request.basePrice;
+            const sqrtPriceX96 = calculateSqrtPriceX96(
+                token0.symbol,
+                token1.symbol,
+                basePrice,
+                false
+            );
+
+            logInfo('MarketCreation', `Base price: ${basePrice}, sqrtPriceX96: ${sqrtPriceX96}`);
+
+            // Initialize pool and mint liquidity in one atomic transaction
+            await mintPool(
+                token0Address,
+                token1Address,
+                basePrice,
+                '10', // Default amount0
+                '10'  // Default amount1
+            );
+
+            // Calculate expiration time based on request's expirationDays or default to 7 days
+            const expirationDays = request.expirationDays || 7;
+            const expirationTime = BigInt(Math.floor(Date.now() / 1000) + expirationDays * 24 * 60 * 60);
+
+            // Calculate price threshold based on priceThresholdMultiplier
+            const priceThresholdPercentage = Math.floor((request.priceThresholdMultiplier - 1) * 100);
+            const priceThreshold = BigInt(priceThresholdPercentage);
+            
+            // Create prediction market with token info
+            const marketHash = await createPredictionMarket(
+                predictionManager, 
+                request, 
+                poolKey, 
+                adminClient,
+                token0,
+                token1
+            );
+            logInfo('MarketCreation', `Market transaction hash: ${marketHash}`);
+
+            // Return market info
+            return {
+                id: `${marketId}`,
+                name: `${token0.symbol}/${token1.symbol}`,
+                poolKey,
+                sqrtPriceX96,
+                expirationTime,
+                priceThreshold,
+                token0,
+                token1,
+                priceConfidence: request.priceConfidence || 'medium',
+                category: request.category || 'unknown'
+            };
+        } catch (error) {
+            logWarning('MarketCreation', `Failed to create market #${marketId}: ${error instanceof Error ? error.message : String(error)}`);
+            return null;
         }
-        
-        const baseToken = tokenConfigToInfo(baseTokenConfig);
-        const quoteToken = tokenConfigToInfo(quoteTokenConfig);
-        
-        const [token0Address, token1Address] = sortTokenAddresses(baseToken.address, quoteToken.address);
-        const token0Info = token0Address === baseToken.address ? baseToken : quoteToken;
-        const token1Info = token1Address === baseToken.address ? baseToken : quoteToken;
-        
-        console.log(`  Token0: ${token0Info.symbol} (${token0Info.address})`);
-        console.log(`  Token1: ${token1Info.symbol} (${token1Info.address})`);
-        
-        const sqrtPriceX96 = calculateSqrtPriceX96(
-            token0Info.symbol,
-            token1Info.symbol,
-            request.basePrice,
-            false // Don't verbose log for each market
-        );
-        
-        const poolKey = createPoolKey(token0Address, token1Address);
-         
-        await initializePool(contracts.poolManager, poolKey, sqrtPriceX96, adminClient);
-        await addPoolLiquidity(adminClient, poolKey, request.basePrice);
-        await createPredictionMarket(contracts.predictionManager, request, poolKey, adminClient);
-        
-        const result: MarketCreationResult = {
-            id: String(marketId),
-            name: `${request.base} Price Prediction`,
-            poolKey,
-            sqrtPriceX96,
-            expirationTime: BigInt(Math.floor(Date.now() / 1000) + request.expirationDays * 24 * 60 * 60),
-            priceThreshold: parseUnits(String(request.basePrice * request.priceThresholdMultiplier), 8),
-            token0: token0Info,
-            token1: token1Info,
-            priceConfidence: request.priceConfidence,
-            category: request.category
-        };
-        
-        console.log(chalk.green(`✅ Market ${marketId} fully created and configured\n`));
-        return result;
-        
-    } catch (error: any) {
-        console.error(chalk.red(`❌ Failed to create market ${marketId}: ${error.message}`));
-        return null;
-    }
-}
+    };
+    
+    // Use withRetry with the wrapped function
+    return await withRetry(wrappedFn, {
+        maxAttempts: 2,
+        context: 'CreateSingleMarket',
+        onRetry: (attempt, error) => {
+            logInfo('MarketCreation', `Attempt ${attempt} failed, retrying...`);
+        }
+    });
+};
 
 /**
- * NEW: Enhanced market generation with flexible configuration
+ * Enhanced market generation with flexible configuration
+ * @param adminClient - The wallet client with admin permissions
+ * @param customConfig - Optional custom market generation configuration
+ * @returns Array of created markets
  */
-export async function generateMarketsV2(
-    adminClient: WalletClient,
-    customConfig?: Partial<MarketGenerationConfig>
-): Promise<MarketCreationResult[]> {
-    console.log(chalk.blue('\n🏗️  GENERATING PREDICTION MARKETS V2\n'));
-    
-    const config = { ...DEFAULT_MARKET_CONFIG, ...customConfig };
-    const generator = new MarketGenerator();
-    
-    // Generate market requests based on configuration
-    const marketRequests = await generator.generateMarketRequests(config);
-    
-    if (marketRequests.length === 0) {
-        throw new Error('No valid market requests generated - check your configuration');
-    }
-    
-    const contracts = getContractInstances();
-    const markets: MarketCreationResult[] = [];
-    
-    for (let i = 0; i < marketRequests.length; i++) {
-        const request = marketRequests[i];
-        
-        const result = await createSingleMarketFromRequest(
-            request,
-            i + 1,
-            contracts,
-            adminClient
-        );
-        
-        if (result) {
-            markets.push(result);
+export const generateMarketsV2 = withErrorHandling(
+    async (
+        adminClient: WalletClient,
+        customConfig?: Partial<MarketGenerationConfig>
+    ): Promise<MarketCreationResult[]> => {
+        // Merge default config with custom config
+        const config = { ...DEFAULT_MARKET_CONFIG, ...customConfig };
+
+        logInfo('MarketGeneration', `Generating up to ${config.maxMarkets} markets with config: ${JSON.stringify(config)}`);
+
+        // Get contract instances with proper typing
+        const poolManager = getContract(getPoolManager, CONTRACT_ADDRESSES.POOL_MANAGER as Address);
+        const predictionManager = getContract(getPredictionManager, CONTRACT_ADDRESSES.PREDICTION_MANAGER as Address);
+
+        // Create market generator
+        const marketGenerator = new MarketGenerator();
+
+        // Generate market requests
+        const marketRequests = await marketGenerator.generateMarketRequests(config);
+
+        logInfo('MarketGeneration', `Generated ${marketRequests.length} market requests`);
+
+        // Create markets
+        const markets: MarketCreationResult[] = [];
+
+        for (let i = 0; i < Math.min(marketRequests.length, config.maxMarkets); i++) {
+            const request = marketRequests[i];
+
+            logInfo('MarketGeneration', `Processing market request ${i+1}/${Math.min(marketRequests.length, config.maxMarkets)}: ${request.base}/${request.quote}`);
+
+            const market = await createSingleMarketFromRequest(
+                request,
+                i + 1,
+                { poolManager, predictionManager },
+                adminClient
+            );
+
+            if (market) {
+                markets.push(market);
+                logSuccess('MarketGeneration', `Created market ${i+1}: ${market.name}`);
+            }
         }
-    }
-    
-    console.log(chalk.blue(`📝 Successfully created ${markets.length}/${marketRequests.length} markets\n`));
-    return markets;
-}
+
+        logSuccess('MarketGeneration', `Successfully created ${markets.length} markets`);
+
+        return markets;
+    },
+    'GenerateMarketsV2'
+);
