@@ -22,7 +22,7 @@ const TARGET_CONTRACTS = [
     'PoolManager',
     'StateView',
     'IUniversalRouter',
-    'PositionManager',
+    'IPositionManager',
 ];
 
 if (!existsSync(generatedDir)) {
