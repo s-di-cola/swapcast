@@ -7,11 +7,13 @@ import {
   type Hash,
   type WalletClient,
   encodeFunctionData,
-  parseUnits
+  parseUnits,
+  encodePacked,
+  encodeAbiParameters
 } from 'viem';
 import { anvil } from 'viem/chains';
 import { getPositionManager } from '../../src/generated/types/PositionManager';
-import { getContract, getWalletClient, impersonateAccount, stopImpersonatingAccount } from './client';
+import { getWalletClient, impersonateAccount, stopImpersonatingAccount } from './client';
 import { logSuccess, logWarning, withErrorHandling } from './error';
 import { calculateSqrtPriceX96, getTokenSymbolFromAddress } from './math';
 import { approveTokens, findWhaleWithBalance } from './tokens';
@@ -120,13 +122,10 @@ const createPoolKey = withErrorHandling(
 );
 
 
-/**
- * Initialize pool and mint liquidity in one atomic transaction using multicall
- */
 
 /**
  * Initialize pool and mint liquidity in one atomic transaction using multicall
- * Following the official Uniswap V4 guide
+ * Following the official Uniswap V4 guide EXACTLY
  */
 const mintPool = async (
   token0Address: Address,
@@ -174,108 +173,127 @@ const mintPool = async (
       value = amount1Desired;
     }
     
-    // Get position manager contract
-    const positionManager = getContract(getPositionManager, CONTRACT_ADDRESSES.POSITION_MANAGER as Address);
+    // Get whale client
+    const whaleClient = await getWalletClient(whaleAddress);
     
-    // 1. Encode initialize call
-    const calls: `0x${string}`[] = [
-      encodeFunctionData({
-        abi: [{
-          name: 'initialize',
-          type: 'function',
-          inputs: [
-            {
-              name: 'key',
-              type: 'tuple',
-              components: [
-                { name: 'currency0', type: 'address' },
-                { name: 'currency1', type: 'address' },
-                { name: 'fee', type: 'uint24' },
-                { name: 'tickSpacing', type: 'int24' },
-                { name: 'hooks', type: 'address' }
-              ]
-            },
-            { name: 'sqrtPriceX96', type: 'uint160' }
-          ],
-          outputs: [],
-          stateMutability: 'nonpayable'
-        }],
-        functionName: 'initialize',
-        args: [poolKey, sqrtPriceX96]
-      }),
-      
-      // 2. Encode modifyPosition call
-      encodeFunctionData({
-        abi: [{
-          name: 'modifyPosition',
-          type: 'function',
-          inputs: [
-            {
-              name: 'key',
-              type: 'tuple',
-              components: [
-                { name: 'currency0', type: 'address' },
-                { name: 'currency1', type: 'address' },
-                { name: 'fee', type: 'uint24' },
-                { name: 'tickSpacing', type: 'int24' },
-                { name: 'hooks', type: 'address' }
-              ]
-            },
-            {
-              name: 'params',
-              type: 'tuple',
-              components: [
-                { name: 'tickLower', type: 'int24' },
-                { name: 'tickUpper', type: 'int24' },
-                { name: 'liquidityDelta', type: 'int128' }
-              ]
-            },
-            {
-              name: 'data',
-              type: 'tuple',
-              components: [
-                { name: 'amount0Desired', type: 'uint256' },
-                { name: 'amount1Desired', type: 'uint256' },
-                { name: 'amount0Min', type: 'uint256' },
-                { name: 'amount1Min', type: 'uint256' },
-                { name: 'recipient', type: 'address' },
-                { name: 'deadline', type: 'uint256' }
-              ]
-            }
-          ],
-          outputs: [{ name: '', type: 'bytes32' }],
-          stateMutability: 'payable'
-        }],
-        functionName: 'modifyPosition',
-        args: [
-          poolKey,
+    // FOLLOWING THE EXACT GUIDE PATTERN:
+    
+    // 1. Initialize the parameters provided to multicall()
+    const params: `0x${string}`[] = [];
+    
+    // 3. Encode the initializePool parameters
+    // params[0] = abi.encodeWithSelector(IPoolInitializer_v4.initializePool.selector, pool, startingPrice);
+    params[0] = encodeFunctionData({
+      abi: [{
+        name: 'initializePool',
+        type: 'function',
+        inputs: [
           {
-            tickLower,
-            tickUpper,
-            liquidityDelta: 0n // This should probably be calculated based on desired amounts
+            name: 'key',
+            type: 'tuple',
+            components: [
+              { name: 'currency0', type: 'address' },
+              { name: 'currency1', type: 'address' },
+              { name: 'fee', type: 'uint24' },
+              { name: 'tickSpacing', type: 'int24' },
+              { name: 'hooks', type: 'address' }
+            ]
           },
-          {
-            amount0Desired,
-            amount1Desired,
-            amount0Min: 0n,
-            amount1Min: 0n,
-            recipient: whaleAddress,
-            deadline: BigInt(Math.floor(Date.now() / 1000) + 1200)
-          }
-        ]
-      })
-    ];
+          { name: 'sqrtPriceX96', type: 'uint160' }
+        ],
+        outputs: [],
+        stateMutability: 'nonpayable'
+      }],
+      functionName: 'initializePool',
+      args: [poolKey, sqrtPriceX96]
+    });
     
-    // Execute multicall with both account and chain specified
+    // 4. Initialize the mint-liquidity parameters
+    // bytes memory actions = abi.encodePacked(uint8(Actions.MINT_POSITION), uint8(Actions.SETTLE_PAIR));
+    const actions = encodePacked(['uint8', 'uint8'], [0, 1]); // MINT_POSITION = 0, SETTLE_PAIR = 1
+    
+    // 5. Encode the MINT_POSITION parameters
+    const mintParams: `0x${string}`[] = [];
+    
+    // mintParams[0] = abi.encode(pool, tickLower, tickUpper, liquidity, amount0Max, amount1Max, recipient, hookData);
+    mintParams[0] = encodeAbiParameters(
+      [
+        {
+          name: 'pool',
+          type: 'tuple',
+          components: [
+            { name: 'currency0', type: 'address' },
+            { name: 'currency1', type: 'address' },
+            { name: 'fee', type: 'uint24' },
+            { name: 'tickSpacing', type: 'int24' },
+            { name: 'hooks', type: 'address' }
+          ]
+        },
+        { name: 'tickLower', type: 'int24' },
+        { name: 'tickUpper', type: 'int24' },
+        { name: 'liquidity', type: 'uint128' },
+        { name: 'amount0Max', type: 'uint256' },
+        { name: 'amount1Max', type: 'uint256' },
+        { name: 'recipient', type: 'address' },
+        { name: 'hookData', type: 'bytes' }
+      ],
+      [
+        poolKey,
+        tickLower,
+        tickUpper,
+        1000000n, // liquidity amount
+        amount0Desired,
+        amount1Desired,
+        whaleAddress,
+        '0x' // empty hookData
+      ]
+    );
+    
+    // 6. Encode the SETTLE_PAIR parameters
+    // mintParams[1] = abi.encode(pool.currency0, pool.currency1);
+    mintParams[1] = encodeAbiParameters(
+      [{ type: 'address' }, { type: 'address' }],
+      [poolKey.currency0, poolKey.currency1]
+    );
+    
+    // 7. Encode the modifyLiquidites call
+    // params[1] = abi.encodeWithSelector(posm.modifyLiquidities.selector, abi.encode(actions, mintParams), deadline);
+    const deadline = BigInt(Math.floor(Date.now() / 1000) + 60);
+    
+    params[1] = encodeFunctionData({
+      abi: [{
+        name: 'modifyLiquidities',
+        type: 'function',
+        inputs: [
+          { name: 'unlockData', type: 'bytes' },
+          { name: 'deadline', type: 'uint256' }
+        ],
+        outputs: [],
+        stateMutability: 'payable'
+      }],
+      functionName: 'modifyLiquidities',
+      args: [
+        encodeAbiParameters(
+          [{ type: 'bytes' }, { type: 'bytes[]' }],
+          [actions, mintParams]
+        ),
+        deadline
+      ]
+    });
+    
+    // 9. Execute the multicall
+    // PositionManager(posm).multicall(params);
+    const positionManager = await getPositionManager({
+      address: CONTRACT_ADDRESSES.POSITION_MANAGER as Address,
+      chain: anvil
+    });
     const hash = await positionManager.write.multicall(
-      [calls],
+      [params],
       {
         account: whaleAddress,
         value,
-        chain: anvil,
-        // Add gas settings to avoid estimation issues
-        gas: 1000000n
-       }
+        chain: anvil
+      }
     );
     
     logSuccess('PoolInitialization', `Pool initialized and liquidity minted with hash: ${hash}`);
