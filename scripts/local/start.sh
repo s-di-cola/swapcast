@@ -47,14 +47,14 @@ command_exists() { command -v "$1" >/dev/null 2>&1; }
 cleanup_and_exit() {
   local exit_code=$1
   local message=$2
-  
+
   log_info "Cleaning up resources..."
   "${PROJECT_ROOT}/scripts/local/stop.sh" > /dev/null 2>&1
-  
+
   if [ -n "$message" ]; then
     log_error "$message"
   fi
-  
+
   exit $exit_code
 }
 
@@ -120,7 +120,7 @@ setup_rpc_url() {
     export FORK_RPC_URL="$FORK_RPC_URL"
     return 0
   fi
-  
+
   # Only ask for RPC URL if running interactively
   if [ ! -t 0 ]; then
     log_error "FORK_RPC_URL environment variable is required in non-interactive mode"
@@ -157,7 +157,7 @@ setup_rpc_url() {
       return 1
       ;;
   esac
-  
+
   return 0
 }
 
@@ -167,14 +167,14 @@ start_anvil() {
 
   # Kill any existing anvil process
   pkill -f anvil > /dev/null 2>&1 || true
-  
+
   # Make sure we have an RPC URL
   if [ -z "$FORK_RPC_URL" ]; then
     log_error "FORK_RPC_URL is not set. Please export it before running this script."
     log_error "Example: export FORK_RPC_URL=\"https://eth-mainnet.g.alchemy.com/v2/YOUR_API_KEY\""
     return 1
   fi
-  
+
   # Test the RPC URL
   if ! curl -s -X POST -H "Content-Type: application/json" \
      --data '{"jsonrpc":"2.0","method":"eth_blockNumber","params":[],"id":1}' \
@@ -248,7 +248,6 @@ deploy_contracts() {
   ORACLE_RESOLVER=$(grep -A 15 "SwapCast Deployment Summary" "$LOG_DIR"/deploy.log | grep "OracleResolver:" | awk '{print $2}')
   REWARD_DISTRIBUTOR=$(grep -A 15 "SwapCast Deployment Summary" "$LOG_DIR"/deploy.log | grep "RewardDistributor:" | awk '{print $2}')
   SWAP_CAST_HOOK=$(grep -A 15 "SwapCast Deployment Summary" "$LOG_DIR"/deploy.log | grep "SwapCastHook:" | awk '{print $2}')
-  SIMPLE_SWAP_ROUTER=$(grep -A 15 "SwapCast Deployment Summary" "$LOG_DIR"/deploy.log | grep "SimpleSwapRouter:" | awk '{print $2}')
   POOL_STATE_READER=$(grep -A 15 "SwapCast Deployment Summary" "$LOG_DIR"/deploy.log | grep "PoolStateReader:" | awk '{print $2}')
 
   # Check if we found the PredictionManager address
@@ -264,8 +263,7 @@ deploy_contracts() {
   [ -n "$ORACLE_RESOLVER" ] && echo "PUBLIC_ORACLERESOLVER_ADDRESS=$ORACLE_RESOLVER" >> "$DAPP_ENV_FILE"
   [ -n "$REWARD_DISTRIBUTOR" ] && echo "PUBLIC_REWARDDISTRIBUTOR_ADDRESS=$REWARD_DISTRIBUTOR" >> "$DAPP_ENV_FILE"
   [ -n "$SWAP_CAST_HOOK" ] && echo "PUBLIC_SWAPCASTHOOK_ADDRESS=$SWAP_CAST_HOOK" >> "$DAPP_ENV_FILE"
-  [ -n "$SIMPLE_SWAP_ROUTER" ] && echo "PUBLIC_SIMPLESWAPROUTER_ADDRESS=$SIMPLE_SWAP_ROUTER" >> "$DAPP_ENV_FILE"
-  
+
   # Add Uniswap v4 PoolManager address (mainnet)
   echo "PUBLIC_UNIV4_POOLMANAGER_ADDRESS=0x000000000004444c5dc75cB358380D2e3dE08A90" >> "$DAPP_ENV_FILE"
   # Add our custom PoolStateReader address (from our local deployment)
@@ -276,6 +274,9 @@ deploy_contracts() {
   fi
   # Add Uniswap Universal Router address (mainnet)
   echo "PUBLIC_UNIVERSAL_ROUTER_ADDRESS=0x66a9893cc07d91d95644aedd05d03f95e1dba8af" >> "$DAPP_ENV_FILE"
+
+  # Add Uniswap PositionManager address (mainnet)
+  echo "PUBLIC_UNIV4_POSITIONMANAGER_ADDRESS=0xbd216513d74c8cf14cf4747e6aaa6420ff64ee9e" >> "$DAPP_ENV_FILE"
 
   # Add the admin private key and address (using first Anvil account)
   echo "PUBLIC_ADMIN_PRIVATE_KEY=$PRIVATE_KEY" >> "$DAPP_ENV_FILE"
@@ -301,7 +302,7 @@ setup_subgraph() {
     log_warning "Skipping subgraph setup"
     return 0
   fi
-  
+
   # Clean up data directories to ensure a fresh start
   log_info "Cleaning up data directories"
   rm -rf "$SUBGRAPH_DIR/docker/data/ipfs" "$SUBGRAPH_DIR/docker/data/postgres"
@@ -372,7 +373,7 @@ setup_subgraph() {
   else
     npm run create-local || true
   fi
-  
+
   # Run deploy-local with automatic version flag
   log_info "Deploying local subgraph..."
   if [ "$QUIET_MODE" = true ]; then
@@ -380,7 +381,7 @@ setup_subgraph() {
   else
     npm run deploy-local-auto || true
   fi
-  
+
   # Mark as deployed and continue
   log_info "Subgraph deployment initiated"
   SUBGRAPH_DEPLOYED=true
@@ -390,7 +391,7 @@ setup_subgraph() {
 # Print a summary of the setup
 print_summary() {
   echo -e "\n${BOLD}========== Setup Summary ==========${NC}"
-  
+
   if [ "$DEPLOYMENT_SUCCESS" = true ]; then
     echo -e "${GREEN}✓ Contracts deployed successfully${NC}"
     echo -e "  PredictionManager: $PREDICTION_MANAGER_ADDRESS"
@@ -413,10 +414,10 @@ print_summary() {
 
   echo -e "\n${BOLD}Anvil RPC:${NC} http://localhost:$ANVIL_PORT"
   echo -e "${BOLD}Chain ID:${NC} 31337"
-  
+
   echo -e "\n${BOLD}To stop all services:${NC}"
   echo -e "  ./scripts/local/stop.sh"
-  
+
   echo -e "\n${BOLD}========== Setup Complete ==========${NC}"
 }
 
@@ -463,10 +464,10 @@ function main() {
   # First thing: clean up any existing resources
   log_info "Cleaning up any existing resources"
   "${PROJECT_ROOT}/scripts/local/stop.sh" > /dev/null 2>&1
-  
+
   # Check prerequisites
   check_prerequisites || cleanup_and_exit 1 "Prerequisites check failed"
-  
+
   # Check if FORK_RPC_URL is set
   if [ -n "$FORK_RPC_URL" ]; then
     log_info "Using FORK_RPC_URL from environment"
@@ -474,17 +475,17 @@ function main() {
     # Prompt the user for RPC URL
     setup_rpc_url || cleanup_and_exit 1 "Failed to set up RPC URL"
   fi
-  
+
   # Start anvil
   start_anvil || cleanup_and_exit 1 "Failed to start Anvil"
-  
+
   # Deploy contracts
   if deploy_contracts; then
     DEPLOYMENT_SUCCESS=true
   else
     cleanup_and_exit 1 "Contract deployment failed"
   fi
-  
+
   # Setup subgraph
   if [ "$SKIP_SUBGRAPH" = false ]; then
     if setup_subgraph; then
@@ -493,10 +494,10 @@ function main() {
       log_warning "Subgraph setup had issues, but continuing"
     fi
   fi
-  
+
   # Print summary
   print_summary
-  
+
   # Remove the trap before exiting normally
   trap - INT TERM
   exit 0
