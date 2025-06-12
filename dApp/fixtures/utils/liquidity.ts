@@ -18,7 +18,7 @@ import { logSuccess, logWarning, withErrorHandling } from './error';
 import { calculateSqrtPriceX96, getTokenSymbolFromAddress } from './math';
 import { approveTokens, findWhaleWithBalance } from './tokens';
 import { CONTRACT_ADDRESSES } from './wallets';
-
+import {Actions} from '@uniswap/v4-sdk'
 /**
  * Setup a whale account for liquidity operations
  */
@@ -148,31 +148,36 @@ const calculateETHValue = (
 };
 
 /**
- * Encode initializePool parameters for multicall
+ * Encode initializePool parameters for multicall using encodeFunctionData
  */
 const encodeInitializePoolParams = (
   poolKey: { currency0: Address; currency1: Address; fee: number; tickSpacing: number; hooks: Address },
   sqrtPriceX96: bigint
 ): `0x${string}` => {
-  const initializePoolSelector = '0xf7020405';
-  
-  return `${initializePoolSelector}${encodeAbiParameters(
-    [
-      {
-        name: 'key',
-        type: 'tuple',
-        components: [
-          { name: 'currency0', type: 'address' },
-          { name: 'currency1', type: 'address' },
-          { name: 'fee', type: 'uint24' },
-          { name: 'tickSpacing', type: 'int24' },
-          { name: 'hooks', type: 'address' }
-        ]
-      },
-      { name: 'sqrtPriceX96', type: 'uint160' }
-    ],
-    [poolKey, sqrtPriceX96]
-  ).slice(2)}` as `0x${string}`;
+  return encodeFunctionData({
+    abi: [{
+      name: 'initializePool',
+      type: 'function',
+      inputs: [
+        {
+          name: 'key',
+          type: 'tuple',
+          components: [
+            { name: 'currency0', type: 'address' },
+            { name: 'currency1', type: 'address' },
+            { name: 'fee', type: 'uint24' },
+            { name: 'tickSpacing', type: 'int24' },
+            { name: 'hooks', type: 'address' }
+          ]
+        },
+        { name: 'sqrtPriceX96', type: 'uint160' }
+      ],
+      outputs: [],
+      stateMutability: 'nonpayable'
+    }],
+    functionName: 'initializePool',
+    args: [poolKey, sqrtPriceX96]
+  });
 };
 
 /**
@@ -240,8 +245,8 @@ const encodeModifyLiquiditiesParams = (
 ): `0x${string}` => {
   // Create actions based on whether we have native ETH
   const actions = hasNativeETH 
-    ? encodePacked(['uint8', 'uint8', 'uint8'], [0, 1, 2]) // MINT_POSITION, SETTLE_PAIR, SWEEP
-    : encodePacked(['uint8', 'uint8'], [0, 1]); // MINT_POSITION, SETTLE_PAIR
+    ? encodePacked(['uint8', 'uint8', 'uint8'], [Actions.MINT_POSITION, Actions.SETTLE_PAIR, Actions.SWEEP]) // MINT_POSITION, SETTLE_PAIR, SWEEP
+    : encodePacked(['uint8', 'uint8'], [Actions.MINT_POSITION, Actions.SETTLE_PAIR]); // MINT_POSITION, SETTLE_PAIR
 
   const deadline = BigInt(Math.floor(Date.now() / 1000) + 60);
   const modifyLiquiditiesSelector = '0xdd46508f';
@@ -286,19 +291,21 @@ const mintPool = async (
     const amount1Desired = parseUnits(amount1, 18);
 
     // Setup whale and approvals
-    await setupWhaleForLiquidity(token0Address, token1Address, amount0Desired, amount1Desired);
+    const { whaleAddress } = await setupWhaleForLiquidity(token0Address, token1Address, amount0Desired, amount1Desired);
 
     // Calculate ETH value
     const { value, hasNativeETH } = calculateETHValue(poolKey, amount0Desired, amount1Desired);
 
-    // Encode multicall parameters
+    // Encode multicall parameters using encodeFunctionData
     const initializeParams = encodeInitializePoolParams(poolKey, sqrtPriceX96);
     const mintParams = encodeMintParams(poolKey, tickLower, tickUpper, amount0Desired, amount1Desired, whaleAddress);
     const modifyLiquiditiesParams = encodeModifyLiquiditiesParams(hasNativeETH, mintParams);
 
     const params = [initializeParams, modifyLiquiditiesParams];
 
-    // Execute multicall - try without account field to avoid "tx from field is set"
+    console.log('Multicall params:', params);
+
+    // Execute multicall with account specified
     const positionManager = await getPositionManager({
       address: CONTRACT_ADDRESSES.POSITION_MANAGER as Address,
       chain: anvil
@@ -307,9 +314,9 @@ const mintPool = async (
     const hash = await positionManager.write.multicall(
       [params],
       {
+        account: whaleAddress,
         ...(hasNativeETH && { value }),
-        chain: anvil,
-        account: whaleAddress
+        chain: anvil
       }
     );
 
