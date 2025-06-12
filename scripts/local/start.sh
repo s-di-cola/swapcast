@@ -185,7 +185,7 @@ start_anvil() {
   fi
   # Start anvil with mainnet fork in the background
   log_info "Starting Anvil with fork URL: ${FORK_RPC_URL:0:30}..."
-  anvil --fork-url "$FORK_RPC_URL" --port $ANVIL_PORT --chain-id 31337 > "$LOG_DIR"/anvil.log 2>&1 &
+  anvil --fork-url "$FORK_RPC_URL" --port $ANVIL_PORT --chain-id 31337  --hardfork cancun  --gas-limit 30000000 > "$LOG_DIR"/anvil.log 2>&1 &
   ANVIL_PID=$!
 
   # Save PID immediately
