@@ -11,7 +11,6 @@ import {OracleResolver} from "src/OracleResolver.sol";
 import {RewardDistributor} from "src/RewardDistributor.sol";
 import {PredictionManager} from "src/PredictionManager.sol";
 import {SwapCastHook} from "src/SwapCastHook.sol";
-import {SimpleSwapRouter} from "src/SimpleSwapRouter.sol";
 import {PoolStateReader} from "src/PoolStateReader.sol"; // Use our custom PoolStateReader
 import {IPoolManager} from "v4-core/interfaces/IPoolManager.sol";
 import {PredictionTypes} from "src/types/PredictionTypes.sol";
@@ -48,14 +47,13 @@ contract DeploySwapCast is Script, StdCheats {
     OracleResolver public oracleResolver;
     RewardDistributor public rewardDistributor;
     SwapCastHook public swapCastHook;
-    SimpleSwapRouter public simpleSwapRouter;
     PoolStateReader public poolStateReader; // Our custom pool state reader
 
     function run() external {
         // Get the private key from the environment variable
         uint256 deployerPrivateKey = vm.envUint("PRIVATE_KEY");
         address deployerAddress = vm.addr(deployerPrivateKey);
-        
+
         console2.log("Deploying SwapCast contracts with address:", deployerAddress);
 
         // Start broadcasting transactions
@@ -68,7 +66,7 @@ contract DeploySwapCast is Script, StdCheats {
         // 2. Deploy Treasury
         treasury = new Treasury(deployerAddress);
         console2.log("Treasury deployed at:", address(treasury));
-        
+
         // 3. Deploy our custom PoolStateReader pointing to the PoolManager
         // Note: In a forked environment, we need a direct pool state reader that works with the PoolManager
         address poolManagerAddress = 0x000000000004444c5dc75cB358380D2e3dE08A90; // Mainnet PoolManager address
@@ -89,17 +87,17 @@ contract DeploySwapCast is Script, StdCheats {
         );
         console2.log("PredictionManager deployed at:", address(predictionManager));
         console2.log("ADMIN_ADDRESS:", predictionManager.owner());
-        
+
         // 4. Deploy OracleResolver with the real Chainlink Feed Registry and PredictionManager address
         // Chainlink Feed Registry on Ethereum mainnet: 0x47Fb2585D2C56Fe188D0E6ec628a38b74fCeeeDf
         address feedRegistry = 0x47Fb2585D2C56Fe188D0E6ec628a38b74fCeeeDf;
         oracleResolver = new OracleResolver(address(predictionManager), feedRegistry, deployerAddress);
         console2.log("OracleResolver deployed at:", address(oracleResolver));
-        
+
         // 5. Deploy RewardDistributor with the PredictionManager address
         rewardDistributor = new RewardDistributor(deployerAddress, address(predictionManager));
         console2.log("RewardDistributor deployed at:", address(rewardDistributor));
-        
+
         // 6. Set the proper addresses in PredictionManager using the new setter methods
         predictionManager.setOracleResolverAddress(address(oracleResolver));
         predictionManager.setRewardDistributorAddress(address(rewardDistributor));
@@ -111,18 +109,18 @@ contract DeploySwapCast is Script, StdCheats {
 
         // 8. Deploy SwapCastHook with the Uniswap v4 PoolManager
         console2.log("Deploying SwapCastHook at an address that encodes its permissions");
-        
+
         // Reuse the poolManagerAddress from earlier
-        
+
         // Set the hook flags - SwapCastHook only uses afterSwap
         uint160 flags = uint160(Hooks.AFTER_SWAP_FLAG);
-        
+
         // The CREATE2 deployer address used by Foundry
         address CREATE2_DEPLOYER = 0x4e59b44847b379578588920cA78FbF26c0B4956C;
-        
+
         // Prepare constructor arguments
         bytes memory constructorArgs = abi.encode(IPoolManager(poolManagerAddress), address(predictionManager));
-        
+
         // Mine for a salt that will produce a hook address with the correct flags
         (address hookAddress, bytes32 salt) = HookMiner.find(
             CREATE2_DEPLOYER,
@@ -130,41 +128,35 @@ contract DeploySwapCast is Script, StdCheats {
             type(SwapCastHook).creationCode,
             constructorArgs
         );
-        
+
         console2.log("Found salt for hook deployment:", vm.toString(salt));
         console2.log("Expected hook address:", hookAddress);
-        
+
         // Deploy the hook using CREATE2 with the mined salt
         swapCastHook = new SwapCastHook{salt: salt}(IPoolManager(poolManagerAddress), address(predictionManager));
-        
+
         // Verify the deployed address matches the mined address
         require(address(swapCastHook) == hookAddress, "Hook address mismatch");
-        
+
         console2.log("SwapCastHook deployed at:", address(swapCastHook));
 
-        // 9. Deploy SimpleSwapRouter for handling hook external calls
-        console2.log("Deploying SimpleSwapRouter for proper unlock handling...");
-        simpleSwapRouter = new SimpleSwapRouter(IPoolManager(poolManagerAddress));
-        console2.log("SimpleSwapRouter deployed at:", address(simpleSwapRouter));
-        
-        // 10. Deploy PoolStateReader for reliable pool state reading in forked environment
+        // 9. Deploy PoolStateReader for reliable pool state reading in forked environment
         console2.log("Deploying PoolStateReader that points to our local PoolManager...");
         poolStateReader = new PoolStateReader(IPoolManager(poolManagerAddress));
         console2.log("PoolStateReader deployed at:", address(poolStateReader));
-        
+
         // The hook is now deployed at the correct address with the proper permissions
         console2.log("SwapCastHook successfully deployed at address:", address(swapCastHook));
         console2.log("Hook is ready to be used with Uniswap v4 pools");
-        
+
         // Log information about how to use the hook with a pool
         console2.log("\nTo create a pool with this hook, use the following information:");
         console2.log("1. PoolManager address: ", poolManagerAddress);
-        console2.log("2. Hook address: ", address(swapCastHook));
-        console2.log("3. SimpleSwapRouter address: ", address(simpleSwapRouter));
-        console2.log("4. Example token pair: WETH/USDC");
+        console2.log("2. SwapCastHook address: ", address(swapCastHook));
+        console2.log("3. Example token pair: WETH/USDC");
         console2.log("   - WETH: 0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2");
         console2.log("   - USDC: 0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48");
-        
+
         // Define the pool key for reference (not initializing yet)
         PoolKey memory poolKey = PoolKey({
             currency0: Currency.wrap(0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2), // WETH
@@ -173,7 +165,7 @@ contract DeploySwapCast is Script, StdCheats {
             tickSpacing: 60,
             hooks: IHooks(address(swapCastHook))
         });
-        
+
         // Calculate and log the pool ID for reference
         PoolId poolId = poolKey.toId();
         bytes32 poolIdBytes;
@@ -183,21 +175,22 @@ contract DeploySwapCast is Script, StdCheats {
         console2.log("5. Expected Pool ID: ", vm.toString(poolIdBytes));
         console2.log("\nNote: Pool initialization should be done in a separate transaction");
         console2.log("after ensuring the tokens are properly sorted and the hook is valid.");
-        console2.log("\nIMPORTANT: Use SimpleSwapRouter instead of PoolManager for swaps with predictions!");
+        console2.log("\nIMPORTANT: Use the hook with the PoolManager for swaps with predictions!");
 
         // Stop broadcasting transactions
         vm.stopBroadcast();
 
         // Log deployment summary
-        console2.log("\n--- SwapCast Deployment Summary ---");
-        console2.log("SwapCastNFT:       ", address(swapCastNFT));
-        console2.log("Treasury:          ", address(treasury));
-        console2.log("PredictionManager: ", address(predictionManager));
-        console2.log("OracleResolver:    ", address(oracleResolver));
-        console2.log("RewardDistributor: ", address(rewardDistributor));
-        console2.log("SwapCastHook:      ", address(swapCastHook));
-        console2.log("SimpleSwapRouter:  ", address(simpleSwapRouter));
-        console2.log("PoolStateReader:   ", address(poolStateReader));
+        console2.log("\n--------------------------------");
+        console2.log("SwapCast Deployment Summary");
+        console2.log("--------------------------------");
+        console2.log("SwapCastNFT:     ", address(swapCastNFT));
+        console2.log("Treasury:        ", address(treasury));
+        console2.log("PredictionManager:", address(predictionManager));
+        console2.log("OracleResolver:  ", address(oracleResolver));
+        console2.log("RewardDistributor:", address(rewardDistributor));
+        console2.log("SwapCastHook:    ", address(swapCastHook));
+        console2.log("PoolStateReader: ", address(poolStateReader));
         console2.log("--------------------------------");
     }
 }

@@ -15,7 +15,6 @@
   - [PoolStateReader](src/PoolStateReader.sol/contract.PoolStateReader.md)
   - [PredictionManager](src/PredictionManager.sol/contract.PredictionManager.md)
   - [RewardDistributor](src/RewardDistributor.sol/contract.RewardDistributor.md)
-  - [SimpleSwapRouter](src/SimpleSwapRouter.sol/contract.SimpleSwapRouter.md)
   - [SwapCastHook](src/SwapCastHook.sol/contract.SwapCastHook.md)
   - [SwapCastNFT](src/SwapCastNFT.sol/contract.SwapCastNFT.md)
   - [Treasury](src/Treasury.sol/contract.Treasury.md)

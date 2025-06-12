@@ -73,13 +73,18 @@ function getContractInstances() {
  * Creates pool key for Uniswap v4
  */
 function createPoolKey(token0Address: Address, token1Address: Address) {
-    return {
+    
+    const poolKey = {
         currency0: token0Address,
         currency1: token1Address,
         fee: 3000,
         tickSpacing: getTickSpacing(3000),
         hooks: CONTRACT_ADDRESSES.SWAPCAST_HOOK as Address
     };
+    
+    console.log(chalk.cyan(`  🔑 Pool key: ${JSON.stringify(poolKey)}`));
+    
+    return poolKey;
 }
 
 /**
@@ -211,7 +216,7 @@ async function createSingleMarketFromRequest(
         );
         
         const poolKey = createPoolKey(token0Address, token1Address);
-        
+         
         await initializePool(contracts.poolManager, poolKey, sqrtPriceX96, adminClient);
         await addPoolLiquidity(adminClient, poolKey, request.basePrice);
         await createPredictionMarket(contracts.predictionManager, request, poolKey, adminClient);
