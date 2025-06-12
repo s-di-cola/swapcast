@@ -1,7 +1,7 @@
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'fs';
-import { dirname, join, resolve } from 'path';
-import { fileURLToPath } from 'url';
-import { format } from 'prettier';
+import {existsSync, mkdirSync, readFileSync, writeFileSync} from 'fs';
+import {dirname, join, resolve} from 'path';
+import {fileURLToPath} from 'url';
+import {format} from 'prettier';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -11,28 +11,29 @@ const abisDir = join(rootDir, 'src/generated/abis');
 
 // List of contracts to generate types for
 const TARGET_CONTRACTS = [
-  'PredictionManager',
-  'SwapCastHook',
-  'SwapCastNFT',
-  'OracleResolver',
-  'RewardDistributor',
-  'Treasury',
-  'MarketLogic',
-  'PoolManager',
-  'StateView',
-  'IUniversalRouter',
-  'SimpleSwapRouter'
+    'Actions',
+    'PredictionManager',
+    'SwapCastHook',
+    'SwapCastNFT',
+    'OracleResolver',
+    'RewardDistributor',
+    'Treasury',
+    'MarketLogic',
+    'PoolManager',
+    'StateView',
+    'IUniversalRouter',
+    'PositionManager',
 ];
 
 if (!existsSync(generatedDir)) {
-  mkdirSync(generatedDir, { recursive: true });
+    mkdirSync(generatedDir, {recursive: true});
 }
 
 /**
  * Generate TypeScript contract interface file
  */
 function generateContractTypes(contractName: string, abi: any): string {
-  return `// Auto-generated file - DO NOT EDIT!
+    return `// Auto-generated file - DO NOT EDIT!
 import { createPublicClient, http, getContract, type Address } from 'viem';
 
 // ABI with type inference when used with 'as const'
@@ -78,47 +79,47 @@ export type ${contractName}WriteFunctions = ${contractName}Instance extends { wr
  * Main execution function
  */
 (async () => {
-  const typesDir = join(generatedDir, 'types');
-  if (!existsSync(typesDir)) {
-    mkdirSync(typesDir, { recursive: true });
-  }
-  
-  for (const contractName of TARGET_CONTRACTS) {
-    try {
-      const artifactPath = join(abisDir, `${contractName}.sol`, `${contractName}.abi.json`);
-      
-      if (!existsSync(artifactPath)) {
-        console.warn(`Skipping ${contractName}: No ABI JSON file found at ${artifactPath}`);
-        continue;
-      }
-      
-      const abi = JSON.parse(readFileSync(artifactPath, 'utf-8'));
-      const content = generateContractTypes(contractName, abi);
-      
-      // Format the generated code - prettier.format is async
-      try {
-        const formatted = await format(content, {
-          singleQuote: true,
-          trailingComma: 'es5',
-          semi: true,
-          printWidth: 100,
-          parser: 'typescript'
-        });
-        
-        const outputFile = join(typesDir, `${contractName}.ts`);
-        writeFileSync(outputFile, formatted, 'utf-8');
-        console.log(`Generated types for ${contractName}`);
-      } catch (formatError) {
-        // If formatting fails, write the unformatted content
-        console.warn(`Formatting failed for ${contractName}, writing unformatted code:`, formatError);
-        const outputFile = join(typesDir, `${contractName}.ts`);
-        writeFileSync(outputFile, content, 'utf-8');
-        console.log(`Generated unformatted types for ${contractName}`);
-      }
-    } catch (e) {
-      console.error(`Error generating types for ${contractName}:`, e);
+    const typesDir = join(generatedDir, 'types');
+    if (!existsSync(typesDir)) {
+        mkdirSync(typesDir, {recursive: true});
     }
-  }
-  
-  console.log('Contract type generation complete!');
+
+    for (const contractName of TARGET_CONTRACTS) {
+        try {
+            const artifactPath = join(abisDir, `${contractName}.sol`, `${contractName}.abi.json`);
+
+            if (!existsSync(artifactPath)) {
+                console.warn(`Skipping ${contractName}: No ABI JSON file found at ${artifactPath}`);
+                continue;
+            }
+
+            const abi = JSON.parse(readFileSync(artifactPath, 'utf-8'));
+            const content = generateContractTypes(contractName, abi);
+
+            // Format the generated code - prettier.format is async
+            try {
+                const formatted = await format(content, {
+                    singleQuote: true,
+                    trailingComma: 'es5',
+                    semi: true,
+                    printWidth: 100,
+                    parser: 'typescript'
+                });
+
+                const outputFile = join(typesDir, `${contractName}.ts`);
+                writeFileSync(outputFile, formatted, 'utf-8');
+                console.log(`Generated types for ${contractName}`);
+            } catch (formatError) {
+                // If formatting fails, write the unformatted content
+                console.warn(`Formatting failed for ${contractName}, writing unformatted code:`, formatError);
+                const outputFile = join(typesDir, `${contractName}.ts`);
+                writeFileSync(outputFile, content, 'utf-8');
+                console.log(`Generated unformatted types for ${contractName}`);
+            }
+        } catch (e) {
+            console.error(`Error generating types for ${contractName}:`, e);
+        }
+    }
+
+    console.log('Contract type generation complete!');
 })();
