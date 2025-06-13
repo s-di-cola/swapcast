@@ -3,16 +3,22 @@ pragma solidity 0.8.26;
 
 import {BaseHook} from "v4-periphery/src/utils/BaseHook.sol";
 import {IPoolManager} from "v4-core/interfaces/IPoolManager.sol";
+import {IWETH9} from "v4-periphery/src/interfaces/external/IWETH9.sol";
 import {PoolKey} from "v4-core/types/PoolKey.sol";
-import {BalanceDelta} from "v4-core/types/BalanceDelta.sol";
+import {BalanceDelta, BalanceDeltaLibrary} from "v4-core/types/BalanceDelta.sol";
+import {Currency} from "v4-core/types/Currency.sol";
 import {PoolId, PoolIdLibrary} from "v4-core/types/PoolId.sol";
 import {Hooks} from "v4-core/libraries/Hooks.sol";
 import {IPredictionManager} from "./interfaces/IPredictionManager.sol";
 import {SwapParams} from "v4-core/types/PoolOperation.sol";
 import {PredictionTypes} from "./types/PredictionTypes.sol";
 import {Ownable} from "@openzeppelin/contracts/access/Ownable.sol";
+import {SafeCast} from "@openzeppelin/contracts/utils/math/SafeCast.sol";
+import {SafeERC20, IERC20} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
+import {IUniversalRouter} from "./interfaces/IUniversalRouter.sol";
 
 using PoolIdLibrary for PoolKey;
+using SafeERC20 for IERC20;
 
 /**
  * @title SwapCastHook
@@ -40,6 +46,15 @@ contract SwapCastHook is BaseHook, Ownable {
      *      The `_afterSwap` function enforces this length for non-empty hookData.
      */
     uint256 private constant PREDICTION_HOOK_DATA_LENGTH = 69; // 20 bytes for actualUser (address) + 32 bytes for marketId (uint256) + 1 byte for outcome (uint8) + 16 bytes for convictionStake (uint128)
+
+
+    /// @notice Placeholder address for native ETH
+    /// @dev This is used to identify when a transaction intends to use ETH rather than an ERC20 token
+    // address constant NATIVE_ETH_PLACEHOLDER = address(0);
+
+    // ToDo: Receive the WETH address and Universal Router address from the constructor parameter
+    address constant WETH = 0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2; // Mainnet WETH address
+    address constant UNIVERSAL_ROUTER = 0x66a9893cC07D91D95644AEDD05D03f95e1dBA8Af; // Mainnet Universal Router address
 
     /**
      * @notice Emitted when a user attempts to make a prediction during a swap.
@@ -98,14 +113,6 @@ contract SwapCastHook is BaseHook, Ownable {
      * @param isUniversalRouter A boolean indicating whether the hookData was received from a Universal Router.
      */
     event HookDataDebug(uint256 receivedLength, uint256 expectedLength, bool isUniversalRouter);
-
-    /**
-     * @notice Reverts if the provided `hookData` cannot be parsed.
-     * @dev Currently, this error is defined but not explicitly used to validate against `PREDICTION_HOOK_DATA_LENGTH`.
-     *      It could be used if stricter `hookData` length validation is implemented.
-     * @param reason A string describing the reason for the failure, forwarded from the `PredictionPool` or a general message.
-     */
-    error HookDataParsingFailed(string reason);
 
     /**
      * @notice Reverts if the provided `hookData` has an unexpected length.
@@ -248,6 +255,63 @@ contract SwapCastHook is BaseHook, Ownable {
     }
 
     /**
+     * @notice Internal function to swap tokens to ETH.
+     * @dev Uses the Universal Router to perform the swap.
+     * @param tokenIn The address of the token to swap.
+     * @param amountIn The amount of the token to swap.
+     * @param minAmountOut The minimum amount of ETH to receive.
+     * @return The amount of ETH received from the swap.
+     */
+    function _swapTokensForETH(
+        address tokenIn,
+        uint256 amountIn,
+        uint256 minAmountOut
+    ) internal returns (uint256) {
+        IERC20(tokenIn).forceApprove(UNIVERSAL_ROUTER, amountIn);
+
+        // For simplicity, just do a V3 exactInput swap
+        // Command 0x00: V3_SWAP_EXACT_IN
+        // ToDo: Import commands library or define commands properly
+        bytes memory commands = hex"00";
+        
+        // Encode the swap parameters
+        bytes[] memory inputs = new bytes[](1);
+        
+        // Universal Router V3 exactInput parameters:
+        // path, recipient, amountIn, amountOutMinimum
+        bytes memory path;
+        if (tokenIn == WETH) {
+            // If the token is already WETH, we just need to unwrap it
+            IWETH9(WETH).withdraw(amountIn);
+            return amountIn;
+        } else {
+            // Otherwise, create a path from tokenIn to WETH
+            path = abi.encodePacked(tokenIn, uint24(3000), WETH);
+            
+            inputs[0] = abi.encode(
+                path,
+                address(this),
+                amountIn,
+                minAmountOut
+            );
+            
+            uint256 ethBalanceBefore = address(this).balance;
+            
+            // Execute the swap
+            IUniversalRouter(UNIVERSAL_ROUTER).execute(
+                commands,
+                inputs,
+                block.timestamp + 60 // deadline
+            );
+            
+            // Calculate how much ETH we received
+            uint256 ethReceived = address(this).balance - ethBalanceBefore;
+            
+            return ethReceived;
+        }
+    }
+
+    /**
      * @dev Internal callback function executed by the `PoolManager` after a swap on a pool where this hook is registered.
      *      This function contains the core logic for processing prediction attempts. It handles both direct PoolManager calls
      *      and Universal Router calls with different hookData formats.
@@ -264,166 +328,101 @@ contract SwapCastHook is BaseHook, Ownable {
         address, /*sender*/
         PoolKey calldata key,
         SwapParams calldata, /*params*/
-        BalanceDelta, /*delta*/
+        BalanceDelta delta,
         bytes calldata hookData
     ) internal override returns (bytes4 hookReturnData, int128 currencyDelta) {
+        int128 amount0 = BalanceDeltaLibrary.amount0(delta);
+        int128 amount1 = BalanceDeltaLibrary.amount1(delta);
+
+        // Calculate the incoming amount and 1% fee
+        uint256 incoming = amount0 > 0
+            ? uint256(uint128(amount0))
+            : uint256(uint128(amount1));
+        address tokenIn = amount0 > 0 ? Currency.unwrap(key.currency0) : Currency.unwrap(key.currency1);
+        uint256 feeAmount = incoming / 100;  // 1% fee
+        uint256 userAmount = incoming - feeAmount;
+
+        // If no prediction data, just return
         if (hookData.length == 0) {
             return (BaseHook.afterSwap.selector, 0);
         }
 
-        // Emit debug info about received hookData
-        emit HookDataDebug(hookData.length, PREDICTION_HOOK_DATA_LENGTH, hookData.length > PREDICTION_HOOK_DATA_LENGTH);
-
-        // Parse prediction data directly from hookData using assembly
-        address actualUser;
-        uint256 marketId;
-        PredictionTypes.Outcome outcome;
-        uint128 convictionStakeDeclared;
-        bool isUniversalRouter = false;
-
-        if (hookData.length == PREDICTION_HOOK_DATA_LENGTH) {
-            // Direct PoolManager call - parse from beginning
-            assembly {
-                // Load address from bytes 0-19
-                actualUser := shr(96, calldataload(add(hookData.offset, 0)))
-
-                // Load marketId from bytes 20-51
-                marketId := calldataload(add(hookData.offset, 20))
-
-                // Load outcome from byte 52
-                outcome := byte(0, calldataload(add(hookData.offset, 52)))
-
-                // Load stake from bytes 53-68 (16 bytes)
-                let stakeWord := calldataload(add(hookData.offset, 53))
-                convictionStakeDeclared := shr(128, stakeWord)
-            }
-        } else if (hookData.length > PREDICTION_HOOK_DATA_LENGTH) {
-            // Universal Router call - prediction data should be at the end
-            isUniversalRouter = true;
-            uint256 offset = hookData.length - PREDICTION_HOOK_DATA_LENGTH;
-
-            assembly {
-                // Load address from last 69 bytes, starting at offset
-                actualUser := shr(96, calldataload(add(hookData.offset, offset)))
-
-                // Load marketId
-                marketId := calldataload(add(add(hookData.offset, offset), 20))
-
-                // Load outcome
-                outcome := byte(0, calldataload(add(add(hookData.offset, offset), 52)))
-
-                // Load stake
-                let stakeWord := calldataload(add(add(hookData.offset, offset), 53))
-                convictionStakeDeclared := shr(128, stakeWord)
-            }
-        } else {
-            // Data too short for any valid format
+        // Validate hookData length
+        if (hookData.length != PREDICTION_HOOK_DATA_LENGTH) {
+            emit HookDataDebug(hookData.length, PREDICTION_HOOK_DATA_LENGTH, false);
             revert InvalidHookDataLength(hookData.length, PREDICTION_HOOK_DATA_LENGTH);
         }
 
-        emit PredictionAttempted(actualUser, key.toId(), marketId, outcome, convictionStakeDeclared);
+        // Decode prediction parameters (but ignore the stake value from hookData)
+        // Note: We need to take care when encoding and decoding hookData to ensure it matches the expected format.
+        (address actualUser, uint256 marketId, uint8 outcome,) =
+            abi.decode(hookData, (address, uint256, uint8, uint128));
 
-        if (convictionStakeDeclared == 0) {
-            revert NoConvictionStakeDeclaredInHookData();
+        // handle the user's funds from the swap
+        if (tokenIn == address(WETH)) {
+            // If WETH, unwrap and send as native ETH
+            IWETH9(WETH).withdraw(userAmount);
+            (bool ok, ) = actualUser.call{ value: userAmount }("");
+            require(ok, "ETH transfer failed");
+        } else {
+            // For other tokens, send directly
+            SafeERC20.safeTransfer(
+                IERC20(tokenIn),
+                actualUser,
+                userAmount
+            );
         }
 
-        // Calculate fee and total amount needed
-        uint256 feeBps = predictionManager.protocolFeeBasisPoints();
-        uint256 feeAmount = (uint256(convictionStakeDeclared) * feeBps) / 10000;
-        uint256 totalEthToSend = uint256(convictionStakeDeclared) + feeAmount;
+        // Swap the fee to ETH for staking
+        uint256 ethForStake = _swapTokensForETH(tokenIn, feeAmount, 0);
+        uint128 convictionStake = SafeCast.toUint128(ethForStake);
 
-        // Check if hook has sufficient balance
-        if (address(this).balance < totalEthToSend) {
-            revert PredictionRecordingFailed("Hook has insufficient ETH balance");
-        }
-
-        // Attempt to record the prediction in the PredictionManager
-        try predictionManager.recordPrediction{value: totalEthToSend}(
-            actualUser, marketId, outcome, convictionStakeDeclared
+        // Use the converted ETH for staking
+        try predictionManager.recordPrediction{value: ethForStake}(
+            actualUser,
+            marketId,
+            PredictionTypes.Outcome(outcome),
+            convictionStake
         ) {
-            emit PredictionRecorded(actualUser, key.toId(), marketId, outcome, convictionStakeDeclared);
-            return (BaseHook.afterSwap.selector, 0);
-        } catch (bytes memory lowLevelData) {
-            bytes4 errorSelector = bytes4(0);
-            string memory errorMessage = "PredictionManager reverted with an unspecified error.";
-
-            // Extract error selector if available
-            if (lowLevelData.length >= 4) {
-                errorSelector = bytes4(lowLevelData);
-
-                // Handle standard Error(string)
-                if (errorSelector == bytes4(keccak256("Error(string)"))) {
-                    if (lowLevelData.length > 4) {
-                        errorMessage = _extractErrorMessage(lowLevelData);
-                    }
-                } else if (errorSelector == bytes4(keccak256("Panic(uint256)"))) {
-                    uint256 errorCode;
-                    if (lowLevelData.length >= 36) {
-                        assembly {
-                            errorCode := mload(add(add(lowLevelData, 0x20), 4))
-                        }
-                    }
-                    errorMessage =
-                        string(abi.encodePacked("PredictionManager Panic: Code ", _uint256ToString(errorCode)));
-                } else {
-                    errorMessage = _getCustomErrorMessage(errorSelector);
-                }
+            emit PredictionRecorded(
+                actualUser,
+                key.toId(),
+                marketId,
+                PredictionTypes.Outcome(outcome),
+                convictionStake
+            );
+        } catch Error(string memory reason) {
+            string memory errorMessage = string(abi.encode("PredictionManager Error: ", reason));
+            emit PredictionFailed(
+                actualUser,
+                key.toId(),
+                marketId,
+                PredictionTypes.Outcome(outcome),
+                convictionStake,
+                bytes4(0)
+            );
+            revert PredictionRecordingFailed(errorMessage);
+        } catch (bytes memory errorData) {
+            bytes4 errorSelector;
+            string memory errorMessage = "Unknown error";
+            
+            if (errorData.length >= 4) {
+                errorSelector = bytes4(errorData);
+                errorMessage = _getCustomErrorMessage(errorSelector);
             }
-
-            emit PredictionFailed(actualUser, key.toId(), marketId, outcome, convictionStakeDeclared, errorSelector);
+            
+            emit PredictionFailed(
+                actualUser,
+                key.toId(),
+                marketId,
+                PredictionTypes.Outcome(outcome),
+                convictionStake,
+                errorSelector
+            );
             revert PredictionRecordingFailed(errorMessage);
         }
-    }
 
-    /**
-     * @dev Internal helper function to extract an error message from a standard Error(string) revert.
-     * @param data The raw bytes data from the caught exception.
-     * @return The extracted error message with a prefix.
-     */
-    function _extractErrorMessage(bytes memory data) internal pure returns (string memory) {
-        // Skip the first 4 bytes (error selector) and decode the rest as a string
-        if (data.length <= 4) return "PredictionManager Error: <no message>";
-
-        // Create a new bytes array for the encoded string (without the selector)
-        bytes memory encodedString = new bytes(data.length - 4);
-
-        // Copy the encoded string part (skipping the selector)
-        // This is still necessary but we're doing it in a single function rather than inline
-        for (uint256 i = 0; i < encodedString.length; i++) {
-            encodedString[i] = data[i + 4];
-        }
-
-        // Decode the string and return it with a prefix
-        string memory reason = abi.decode(encodedString, (string));
-        return string(abi.encodePacked("PredictionManager Error: ", reason));
-    }
-
-    /**
-     * @dev Internal helper function to convert a uint256 to a string.
-     * @param value The uint256 value to convert.
-     * @return The string representation of the value.
-     */
-    function _uint256ToString(uint256 value) internal pure returns (string memory) {
-        // Handle the special case of 0
-        if (value == 0) return "0";
-
-        // Calculate the length of the resulting string
-        uint256 temp = value;
-        uint256 digits;
-        while (temp != 0) {
-            digits++;
-            temp /= 10;
-        }
-
-        // Create the string
-        bytes memory buffer = new bytes(digits);
-        while (value != 0) {
-            digits -= 1;
-            buffer[digits] = bytes1(uint8(48 + uint256(value % 10)));
-            value /= 10;
-        }
-
-        return string(buffer);
+        return (BaseHook.afterSwap.selector, 0);
     }
 
     /**
