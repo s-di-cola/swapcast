@@ -1,4 +1,5 @@
-import { formatEther, type Address, createPublicClient, http } from 'viem';
+import { formatEther, type Address, createPublicClient, http, encodePacked, keccak256 } from 'viem';
+import { getStateView } from '../../src/generated/types/StateView';
 import { getPredictionManager } from '../../src/generated/types/PredictionManager';
 import chalk from 'chalk';
 import {CONTRACT_ADDRESSES} from './wallets.ts';
@@ -131,15 +132,33 @@ function analyzePriceSanity(
 }
 
 /**
- * Check pool prices - TRUST market creation values (no StateView/PoolReader)
+ * Check pool prices - Use StateView contract to get actual pool state
  */
 async function checkPoolPrices(markets: MarketCreationResult[], results: DiagnosticResults): Promise<void> {
     console.log(chalk.yellow('\n📊 ANALYZING POOL PRICES'));
     console.log(chalk.yellow('-'.repeat(40)));
     
-    console.log(chalk.blue('🔍 Using market creation data (most reliable)'));
-    console.log(chalk.gray('Note: Pool state readers dont work reliably on Anvil fork'));
+    // Early return if no markets exist
+    if (markets.length === 0) {
+        console.log(chalk.red('❌ No markets available to analyze pools'));
+        results.errors.push('No markets created - cannot analyze pools');
+        return;
+    }
+    
+    console.log(chalk.blue('🔍 Using StateView contract to check actual pool state'));
     console.log('');
+    
+    const publicClient = createPublicClient({
+        chain: anvil,
+        transport: http()
+    });
+    
+    // Get StateView contract instance
+    const stateView = getStateView({
+        address: CONTRACT_ADDRESSES.STATE_VIEW as Address,
+        chain: anvil,
+        transport: http()
+    });
 
     for (let i = 0; i < markets.length; i++) {
         const market = markets[i];
@@ -148,49 +167,104 @@ async function checkPoolPrices(markets: MarketCreationResult[], results: Diagnos
         console.log(chalk.gray(`   Price Confidence: ${(market as any).priceConfidence || 'Unknown'}`));
         console.log(chalk.gray(`   Category: ${(market as any).category || 'Unknown'}`));
 
-        // Use market creation values directly (these are correct!)
-        const sqrtPriceX96 = market.sqrtPriceX96;
-        const tick = 0; // We don't have tick from market creation
-        const dataSource = 'Market Creation (Trusted)';
-        
-        // Convert to human readable prices using the CORRECT market creation values
-        const { token0Price, token1Price } = sqrtPriceX96ToPrice(sqrtPriceX96);
-        
-        // Analyze price sanity
-        const { status, expectedRange } = analyzePriceSanity(
-            token0Price, 
-            token1Price, 
-            market.poolKey.currency0, 
-            market.poolKey.currency1
-        );
-        
-        const statusColor = status === 'REASONABLE' ? chalk.green : 
-                           status === 'SUSPICIOUS' ? chalk.yellow : chalk.red;
-        
-        console.log(chalk.blue(`📊 Analysis:`));
-        console.log(chalk.gray(`   Data Source: ${dataSource}`));
-        console.log(chalk.gray(`   sqrtPriceX96: ${sqrtPriceX96}`));
-        console.log(chalk.gray(`   token0Price: ${token0Price.toExponential(4)}`));
-        console.log(chalk.gray(`   token1Price: ${token1Price.toExponential(4)}`));
-        console.log(statusColor(`   Status: ${status} (${expectedRange})`));
-        console.log('');
-        
-        results.poolDetails.push({
-            marketId: i + 1,
-            poolKey: {
-                currency0: market.poolKey.currency0,
-                currency1: market.poolKey.currency1,
-                fee: market.poolKey.fee,
-                tickSpacing: market.poolKey.tickSpacing,
-                hooks: market.poolKey.hooks
-            },
-            sqrtPriceX96: sqrtPriceX96.toString(),
-            tick,
-            token0Price,
-            token1Price,
-            priceStatus: status,
-            dataSource
-        });
+        try {
+            // Generate poolId from poolKey
+            const poolId = keccak256(
+                encodePacked(
+                    ['address', 'address', 'uint24', 'int24', 'address'],
+                    [
+                        market.poolKey.currency0 as Address,
+                        market.poolKey.currency1 as Address,
+                        market.poolKey.fee,
+                        market.poolKey.tickSpacing,
+                        market.poolKey.hooks as Address
+                    ]
+                )
+            );
+            
+            // Get pool state from StateView contract
+            const poolState = await stateView.read.getSlot0([poolId]);
+            const liquidity = await stateView.read.getLiquidity([poolId]);
+            
+            // Extract values from pool state
+            const sqrtPriceX96 = poolState[0];
+            const tick = poolState[1];
+            const dataSource = 'StateView Contract (Live)';
+            
+            console.log(chalk.gray(`   Liquidity: ${liquidity}`));
+            console.log(chalk.gray(`   Tick: ${tick}`));
+            console.log(chalk.gray(`   SqrtPriceX96: ${sqrtPriceX96}`));
+            
+            // Convert to human readable prices
+            const { token0Price, token1Price } = sqrtPriceX96ToPrice(sqrtPriceX96);
+            
+            // Analyze price sanity
+            const { status, expectedRange } = analyzePriceSanity(
+                token0Price, 
+                token1Price, 
+                market.poolKey.currency0, 
+                market.poolKey.currency1
+            );
+            
+            const statusColor = status === 'REASONABLE' ? chalk.green : 
+                               status === 'SUSPICIOUS' ? chalk.yellow : chalk.red;
+            
+            console.log(chalk.blue(`📊 Analysis:`));
+            console.log(chalk.gray(`   Data Source: ${dataSource}`));
+            console.log(chalk.gray(`   sqrtPriceX96: ${sqrtPriceX96}`));
+            console.log(chalk.gray(`   token0Price: ${token0Price.toExponential(4)}`));
+            console.log(chalk.gray(`   token1Price: ${token1Price.toExponential(4)}`));
+            console.log(statusColor(`   Status: ${status} (${expectedRange})`));
+            console.log('');
+            
+            results.poolDetails.push({
+                marketId: i + 1,
+                poolKey: {
+                    currency0: market.poolKey.currency0,
+                    currency1: market.poolKey.currency1,
+                    fee: market.poolKey.fee,
+                    tickSpacing: market.poolKey.tickSpacing,
+                    hooks: market.poolKey.hooks
+                },
+                sqrtPriceX96: sqrtPriceX96.toString(),
+                tick,
+                token0Price,
+                token1Price,
+                priceStatus: status,
+                dataSource
+            });
+        } catch (error: any) {
+            console.log(chalk.red(`❌ Error checking pool: ${error.message}`));
+            results.errors.push(`Pool check failed for market ${i + 1}: ${error.message}`);
+            
+            // Fallback to market creation values if StateView fails
+            console.log(chalk.yellow(`⚠️ Falling back to market creation values`));
+            
+            const sqrtPriceX96 = market.sqrtPriceX96;
+            const tick = 0; 
+            const dataSource = 'Market Creation (Fallback)';
+            
+            // Convert to human readable prices using market creation values
+            const { token0Price, token1Price } = sqrtPriceX96ToPrice(sqrtPriceX96);
+            
+            // Add to results with fallback data
+            results.poolDetails.push({
+                marketId: i + 1,
+                poolKey: {
+                    currency0: market.poolKey.currency0,
+                    currency1: market.poolKey.currency1,
+                    fee: market.poolKey.fee,
+                    tickSpacing: market.poolKey.tickSpacing,
+                    hooks: market.poolKey.hooks
+                },
+                sqrtPriceX96: sqrtPriceX96.toString(),
+                tick,
+                token0Price,
+                token1Price,
+                priceStatus: 'SUSPICIOUS',
+                dataSource
+            });
+        }
     }
 }
 
@@ -228,6 +302,13 @@ async function analyzeMarkets(predictionManager: any, markets: MarketCreationRes
     console.log(chalk.yellow('-'.repeat(40)));
 
     results.totalMarkets = markets.length;
+    
+    // Early return with error if no markets exist
+    if (markets.length === 0) {
+        console.log(chalk.red('❌ No markets found - market creation is failing'));
+        results.errors.push('No markets created - market creation process is failing');
+        return;
+    }
 
     for (const market of markets) {
         try {
@@ -317,6 +398,13 @@ async function validateSystemConsistency(results: DiagnosticResults): Promise<vo
     console.log(chalk.yellow('\n🔍 VALIDATING SYSTEM CONSISTENCY'));
     console.log(chalk.yellow('-'.repeat(40)));
 
+    // Check if no markets were created - this is a critical issue
+    if (results.totalMarkets === 0) {
+        console.log(chalk.red(`❌ CRITICAL ISSUE: No markets have been created!`));
+        results.errors.push('No markets have been created - market creation is failing');
+        return;
+    }
+
     const brokenPools = results.poolDetails.filter(p => p.priceStatus === 'BROKEN');
     const suspiciousPools = results.poolDetails.filter(p => p.priceStatus === 'SUSPICIOUS');
     
@@ -327,8 +415,11 @@ async function validateSystemConsistency(results: DiagnosticResults): Promise<vo
         });
     } else if (suspiciousPools.length > 0) {
         console.log(chalk.yellow(`⚠️ ${suspiciousPools.length} pools have suspicious prices`));
-    } else {
+    } else if (results.poolDetails.length > 0) {
         console.log(chalk.green(`✅ All pool price calculations look reasonable`));
+    } else {
+        console.log(chalk.red(`❌ No pools found for the markets`));
+        results.errors.push('Markets exist but no pools were found');
     }
 }
 
@@ -354,10 +445,13 @@ function printDiagnosticReport(results: DiagnosticResults): void {
     console.log(chalk.white(`   Broken Pools: ${brokenPools}`));
 
     if (results.errors.length > 0) {
-        console.log(chalk.red(`\n⚠️  ISSUES DETECTED:`));
+        console.log(chalk.red(`\n⚠️  CRITICAL ISSUES DETECTED:`));
         results.errors.forEach(error => {
             console.log(chalk.red(`   • ${error}`));
         });
+        console.log(chalk.red(`\n❌ SYSTEM HEALTH CHECK FAILED - FIXES REQUIRED!`));
+    } else if (results.totalMarkets === 0) {
+        console.log(chalk.red(`\n❌ NO MARKETS CREATED - SYSTEM IS NOT OPERATIONAL!`));
     } else {
         console.log(chalk.green(`\n✅ NO ISSUES DETECTED - SYSTEM IS HEALTHY!`));
     }

@@ -11,7 +11,8 @@ import { getCurrentNetworkConfig } from '$lib/utils/network';
 import { PUBLIC_PREDICTIONMANAGER_ADDRESS } from '$env/static/public';
 import { getMarketCount, getMarketDetails } from './contracts';
 import { getPredictionManager } from '$generated/types/PredictionManager';
-import { sortMarkets, applyDefaultSort, DEFAULT_ETH_USD_PRICE_FEED } from './utils';
+import { sortMarkets, applyDefaultSort } from './utils';
+import { CONTRACT_ADDRESSES } from '$fixtures/utils/wallets';
 import type {
 	MarketPaginationOptions,
 	PaginatedMarkets,
@@ -169,7 +170,7 @@ export async function createMarket(
 	try {
 		const expirationTimestamp = BigInt(expirationTime);
 		const priceThreshold = parseEther(String(priceThresholdStr));
-		const priceAggregator = DEFAULT_ETH_USD_PRICE_FEED; // TODO: Make dynamic
+		const priceAggregator = CONTRACT_ADDRESSES.ORACLE_RESOLVER as Address; // Using Oracle Resolver from environment
 
 		const { rpcUrl, chain } = getCurrentNetworkConfig();
 		const predictionManager = getPredictionManager({
