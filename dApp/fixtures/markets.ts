@@ -106,8 +106,8 @@ const createPredictionMarket = withErrorHandling(
                 token0Info.symbol,
                 // Expiration time
                 expirationTime,
-                // Price aggregator - using zero address as placeholder
-                '0x0000000000000000000000000000000000000000' as Address,
+                // Price aggregator - using Oracle Resolver address
+                CONTRACT_ADDRESSES.ORACLE_RESOLVER as Address,
                 // Price threshold
                 priceThreshold,
                 // Pool key
