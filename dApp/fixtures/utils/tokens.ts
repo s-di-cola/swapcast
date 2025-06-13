@@ -13,6 +13,8 @@ import { getPublicClient, impersonateAccount, stopImpersonatingAccount, getWalle
 import { withErrorHandling, logSuccess, logInfo, logWarning } from './error';
 import { WHALE_ADDRESSES, TOKEN_ADDRESSES } from './wallets';
 import {anvil} from "viem/chains";
+import { Token } from '@uniswap/sdk-core';
+import { getTokenSymbolFromAddress } from './math';
 
 // Native ETH is represented as the zero address in Uniswap V4
 export const NATIVE_ETH_ADDRESS = '0x0000000000000000000000000000000000000000' as Address;
@@ -337,3 +339,9 @@ export const transferTokensFromWhale = withErrorHandling(
     },
     'TransferTokensFromWhale'
 );
+
+export async function getTokenFromAddress(address: Address): Promise<Token> {
+    const decimals = await getTokenDecimals(address);
+    const symbol = await getTokenSymbolFromAddress(address);
+    return new Token(anvil.id, address, decimals, symbol);
+}
