@@ -248,7 +248,7 @@ deploy_contracts() {
   ORACLE_RESOLVER=$(grep -A 15 "SwapCast Deployment Summary" "$LOG_DIR"/deploy.log | grep "OracleResolver:" | awk '{print $2}')
   REWARD_DISTRIBUTOR=$(grep -A 15 "SwapCast Deployment Summary" "$LOG_DIR"/deploy.log | grep "RewardDistributor:" | awk '{print $2}')
   SWAP_CAST_HOOK=$(grep -A 15 "SwapCast Deployment Summary" "$LOG_DIR"/deploy.log | grep "SwapCastHook:" | awk '{print $2}')
- 
+
   # Check if we found the PredictionManager address
   if [ -z "$PREDICTION_MANAGER" ]; then
     log_error "Could not find PredictionManager address in the logs"
@@ -273,6 +273,9 @@ deploy_contracts() {
 
   # Add Uniswap StateView address (mainnet)
   echo "PUBLIC_STATEVIEW_ADDRESS=0x7ffe42c4a5deea5b0fec41c94c136cf115597227" >> "$DAPP_ENV_FILE"
+
+  # Add Uniswap Permit2 address (mainnet)
+  echo "PUBLIC_PERMIT2_ADDRESS=0x000000000022D473030F116dDEE9F6B43aC78BA3" >> "$DAPP_ENV_FILE"
 
   # Add the admin private key and address (using first Anvil account)
   echo "PUBLIC_ADMIN_PRIVATE_KEY=$PRIVATE_KEY" >> "$DAPP_ENV_FILE"
