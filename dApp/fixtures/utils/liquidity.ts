@@ -131,7 +131,7 @@ const createPoolKey = withErrorHandling(
  */
 const calculateLiquiditySimple = async (
     amount0Desired: bigint,
-    amount1Desired: bigint,
+    amount1Desired: bigint, 
     tickSpacing: number,
     currentTick: number
 ): Promise<{
@@ -139,23 +139,24 @@ const calculateLiquiditySimple = async (
   tickLower: number;
   tickUpper: number;
   amount0: bigint;
-  amount1: bigint;
+  amount1: bigint
 }> => {
-  // Calculate reasonable tick range around current price
-  const tickRange = Math.max(600, tickSpacing * 10);
-
+  // Use a much narrower tick range
+  const tickRange = tickSpacing * 5;
+  
   // Ensure ticks are properly aligned to tick spacing
   const tickLower = Math.floor((currentTick - tickRange) / tickSpacing) * tickSpacing;
   const tickUpper = Math.ceil((currentTick + tickRange) / tickSpacing) * tickSpacing;
-
-  // Use simple liquidity calculation - V4 Position Manager will handle the optimization
-  const liquidity = amount0Desired > amount1Desired ? amount1Desired : amount0Desired;
-
+  
+  // Scale down the liquidity to be very conservative
+  const smallerAmount = amount0Desired < amount1Desired ? amount0Desired : amount1Desired;
+  const liquidity = smallerAmount / 2n; // Use only half of the smaller amount
+  
   logSuccess('LiquidityCalculation', `Calculated liquidity: ${liquidity.toString()}`);
   logInfo('LiquidityCalculation', `Tick range: ${tickLower} to ${tickUpper} (spacing: ${tickSpacing})`);
   logInfo('LiquidityCalculation', `Amount0: ${amount0Desired.toString()}`);
   logInfo('LiquidityCalculation', `Amount1: ${amount1Desired.toString()}`);
-
+  
   return {
     liquidity,
     tickLower,
