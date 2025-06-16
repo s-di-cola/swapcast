@@ -4,7 +4,7 @@
  * UPDATED: Using Uniswap V4 SDK for proper liquidity calculations
  */
 
-import { Price } from '@uniswap/sdk-core';
+import { Percent } from '@uniswap/sdk-core';
 import { Pool, Position } from '@uniswap/v4-sdk';
 import {
   Address,
