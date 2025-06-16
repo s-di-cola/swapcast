@@ -38,9 +38,21 @@
 </script>
 
 <div class="max-w-6xl mx-auto p-6 pt-24">
-	<div class="mb-6">
-		<h1 class="text-2xl font-bold text-gray-900">Market Details</h1>
-		<p class="text-gray-600">Market ID: {marketId}</p>
+	<div class="mb-8">
+		<div class="flex items-center justify-between">
+			<div>
+				<h1 class="text-3xl font-bold text-gray-900">Market Details</h1>
+				<p class="text-gray-600 mt-1">Market ID: {marketId}</p>
+			</div>
+			<div class="flex gap-3">
+				<button class="px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition-colors">
+					Place Bet
+				</button>
+				<button class="px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors">
+					Share Market
+				</button>
+			</div>
+		</div>
 	</div>
 
 	{#if isLoading}
@@ -54,26 +66,80 @@
 			<p>{error}</p>
 		</div>
 	{:else if market}
-		<div class="space-y-6">
-			<!-- Market Status Section -->
-			<MarketStatus {market} />
+		<div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+			<!-- Left Column: Market Status and Opposition Summary -->
+			<div class="lg:col-span-2 space-y-6">
+				<div class="bg-white rounded-xl border border-gray-200 shadow-sm">
+					<MarketStatus {market} />
+				</div>
 
-			<!-- Opposition Summary Section -->
-			<OppositionSummary {market} />
+				<div class="bg-white rounded-xl border border-gray-200 shadow-sm">
+					<OppositionSummary {market} />
+				</div>
 
-			<!-- Transaction History Section -->
-			<TransactionHistory {market} />
-
-			<!-- Your Positions Section -->
-			<div class="bg-white rounded-lg border border-gray-200 p-4">
-				<h2 class="text-lg font-semibold mb-2">Your Positions</h2>
-				<p class="text-gray-500">Your bets in this market will appear here...</p>
+				<div class="bg-white rounded-xl border border-gray-200 shadow-sm">
+					<TransactionHistory {market} />
+				</div>
 			</div>
 
-			<!-- Claim Rewards Section -->
-			<div class="bg-white rounded-lg border border-gray-200 p-4">
-				<h2 class="text-lg font-semibold mb-2">Claim Rewards</h2>
-				<p class="text-gray-500">Claimable rewards will appear here...</p>
+			<!-- Right Column: User Actions and Info -->
+			<div class="space-y-6">
+				<!-- Your Positions Section -->
+				<div class="bg-white rounded-xl border border-gray-200 shadow-sm p-6">
+					<h2 class="text-xl font-semibold mb-4">Your Positions</h2>
+					<div class="space-y-4">
+						<div class="p-4 bg-gray-50 rounded-lg">
+							<div class="flex justify-between items-center mb-2">
+								<span class="font-medium">Bullish Position</span>
+								<span class="text-green-600">+2.5 ETH</span>
+							</div>
+							<div class="text-sm text-gray-500">
+								Potential Payout: 5.0 ETH
+							</div>
+						</div>
+						<button class="w-full px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition-colors">
+							Increase Position
+						</button>
+					</div>
+				</div>
+
+				<!-- Claim Rewards Section -->
+				<div class="bg-white rounded-xl border border-gray-200 shadow-sm p-6">
+					<h2 class="text-xl font-semibold mb-4">Claim Rewards</h2>
+					<div class="space-y-4">
+						<div class="p-4 bg-gray-50 rounded-lg">
+							<div class="flex justify-between items-center mb-2">
+								<span class="font-medium">Available Rewards</span>
+								<span class="text-green-600">3.2 ETH</span>
+							</div>
+							<div class="text-sm text-gray-500">
+								Market ends in 2 days
+							</div>
+						</div>
+						<button class="w-full px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors">
+							Claim Rewards
+						</button>
+					</div>
+				</div>
+
+				<!-- Market Info Card -->
+				<div class="bg-white rounded-xl border border-gray-200 shadow-sm p-6">
+					<h2 class="text-xl font-semibold mb-4">Market Info</h2>
+					<div class="space-y-3">
+						<div class="flex justify-between">
+							<span class="text-gray-600">Created</span>
+							<span class="font-medium">2 days ago</span>
+						</div>
+						<div class="flex justify-between">
+							<span class="text-gray-600">Total Volume</span>
+							<span class="font-medium">125.4 ETH</span>
+						</div>
+						<div class="flex justify-between">
+							<span class="text-gray-600">Total Bets</span>
+							<span class="font-medium">48</span>
+						</div>
+					</div>
+				</div>
 			</div>
 		</div>
 	{/if}
