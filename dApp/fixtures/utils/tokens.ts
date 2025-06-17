@@ -13,6 +13,10 @@ import { anvil } from "viem/chains";
 import { getPublicClient } from './client';
 import { logInfo, logSuccess, logWarning, withErrorHandling } from './error';
 import { getTokenSymbolFromAddress } from './math';
+import { exec } from 'child_process';
+import { promisify } from 'util';
+
+const execAsync = promisify(exec);
 
 // Native ETH is represented as the zero address in Uniswap V4
 export const NATIVE_ETH_ADDRESS = '0x0000000000000000000000000000000000000000' as Address;
@@ -21,50 +25,41 @@ export const NATIVE_ETH_ADDRESS = '0x0000000000000000000000000000000000000000' a
  * Token information interface
  */
 export interface TokenInfo {
-    address: Address;
-    symbol: string;
-    name: string;
-    decimals: number;
+  address: Address;
+  symbol: string;
+  name: string;
+  decimals: number;
 }
 
 /**
  * Check if an address represents native ETH
  */
 export function isNativeEth(address: Address): boolean {
-    return address.toLowerCase() === NATIVE_ETH_ADDRESS.toLowerCase();
+  return address.toLowerCase() === NATIVE_ETH_ADDRESS.toLowerCase();
 }
 
 /**
  * Get token balance for an account
  */
 export const getTokenBalance = withErrorHandling(
-    async (tokenAddress: Address, account: Address): Promise<bigint> => {
-        if (tokenAddress === NATIVE_ETH_ADDRESS) {
-            const publicClient = getPublicClient();
-            return await publicClient.getBalance({ address: account });
-        } else {
-            const publicClient = getPublicClient();
-            return await publicClient.readContract({
-                address: tokenAddress,
-                abi: erc20Abi,
-                functionName: 'balanceOf',
-                args: [account]
-            });
-        }
-    },
-    'GetTokenBalance'
+  async (tokenAddress: Address, account: Address): Promise<bigint> => {
+    if (tokenAddress === NATIVE_ETH_ADDRESS) {
+      const publicClient = getPublicClient();
+      return await publicClient.getBalance({ address: account });
+    } else {
+      const publicClient = getPublicClient();
+      return await publicClient.readContract({
+        address: tokenAddress,
+        abi: erc20Abi,
+        functionName: 'balanceOf',
+        args: [account]
+      });
+    }
+  },
+  'GetTokenBalance'
 );
 
 
-/**
- * Deals liquidity to an address
- * 
- * @param to - Address to deal liquidity to
- * @param token0Address - Address of token0
- * @param token1Address - Address of token1
- * @param amount0 - Amount of token0 to deal
- * @param amount1 - Amount of token1 to deal
- */
 export async function dealLiquidity(
   to: Address,
   token0Address: Address,
@@ -72,71 +67,86 @@ export async function dealLiquidity(
   amount0: bigint,
   amount1: bigint
 ): Promise<void> {
-  const publicClient = getPublicClient();
 
-  // Helper to calculate storage slot for mapping
-  const getMappingSlot = (mappingSlot: number, key: Address): string => {
-    // For mappings, the storage slot is keccak256(abi.encodePacked(key, slot))
-    const keyPadded = key.slice(2).padStart(64, '0');
-    const slotPadded = mappingSlot.toString(16).padStart(64, '0');
-    const concatenated = keyPadded + slotPadded;
-    
-    // You'll need to use keccak256 - import from viem
-    const { keccak256 } = require('viem');
-    return keccak256(`0x${concatenated}`);
-  };
-
-  // Helper to set token balance
-  const setTokenBalance = async (token: Address, amount: bigint) => {
-    if (token === NATIVE_ETH_ADDRESS || token === '0x0000000000000000000000000000000000000000') {
-      // Set ETH balance
-      await publicClient.request({
-        method: 'anvil_setBalance' as any,
-        params: [to, `0x${amount.toString(16)}`],
-      });
+  const dealTokenWithCast = async (tokenAddress: Address, amount: bigint, tokenName: string) => {
+    // Handle ETH
+    if (tokenAddress === NATIVE_ETH_ADDRESS || tokenAddress === '0x0000000000000000000000000000000000000000') {
+      const cmd = `cast rpc anvil_setBalance ${to} 0x${amount.toString(16)}`;
+      await execAsync(cmd);
       logInfo('DealLiquidity', `Set ETH balance: ${amount.toString()}`);
       return;
     }
 
-    // For ERC20 tokens, try common balance mapping slots
-    const commonSlots = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9]; // Extended list
-    let success = false;
+    // Known balance slots for major tokens
+    const KNOWN_SLOTS: Record<string, number> = {
+      '0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48': 9,  // USDC (confirmed working)
+      '0xdac17f958d2ee523a2206206994597c13d831ec7': 2,  // USDT  
+      '0x6b175474e89094c44da98b954eedeac495271d0f': 2,  // DAI
+      '0x2260fac5e5542a773aa44fbcfedf7c193bc2c599': 0,  // WBTC (confirmed working)
+      '0x514910771af9ca656af840dff83e8264ecf986ca': 1,  // LINK
+      '0x1f9840a85d5af5bf1d1762f925bdaddc4201f984': 4,  // UNI
+      '0x7fc66500c84a76ad7e9c93437bfc5ac33e2ddae9': 0,  // AAVE
+    };
 
-    for (const slot of commonSlots) {
+    const tokenLower = tokenAddress.toLowerCase();
+    const knownSlot = KNOWN_SLOTS[tokenLower];
+
+    logInfo('DealLiquidity', `Dealing ${tokenName}: ${tokenAddress}`);
+    logInfo('DealLiquidity', `Amount: ${amount.toString()}`);
+    logInfo('DealLiquidity', `Known slot: ${knownSlot ?? 'unknown'}`);
+
+    // If we know the slot, try it first, then fallback to brute force
+    const slotsToTry = knownSlot !== undefined
+      ? [knownSlot, ...Array.from({ length: 15 }, (_, i) => i).filter(i => i !== knownSlot)]
+      : Array.from({ length: 15 }, (_, i) => i);
+
+    for (const slot of slotsToTry) {
       try {
-        const storageSlot = getMappingSlot(slot, to);
+        logInfo('DealLiquidity', `Trying slot ${slot}...`);
+
+        // Calculate storage slot
+        const slotCmd = `cast keccak $(cast concat-hex $(cast abi-encode "f(address,uint256)" ${to} ${slot}))`;
+        const { stdout: storageSlot } = await execAsync(slotCmd);
+        const cleanSlot = storageSlot.trim();
+
+        // Set storage
         const amountHex = `0x${amount.toString(16).padStart(64, '0')}`;
-        
-        await publicClient.request({
-          method: 'anvil_setStorageAt' as any,
-          params: [token, storageSlot as `0x${string}`, amountHex as `0x${string}`],
-        });
+        const setCmd = `cast rpc anvil_setStorageAt ${tokenAddress} ${cleanSlot} ${amountHex}`;
+        await execAsync(setCmd);
 
-        // Verify the balance was set correctly by reading it back
-        const balanceData = await publicClient.request({
-          method: 'eth_call',
-          params: [{
-            to: token,
-            data: `0x70a08231${to.slice(2).padStart(64, '0')}` // balanceOf(address)
-          }, 'latest']
-        });
+        // Verify - parse the balance correctly
+        const verifyCmd = `cast call ${tokenAddress} "balanceOf(address)(uint256)" ${to}`;
+        const { stdout: balanceResult } = await execAsync(verifyCmd);
 
-        const actualBalance = BigInt(balanceData);
-        
-        if (actualBalance === amount) {
-          logInfo('DealLiquidity', `Successfully set balance at slot ${slot} for token ${token}: ${amount.toString()}`);
-          success = true;
-          break;
+        // Parse the balance - handle both "1000000" and "1000000000000000 [1e15]" formats
+        const balanceStr = balanceResult.trim();
+        let balance: bigint;
+
+        if (balanceStr.includes('[')) {
+          // Format like "1000000000000000 [1e15]" - take the first number
+          const firstNumber = balanceStr.split(' ')[0];
+          balance = BigInt(firstNumber);
+        } else if (balanceStr.startsWith('0x')) {
+          // Hex format
+          balance = BigInt(balanceStr);
+        } else {
+          // Plain decimal
+          balance = BigInt(balanceStr);
+        }
+
+        logInfo('DealLiquidity', `Slot ${slot} result - Expected: ${amount}, Got: ${balance}`);
+
+        if (balance === amount) {
+          logSuccess('DealLiquidity', `✅ Set ${tokenName} balance at slot ${slot}: ${amount.toString()}`);
+          return;
         }
       } catch (e) {
-        // Continue to next slot
+        logWarning('DealLiquidity', `Slot ${slot} failed: ${String(e).slice(0, 100)}...`);
         continue;
       }
     }
 
-    if (!success) {
-      throw new Error(`Could not set balance for token ${token} after trying slots 0-9`);
-    }
+    throw new Error(`Could not set balance for ${tokenName} (${tokenAddress}) after trying slots 0-14`);
   };
 
   try {
@@ -144,9 +154,9 @@ export async function dealLiquidity(
     logInfo('DealLiquidity', `Token0: ${token0Address}, Amount: ${amount0.toString()}`);
     logInfo('DealLiquidity', `Token1: ${token1Address}, Amount: ${amount1.toString()}`);
 
-    await setTokenBalance(token0Address, amount0);
-    await setTokenBalance(token1Address, amount1);
-    
+    await dealTokenWithCast(token0Address, amount0, 'token0');
+    await dealTokenWithCast(token1Address, amount1, 'token1');
+
     logSuccess('DealLiquidity', `Successfully dealt tokens to ${to}`);
   } catch (error) {
     const errorMessage = error instanceof Error ? error.message : String(error);
@@ -156,51 +166,50 @@ export async function dealLiquidity(
 }
 
 
-
 /**
  * Get token decimals
  */
 export const getTokenDecimals = withErrorHandling(
-    async (tokenAddress: Address): Promise<number> => {
-        if (tokenAddress === NATIVE_ETH_ADDRESS) {
-            return 18; // ETH has 18 decimals
-        } else {
-            const publicClient = getPublicClient();
-            return publicClient.readContract({
-                address: tokenAddress,
-                abi: erc20Abi,
-                functionName: 'decimals'
-            });
-        }
-    },
-    'GetTokenDecimals'
+  async (tokenAddress: Address): Promise<number> => {
+    if (tokenAddress === NATIVE_ETH_ADDRESS) {
+      return 18; // ETH has 18 decimals
+    } else {
+      const publicClient = getPublicClient();
+      return publicClient.readContract({
+        address: tokenAddress,
+        abi: erc20Abi,
+        functionName: 'decimals'
+      });
+    }
+  },
+  'GetTokenDecimals'
 );
 
 /**
  * Format token amount with proper decimals
  */
 export const formatTokenAmount = withErrorHandling(
-    async (tokenAddress: Address, amount: bigint): Promise<string> => {
-        const decimals = await getTokenDecimals(tokenAddress);
-        return formatUnits(amount, decimals);
-    },
-    'FormatTokenAmount'
+  async (tokenAddress: Address, amount: bigint): Promise<string> => {
+    const decimals = await getTokenDecimals(tokenAddress);
+    return formatUnits(amount, decimals);
+  },
+  'FormatTokenAmount'
 );
 
 /**
  * Parse token amount with proper decimals
  */
 export const parseTokenAmount = withErrorHandling(
-    async (tokenAddress: Address, amount: string): Promise<bigint> => {
-        const decimals = await getTokenDecimals(tokenAddress);
-        return parseUnits(amount, decimals);
-    },
-    'ParseTokenAmount'
+  async (tokenAddress: Address, amount: string): Promise<bigint> => {
+    const decimals = await getTokenDecimals(tokenAddress);
+    return parseUnits(amount, decimals);
+  },
+  'ParseTokenAmount'
 );
 
 
 export async function getTokenFromAddress(address: Address): Promise<Token> {
-    const decimals = await getTokenDecimals(address);
-    const symbol = await getTokenSymbolFromAddress(address);
-    return new Token(anvil.id, address, decimals, symbol);
+  const decimals = await getTokenDecimals(address);
+  const symbol = await getTokenSymbolFromAddress(address);
+  return new Token(anvil.id, address, decimals, symbol);
 }

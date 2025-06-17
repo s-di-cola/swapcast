@@ -6,7 +6,7 @@
  */
 
 import { TickMath } from "@uniswap/v3-sdk";
-import { Pool, Position, V4PositionPlanner } from "@uniswap/v4-sdk";
+import { Pool, PoolKey, Position, V4PositionPlanner } from "@uniswap/v4-sdk";
 import { Address, decodeAbiParameters, erc20Abi, Hash, http, parseUnits } from 'viem';
 import { anvil } from 'viem/chains';
 import { getPoolManager } from '../../src/generated/types/PoolManager';
@@ -90,8 +90,14 @@ function getPositionParams(pool: Pool): {
   amount0: string;
   amount1: string;
 } {
-  const tickLower = pool.tickCurrent - pool.tickSpacing * 10; // 10 ticks below current
-  const tickUpper = pool.tickCurrent + pool.tickSpacing * 10; // 10 ticks above current
+
+  // Get current tick and round it to the nearest tick spacing
+  const currentTick = pool.tickCurrent;
+  const tickSpacing = pool.tickSpacing;
+
+  const tickLower = Math.floor(currentTick / tickSpacing) * tickSpacing - (tickSpacing * 10);
+  const tickUpper = Math.ceil(currentTick / tickSpacing) * tickSpacing + (tickSpacing * 10);
+
 
   const amount0Desired = parseUnits("1000", pool.token0.decimals); // e.g., 100 of token0
   const amount1Desired = parseUnits("1000", pool.token1.decimals); // e.g., 100 of token1
@@ -140,7 +146,7 @@ async function approveToken(account: Address, tokenAddress: Address, amount: big
  * @param pool - The pool to add liquidity to
  * @returns Transaction hash of the liquidity addition
  */
-const addLiquidity = async (pool: Pool): Promise<Hash> => {
+const addLiquidity = async (pool: Pool): Promise<void> => {
   try {
     const positionParams = getPositionParams(pool);
     const token0Address = pool.token0.isToken
@@ -155,11 +161,11 @@ const addLiquidity = async (pool: Pool): Promise<Hash> => {
     const liquidityProvider = ANVIL_ACCOUNTS[1].address;
     await dealLiquidity(liquidityProvider, token0Address as Address, token1Address as Address, amount0, amount1);
 
-    if(!pool.token0.isNative){
-    await approveToken(liquidityProvider, token0Address as Address, amount0);
+    if (!pool.token0.isNative) {
+      await approveToken(liquidityProvider, token0Address as Address, amount0);
     }
-    else if(!pool.token1.isNative){
-    await approveToken(liquidityProvider, token1Address as Address, amount1);
+    else if (!pool.token1.isNative) {
+      await approveToken(liquidityProvider, token1Address as Address, amount1);
     }
 
     const planner = new V4PositionPlanner();
@@ -180,8 +186,9 @@ const addLiquidity = async (pool: Pool): Promise<Hash> => {
       planner.addSweep(pool.currency1, liquidityProvider);
     }
     const unlockData = planner.finalize() as `0x${string}`;
-    const deadline = (await getPublicClient().getBlockNumber()) + 100n;
-
+    const currentTimestamp = Math.floor(Date.now() / 1000);
+    const deadline = BigInt(currentTimestamp + 300); // 5 minutes from now
+    
     const positionManager = getIPositionManager({
       address: CONTRACT_ADDRESSES.POSITION_MANAGER as Address,
       chain: anvil
@@ -214,10 +221,11 @@ const addLiquidity = async (pool: Pool): Promise<Hash> => {
 const mintPool = async (
   token0Address: Address,
   token1Address: Address,
-): Promise<void> => {
+): Promise<PoolKey> => {
   try {
     const pool = await initializePool(token0Address, token1Address);
     await addLiquidity(pool);
+    return pool.poolKey;
   } catch (error) {
     const errorMessage = error instanceof Error ? error.message : String(error);
     logWarning('MintPool', `Failed to mint pool: ${errorMessage}`);
