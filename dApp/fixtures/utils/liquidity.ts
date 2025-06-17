@@ -5,212 +5,23 @@
  * using the Position Manager contract with proper action encoding and delta resolution.
  */
 
-import { Address, encodeAbiParameters, encodeFunctionData, encodePacked, concatHex, Hash, parseUnits, parseSignature } from 'viem';
+import { TickMath } from "@uniswap/v3-sdk";
+import { Pool, Position, V4PositionPlanner } from "@uniswap/v4-sdk";
+import { Address, decodeAbiParameters, erc20Abi, Hash, http, parseUnits } from 'viem';
 import { anvil } from 'viem/chains';
-import { privateKeyToAccount } from 'viem/accounts';
-import { getIPositionManager } from '../../src/generated/types/IPositionManager';
 import { getPoolManager } from '../../src/generated/types/PoolManager';
-import { getPublicClient, getWalletClient, impersonateAccount, stopImpersonatingAccount } from './client';
-import { logInfo, logSuccess, logWarning, withErrorHandling } from './error';
-import { calculateSqrtPriceX96FromUSDPrices, getTokenSymbolFromAddress, } from './math';
-import { getBestWhaleForToken, getTokenBalance, getTokenFromAddress } from './tokens';
-import { ANVIL_ACCOUNTS, CONTRACT_ADDRESSES } from './wallets';
-import { Pool } from "@uniswap/v4-sdk"
-import { TickMath } from "@uniswap/v3-sdk"
 import { PriceService } from '../services/price';
-/**
- * Uniswap V4 Position Manager action constants
- * These values are defined in the official v4-periphery Actions.sol library
- */
-const ACTIONS = {
-  INCREASE_LIQUIDITY: 0x00,
-  DECREASE_LIQUIDITY: 0x01,
-  MINT_POSITION: 0x02,
-  BURN_POSITION: 0x03,
-  INCREASE_LIQUIDITY_FROM_DELTAS: 0x04,
-  MINT_POSITION_FROM_DELTAS: 0x05,
-  SWAP_EXACT_IN_SINGLE: 0x06,
-  SWAP_EXACT_IN: 0x07,
-  SWAP_EXACT_OUT_SINGLE: 0x08,
-  SWAP_EXACT_OUT: 0x09,
-  DONATE: 0x0a,
-  SETTLE: 0x0b,
-  SETTLE_ALL: 0x0c,
-  SETTLE_PAIR: 0x0d,
-  TAKE: 0x0e,
-  TAKE_ALL: 0x0f,
-  TAKE_PORTION: 0x10,
-  TAKE_PAIR: 0x11,
-  CLOSE_CURRENCY: 0x12,
-  CLEAR_OR_TAKE: 0x13,
-  SWEEP: 0x14,
-  WRAP: 0x15,
-  UNWRAP: 0x16,
-  MINT_6909: 0x17,
-  BURN_6909: 0x18
-} as const;
-
-/**
- * Permit2 contract address on all chains
- */
-const PERMIT2_ADDRESS = '0x000000000022D473030F116dDEE9F6B43aC78BA3' as Address;
-
-const ANVIL_ACC_0_PRIVATE_KEY = '0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80';
-const ANVIL_ACC_1_PRIVATE_KEY = '0x59c6995e998f97a5a0044966f0945389dc9e86dae88c7a8412f4603b6b78690d';
-
-/**
- * Complete buildSignatureTransferData function (return the data we need)
- */
-async function buildSignatureTransferData(
-  token: `0x${string}`,
-  amount: bigint,
-  deadline: bigint,
-  privateKey: `0x${string}`) {
-  const signer = privateKeyToAccount(privateKey);
-  const publicClient = getPublicClient();
-  const nonce = await publicClient.getTransactionCount({ address: signer.address });
-
-  const message = {
-    permitted: {
-      token: token,
-      amount: amount,
-    },
-    spender: CONTRACT_ADDRESSES.POSITION_MANAGER as `0x${string}`,
-    nonce: BigInt(nonce),
-    deadline: deadline,
-  };
-
-  const domain = {
-    name: 'Permit2',
-    version: '1',
-    chainId: anvil.id,
-    verifyingContract: PERMIT2_ADDRESS,
-  } as const;
-
-  const types = {
-    TokenPermissions: [
-      { name: 'token', type: 'address' },
-      { name: 'amount', type: 'uint256' },
-    ],
-    PermitTransferFrom: [
-      { name: 'permitted', type: 'TokenPermissions' },
-      { name: 'spender', type: 'address' },
-      { name: 'nonce', type: 'uint256' },
-      { name: 'deadline', type: 'uint256' },
-    ],
-  } as const;
-
-  const shortSignature = await signer.signTypedData({ domain, types, message, primaryType: 'PermitTransferFrom' });
-
-  const { r, s, v } = parseSignature(shortSignature);
-  const signature = concatHex([r, s, `0x${v!.toString(16).padStart(2, '0')}`]);
-
-  return {
-    permit: message,
-    transferDetails: {
-      to: CONTRACT_ADDRESSES.POSITION_MANAGER,
-      requestedAmount: amount,
-    },
-    signature,
-  };
-}
-
-/**
- * Creates a pool key structure for Uniswap V4
- * @param token0Address - Address of the first token (lower address)
- * @param token1Address - Address of the second token (higher address)
- * @param fee - Fee tier (100, 500, 3000, or 10000)
- * @param tickSpacing - Tick spacing for the fee tier
- * @param hooksAddress - Address of the hook contract
- * @returns Pool key object for V4 operations
- */
-const createPoolKey = withErrorHandling(
-  async (
-    token0Address: Address,
-    token1Address: Address,
-    fee: number = 3000,
-    tickSpacing: number = 60,
-    hooksAddress: Address = CONTRACT_ADDRESSES.SWAPCAST_HOOK as Address
-  ): Promise<{
-    currency0: Address;
-    currency1: Address;
-    fee: number;
-    tickSpacing: number;
-    hooks: Address;
-  }> => {
-    const validFeeSpacings = {
-      100: 1,
-      500: 10,
-      3000: 60,
-      10000: 200
-    };
-
-    if (validFeeSpacings[fee] !== tickSpacing) {
-      logWarning('PoolKey', `Fee ${fee} doesn't match tick spacing ${tickSpacing}, using correct spacing`);
-      tickSpacing = validFeeSpacings[fee] || 60;
-    }
-
-    return {
-      currency0: token0Address,
-      currency1: token1Address,
-      fee,
-      tickSpacing,
-      hooks: hooksAddress
-    };
-  },
-  'CreatePoolKey'
-);
-
-/**
- * Calculates liquidity parameters for a V4 position using direct math
- * @param amount0Desired - Desired amount of token0
- * @param amount1Desired - Desired amount of token1
- * @param tickSpacing - Tick spacing for the pool
- * @param currentTick - Current tick of the pool
- * @returns Liquidity parameters including tick range and amounts
- */
-const calculateLiquiditySimple = async (
-  amount0Desired: bigint,
-  amount1Desired: bigint,
-  tickSpacing: number,
-  currentTick: number
-): Promise<{
-  liquidity: bigint;
-  tickLower: number;
-  tickUpper: number;
-  amount0: bigint;
-  amount1: bigint
-}> => {
-  // Use a much narrower tick range
-  const tickRange = tickSpacing * 5;
-
-  // Ensure ticks are properly aligned to tick spacing
-  const tickLower = Math.floor((currentTick - tickRange) / tickSpacing) * tickSpacing;
-  const tickUpper = Math.ceil((currentTick + tickRange) / tickSpacing) * tickSpacing;
-
-  // Scale down the liquidity to be very conservative
-  const smallerAmount = amount0Desired < amount1Desired ? amount0Desired : amount1Desired;
-  const liquidity = smallerAmount / 2n; // Use only half of the smaller amount
-
-  logSuccess('LiquidityCalculation', `Calculated liquidity: ${liquidity.toString()}`);
-  logInfo('LiquidityCalculation', `Tick range: ${tickLower} to ${tickUpper} (spacing: ${tickSpacing})`);
-  logInfo('LiquidityCalculation', `Amount0: ${amount0Desired.toString()}`);
-  logInfo('LiquidityCalculation', `Amount1: ${amount1Desired.toString()}`);
-
-  return {
-    liquidity,
-    tickLower,
-    tickUpper,
-    amount0: amount0Desired,
-    amount1: amount1Desired
-  };
-};
+import { getPublicClient, getWalletClient } from './client';
+import { logInfo, logSuccess, logWarning } from './error';
+import { calculateSqrtPriceX96FromUSDPrices, } from './math';
+import { dealLiquidity, getTokenFromAddress, NATIVE_ETH_ADDRESS } from './tokens';
+import { ANVIL_ACCOUNTS, CONTRACT_ADDRESSES } from './wallets';
+import { getIPositionManager } from '../../src/generated/types/IPositionManager';
 
 /**
  * Initializes a Uniswap V4 pool with the specified price
  * @param token0Address - Address of token0
  * @param token1Address - Address of token1
- * @param basePrice - Initial price for the pool
  * @returns Pool initialization data including sqrtPriceX96 and current tick
  */
 const initializePool = async (
@@ -219,12 +30,14 @@ const initializePool = async (
 ): Promise<Pool> => {
   try {
     const priceService = new PriceService();
+
+    // Get token info
     const token0 = await getTokenFromAddress(token0Address);
     const token1 = await getTokenFromAddress(token1Address);
 
+    // Get current prices
     const token0Price = await priceService.getPrice(token0.symbol!);
     const token1Price = await priceService.getPrice(token1.symbol!);
-
     if (!token0Price || !token1Price) {
       throw new Error(`Failed to fetch prices for tokens ${token0.symbol} and ${token1.symbol}`);
     }
@@ -240,7 +53,6 @@ const initializePool = async (
       address: CONTRACT_ADDRESSES.POOL_MANAGER as Address,
       chain: anvil
     });
-
 
     const tx = await poolManager.write.initialize(
       [{
@@ -262,8 +74,7 @@ const initializePool = async (
       throw new Error(`Pool initialization failed with status: ${receipt.status}`);
     }
 
-    logSuccess('PoolInitialization', `Pool initialized successfully`);
-
+    logSuccess('PoolInitialization', `Pool initialized successfully: ${JSON.stringify(pool)}`);
     return pool;
   } catch (error) {
     logWarning('PoolInitialization', `Pool initialization failed: ${error}`);
@@ -271,309 +82,122 @@ const initializePool = async (
   }
 };
 
-/**
- * Executes a transaction using account impersonation
- * @param to - Target contract address
- * @param data - Encoded function call data
- * @param value - ETH value to send with transaction
- * @param fromAddress - Address to impersonate for the transaction
- * @returns Transaction hash
- */
-const executeSimpleTransaction = async (
-  to: Address,
-  data: `0x${string}`,
-  value: bigint = 0n,
-  fromAddress: Address
-): Promise<Hash> => {
-  try {
-    const publicClient = getPublicClient();
 
-    await impersonateAccount(fromAddress);
+function getPositionParams(pool: Pool): {
+  tickLower: number;
+  tickUpper: number;
+  liquidity: string;
+  amount0: string;
+  amount1: string;
+} {
+  const tickLower = pool.tickCurrent - pool.tickSpacing * 10; // 10 ticks below current
+  const tickUpper = pool.tickCurrent + pool.tickSpacing * 10; // 10 ticks above current
 
-    const txHash = await publicClient.request({
-      method: 'eth_sendTransaction' as any,
-      params: [{
-        from: fromAddress,
-        to,
-        data,
-        value: value > 0n ? `0x${value.toString(16)}` : '0x0',
-        gas: '0x2625A0'
-      }]
-    }) as Hash;
+  const amount0Desired = parseUnits("1000", pool.token0.decimals); // e.g., 100 of token0
+  const amount1Desired = parseUnits("1000", pool.token1.decimals); // e.g., 100 of token1
 
-    await stopImpersonatingAccount(fromAddress);
-    return txHash;
-  } catch (error) {
-    console.error('Failed to execute transaction:', error);
-    throw error;
+  const position = Position.fromAmounts({
+    pool,
+    tickLower,
+    tickUpper,
+    amount0: amount0Desired.toString(),
+    amount1: amount1Desired.toString(),
+    useFullPrecision: true // Use full precision for the calculation
+  });
+
+  const mintAmounts = position.mintAmounts;
+  const liquidity = position.liquidity;
+
+  return {
+    tickLower,
+    tickUpper,
+    liquidity: liquidity.toString(),
+    amount0: mintAmounts.amount0.toString(),
+    amount1: mintAmounts.amount1.toString(),
+  };
+}
+
+
+async function approveToken(account: Address, tokenAddress: Address, amount: bigint) {
+  const walletClient = getWalletClient(account);
+  const hash = await walletClient.writeContract({
+    address: tokenAddress,
+    abi: erc20Abi,
+    functionName: 'approve',
+    args: [CONTRACT_ADDRESSES.POOL_MANAGER as Address, amount],
+    account: account,
+    chain: anvil,
+  });
+  const receipt = await getPublicClient().waitForTransactionReceipt({ hash });
+  if (receipt.status !== 'success') {
+    throw new Error(`Approve token failed with status: ${receipt.status}`);
   }
-};
-
-/**
- * Finds a whale account that has sufficient balance for the specified token
- * @param token0Address - Address of first token
- * @param token1Address - Address of second token
- * @param amount0 - Required amount of token0
- * @param amount1 - Required amount of token1
- * @returns Address of whale account
- */
-const findWhaleWithBothTokens = async (
-  token0Address: Address,
-  token1Address: Address,
-  amount0: bigint,
-  amount1: bigint
-): Promise<Address> => {
-  try {
-    const whale = await getBestWhaleForToken(token0Address);
-    if (!whale) {
-      throw new Error('No whale found for token0');
-    }
-
-    logInfo('WhaleSelection', `Using whale ${whale} for liquidity provision`);
-    return whale;
-  } catch (error) {
-    logWarning('WhaleSelection', `Error finding whale: ${error}`);
-    throw error;
-  }
-};
-
-/**
- * Ensures a whale account has sufficient tokens for liquidity provision
- * @param whaleAddress - Address of the whale account
- * @param token0Address - Address of token0
- * @param token1Address - Address of token1
- * @param amount0 - Required amount of token0
- * @param amount1 - Required amount of token1
- */
-const ensureWhaleHasTokens = async (
-  whaleAddress: Address,
-  token0Address: Address,
-  token1Address: Address,
-  amount0: bigint,
-  amount1: bigint
-): Promise<void> => {
-  try {
-    const balance0 = await getTokenBalance(token0Address, whaleAddress);
-    if (balance0 < amount0) {
-      logInfo('TokenFunding', `Transferring ${amount0} of token0 to whale`);
-    }
-
-    const balance1 = await getTokenBalance(token1Address, whaleAddress);
-    if (balance1 < amount1) {
-      logInfo('TokenFunding', `Transferring ${amount1} of token1 to whale`);
-    }
-
-    logSuccess('TokenFunding', `Whale has sufficient tokens for liquidity provision`);
-  } catch (error) {
-    logWarning('TokenFunding', `Error ensuring whale tokens: ${error}`);
-    throw error;
-  }
-};
+  logSuccess('ApproveToken', `Approved token ${tokenAddress} for pool manager`);
+}
 
 /**
  * Adds liquidity to a Uniswap V4 pool using the Position Manager
- * @param token0Address - Address of the first token
- * @param token1Address - Address of the second token
- * @param basePrice - Base price for the position
- * @param amount0 - Amount of token0 to add
- * @param amount1 - Amount of token1 to add
- * @param sqrtPriceX96 - Current pool price in sqrtPriceX96 format
- * @param currentTick - Current tick of the pool
+ * @param pool - The pool to add liquidity to
  * @returns Transaction hash of the liquidity addition
  */
-const addLiquidity = async (
-  token0Address: Address,
-  token1Address: Address,
-  basePrice: number,
-  amount0: string = '10',
-  amount1: string = '10',
-  sqrtPriceX96: bigint,
-  currentTick: number
-): Promise<Hash> => {
+const addLiquidity = async (pool: Pool): Promise<Hash> => {
   try {
-    const poolKey = await createPoolKey(token0Address, token1Address);
-    const amount0Desired = parseUnits(amount0, 18);
-    const amount1Desired = parseUnits(amount1, 18);
+    const positionParams = getPositionParams(pool);
+    const token0Address = pool.token0.isToken
+      ? pool.token0.address
+      : NATIVE_ETH_ADDRESS; // Native ETH address
+    const token1Address = pool.token1.isToken
+      ? pool.token1.address
+      : NATIVE_ETH_ADDRESS; // Native ETH address
+    const amount0 = parseUnits(positionParams.amount0, pool.token0.decimals);
+    const amount1 = parseUnits(positionParams.amount1, pool.token1.decimals);
 
-    const liquidityParams = await calculateLiquiditySimple(
-      amount0Desired,
-      amount1Desired,
-      poolKey.tickSpacing,
-      currentTick
+    const liquidityProvider = ANVIL_ACCOUNTS[1].address;
+    await dealLiquidity(liquidityProvider, token0Address as Address, token1Address as Address, amount0, amount1);
+
+    if(!pool.token0.isNative){
+    await approveToken(liquidityProvider, token0Address as Address, amount0);
+    }
+    else if(!pool.token1.isNative){
+    await approveToken(liquidityProvider, token1Address as Address, amount1);
+    }
+
+    const planner = new V4PositionPlanner();
+    planner.addSettle(pool.currency0, true);
+    planner.addSettle(pool.currency1, true);
+    planner.addMint(pool,
+      positionParams.tickLower,
+      positionParams.tickUpper,
+      positionParams.liquidity,
+      positionParams.amount0,
+      positionParams.amount1,
+      liquidityProvider
     );
-
-    logInfo('LiquidityProvision', `Adding liquidity:`);
-    logInfo('LiquidityProvision', `  Amount0: ${amount0} (${amount0Desired})`);
-    logInfo('LiquidityProvision', `  Amount1: ${amount1} (${amount1Desired})`);
-    logInfo('LiquidityProvision', `  Liquidity: ${liquidityParams.liquidity.toString()}`);
-    logInfo('LiquidityProvision', `  Ticks: ${liquidityParams.tickLower} to ${liquidityParams.tickUpper}`);
-
-    const whaleAddress = await findWhaleWithBothTokens(
-      token0Address,
-      token1Address,
-      liquidityParams.amount0,
-      liquidityParams.amount1
-    );
-
-    await ensureWhaleHasTokens(whaleAddress, token0Address, token1Address, liquidityParams.amount0, liquidityParams.amount1);
-
-    const isToken0Native = token0Address === '0x0000000000000000000000000000000000000000';
-    const isToken1Native = token1Address === '0x0000000000000000000000000000000000000000';
-
-    const anvilAccount0 = privateKeyToAccount(ANVIL_ACC_0_PRIVATE_KEY);
-
-    // Create Permit2 signatures only for non-native tokens
-    const deadline = BigInt(Math.floor(Date.now() / 1000) + 3600); // 1 hour from now
-
-    let permit0Data: any, permit1Data: any;
-
-    if (!isToken0Native || !isToken1Native) {
-      logInfo('Permit2Setup', `Creating off-chain Permit2 signatures for non-native tokens`);
+    if (pool.token0.isNative) {
+      planner.addSweep(pool.currency0, liquidityProvider);
     }
-
-    // Handle token0 - only create signature if it's not native
-    if (!isToken0Native) {
-      logInfo('Permit2Setup', `Creating Permit2 signature for token0 (non-native)`);
-
-      await fundAccountWithToken(token0Address, anvilAccount0.address, liquidityParams.amount0);
-
-      permit0Data = await buildSignatureTransferData(
-        token0Address,
-        liquidityParams.amount0,
-        deadline,
-        ANVIL_ACC_0_PRIVATE_KEY
-      );
-      console.log("Token0 Permit2 signature created");
+    else if (pool.token1.isNative) {
+      planner.addSweep(pool.currency1, liquidityProvider);
     }
+    const unlockData = planner.finalize() as `0x${string}`;
+    const deadline = (await getPublicClient().getBlockNumber()) + 100n;
 
-    if (!isToken1Native) {
-      logInfo('Permit2Setup', `Creating Permit2 signature for token1 (non-native)`);
-
-      await fundAccountWithToken(token1Address, anvilAccount0.address, liquidityParams.amount1);
-
-      permit1Data = await buildSignatureTransferData(
-        token1Address,
-        liquidityParams.amount1,
-        deadline,
-        ANVIL_ACC_0_PRIVATE_KEY
-      );
-      logInfo('Permit2Setup', `Token1 Permit2 signature created`);
-    }
-
-    if (!isToken0Native || !isToken1Native) {
-      logSuccess('Permit2Setup', `Off-chain Permit2 signatures created for non-native tokens`);
-    }
-
-    let actions: `0x${string}`;
-    const params: `0x${string}`[] = [];
-
-    const isAnyNative = isToken0Native || isToken1Native;
-    // const isBothNative = isToken0Native && isToken1Native;
-
-    if (isAnyNative) {
-      actions = encodePacked(
-        ['uint8', 'uint8', 'uint8'],
-        [ACTIONS.MINT_POSITION, ACTIONS.SETTLE_PAIR, ACTIONS.SWEEP]
-      );
-    } else {
-      // Both tokens are ERC20, no native handling needed
-      actions = encodePacked(
-        ['uint8', 'uint8'],
-        [ACTIONS.MINT_POSITION, ACTIONS.SETTLE_PAIR]
-      );
-    }
-
-    params[0] = encodeAbiParameters(
-      [
-        {
-          name: 'poolKey',
-          type: 'tuple',
-          components: [
-            { name: 'currency0', type: 'address' },
-            { name: 'currency1', type: 'address' },
-            { name: 'fee', type: 'uint24' },
-            { name: 'tickSpacing', type: 'int24' },
-            { name: 'hooks', type: 'address' }
-          ]
-        },
-        { name: 'tickLower', type: 'int24' },
-        { name: 'tickUpper', type: 'int24' },
-        { name: 'liquidity', type: 'uint256' },
-        { name: 'amount0Max', type: 'uint128' },
-        { name: 'amount1Max', type: 'uint128' },
-        { name: 'owner', type: 'address' },
-        { name: 'hookData', type: 'bytes' }
-      ],
-      [
-        [poolKey.currency0, poolKey.currency1, poolKey.fee, poolKey.tickSpacing, poolKey.hooks],
-        liquidityParams.tickLower,
-        liquidityParams.tickUpper,
-        liquidityParams.liquidity,
-        liquidityParams.amount0,
-        liquidityParams.amount1,
-        anvilAccount0.address,
-        '0x'
-      ]
-    );
-
-    params[1] = encodeAbiParameters(
-      [
-        { name: 'currency0', type: 'address' },
-        { name: 'currency1', type: 'address' }
-      ],
-      [poolKey.currency0, poolKey.currency1]
-    );
-
-    // Only add SWEEP parameter if there's a native token
-    if (isAnyNative) {
-      const nativeCurrency = isToken0Native ? token0Address : token1Address;
-      params[2] = encodeAbiParameters(
-        [
-          { name: 'currency', type: 'address' },
-          { name: 'recipient', type: 'address' }
-        ],
-        [nativeCurrency, whaleAddress]
-      );
-    }
-
-    const valueToPass = isToken0Native ? amount0Desired :
-      (isToken1Native ? amount1Desired : 0n);
-
-    const unlockData = encodeAbiParameters(
-      [
-        { name: 'actions', type: 'bytes' },
-        { name: 'params', type: 'bytes[]' }
-      ],
-      [actions, params]
-    );
-
-    const modifyLiquiditiesData = encodeFunctionData({
-      abi: getIPositionManager({
-        address: CONTRACT_ADDRESSES.POSITION_MANAGER as Address,
-        chain: anvil
-      }).abi,
-      functionName: 'modifyLiquidities',
-      args: [unlockData, deadline]
+    const positionManager = getIPositionManager({
+      address: CONTRACT_ADDRESSES.POSITION_MANAGER as Address,
+      chain: anvil
     });
 
-    logInfo('LiquidityProvision', `Calling modifyLiquidities with ETH value: ${valueToPass.toString()}`);
+    const hash = await positionManager.write.modifyLiquidities([unlockData, deadline], {
+      account: liquidityProvider,
+      chain: anvil
+    })
 
-    const hash = await executeSimpleTransaction(
-      CONTRACT_ADDRESSES.POSITION_MANAGER as Address,
-      modifyLiquiditiesData,
-      valueToPass,
-      anvilAccount0.address
-    );
-
-    const publicClient = getPublicClient();
-    const receipt = await publicClient.waitForTransactionReceipt({ hash });
+    const receipt = await getPublicClient().waitForTransactionReceipt({ hash });
 
     if (receipt.status !== 'success') {
-      throw new Error(`Liquidity provision failed with status: ${receipt.status}`);
+      throw new Error(`Liquidity addition failed with status: ${receipt.status}`);
     }
-
     logSuccess('LiquidityProvision', `Liquidity added successfully with Permit2 SignatureTransfer!`);
-    return hash;
   } catch (error) {
     const errorMessage = error instanceof Error ? error.message : String(error);
     logWarning('LiquidityProvision', `Failed to add liquidity: ${errorMessage}`);
@@ -585,31 +209,15 @@ const addLiquidity = async (
  * Creates a pool and adds initial liquidity
  * @param token0Address - Address of the first token
  * @param token1Address - Address of the second token
- * @param basePrice - Initial price for the pool
- * @param amount0 - Amount of token0 to add as initial liquidity
- * @param amount1 - Amount of token1 to add as initial liquidity
  * @returns Transaction hash of the liquidity addition
  */
 const mintPool = async (
   token0Address: Address,
   token1Address: Address,
-  basePrice: number,
-  amount0: string = '10',
-  amount1: string = '10'
-): Promise<Hash> => {
+): Promise<void> => {
   try {
     const pool = await initializePool(token0Address, token1Address);
-
-    // return await addLiquidity(
-    //   token0Address,
-    //   token1Address,
-    //   basePrice,
-    //   amount0,
-    //   amount1,
-    //   sqrtPriceX96,
-    //   currentTick
-    // );
-    return '0x'
+    await addLiquidity(pool);
   } catch (error) {
     const errorMessage = error instanceof Error ? error.message : String(error);
     logWarning('MintPool', `Failed to mint pool: ${errorMessage}`);
@@ -618,6 +226,7 @@ const mintPool = async (
 };
 
 export {
-  createPoolKey,
   mintPool
 };
+
+
