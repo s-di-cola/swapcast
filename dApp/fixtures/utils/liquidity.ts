@@ -126,19 +126,55 @@ function getPositionParams(pool: Pool): {
 
 async function approveToken(account: Address, tokenAddress: Address, amount: bigint) {
   const walletClient = getWalletClient(account);
+  
+  // First approve Permit2 contract (not position manager directly)
+  const permit2Address = "0x000000000022D473030F116dDEE9F6B43aC78BA3"; // Canonical Permit2
+  
   const hash = await walletClient.writeContract({
     address: tokenAddress,
     abi: erc20Abi,
     functionName: 'approve',
-    args: [CONTRACT_ADDRESSES.POOL_MANAGER as Address, amount],
+    args: [permit2Address, amount], // Approve Permit2, not position manager
     account: account,
     chain: anvil,
   });
+  
   const receipt = await getPublicClient().waitForTransactionReceipt({ hash });
   if (receipt.status !== 'success') {
     throw new Error(`Approve token failed with status: ${receipt.status}`);
   }
-  logSuccess('ApproveToken', `Approved token ${tokenAddress} for pool manager`);
+  
+  // Then approve position manager through Permit2 with longer deadline
+  const currentTimestamp = Math.floor(Date.now() / 1000);
+  const expiration = BigInt(currentTimestamp + 86400); // 24 hours, not 5 minutes
+  
+  const hash2 = await walletClient.writeContract({
+    address: permit2Address,
+    abi: [
+      {
+        name: 'approve',
+        type: 'function',
+        inputs: [
+          { name: 'token', type: 'address' },
+          { name: 'spender', type: 'address' },
+          { name: 'amount', type: 'uint160' },
+          { name: 'expiration', type: 'uint48' }
+        ],
+        outputs: []
+      }
+    ],
+    functionName: 'approve',
+    args: [tokenAddress, CONTRACT_ADDRESSES.POSITION_MANAGER as Address, amount, expiration],
+    account: account,
+    chain: anvil,
+  });
+  
+  const receipt2 = await getPublicClient().waitForTransactionReceipt({ hash: hash2 });
+  if (receipt2.status !== 'success') {
+    throw new Error(`Permit2 approve failed with status: ${receipt2.status}`);
+  }
+  
+  logSuccess('ApproveToken', `Approved token ${tokenAddress} for position manager via Permit2`);
 }
 
 /**
@@ -149,29 +185,26 @@ async function approveToken(account: Address, tokenAddress: Address, amount: big
 const addLiquidity = async (pool: Pool): Promise<void> => {
   try {
     const positionParams = getPositionParams(pool);
-    const token0Address = pool.token0.isToken
-      ? pool.token0.address
-      : NATIVE_ETH_ADDRESS; // Native ETH address
-    const token1Address = pool.token1.isToken
-      ? pool.token1.address
-      : NATIVE_ETH_ADDRESS; // Native ETH address
+    const token0Address = pool.token0.isToken ? pool.token0.address : NATIVE_ETH_ADDRESS;
+    const token1Address = pool.token1.isToken ? pool.token1.address : NATIVE_ETH_ADDRESS;
     const amount0 = parseUnits(positionParams.amount0, pool.token0.decimals);
     const amount1 = parseUnits(positionParams.amount1, pool.token1.decimals);
 
     const liquidityProvider = ANVIL_ACCOUNTS[1].address;
     await dealLiquidity(liquidityProvider, token0Address as Address, token1Address as Address, amount0, amount1);
 
+    // Approve for POSITION MANAGER
     if (!pool.token0.isNative) {
       await approveToken(liquidityProvider, token0Address as Address, amount0);
     }
-    else if (!pool.token1.isNative) {
+    if (!pool.token1.isNative) {
       await approveToken(liquidityProvider, token1Address as Address, amount1);
     }
 
     const planner = new V4PositionPlanner();
-    planner.addSettle(pool.currency0, true);
-    planner.addSettle(pool.currency1, true);
-    planner.addMint(pool,
+    
+    planner.addMint(
+      pool,
       positionParams.tickLower,
       positionParams.tickUpper,
       positionParams.liquidity,
@@ -179,16 +212,18 @@ const addLiquidity = async (pool: Pool): Promise<void> => {
       positionParams.amount1,
       liquidityProvider
     );
-    if (pool.token0.isNative) {
-      planner.addSweep(pool.currency0, liquidityProvider);
+    
+    planner.addSettlePair(pool.currency0, pool.currency1);
+    
+    if (pool.token0.isNative || pool.token1.isNative) {
+      const nativeCurrency = pool.token0.isNative ? pool.currency0 : pool.currency1;
+      planner.addSweep(nativeCurrency, liquidityProvider);
     }
-    else if (pool.token1.isNative) {
-      planner.addSweep(pool.currency1, liquidityProvider);
-    }
+
     const unlockData = planner.finalize() as `0x${string}`;
     const currentTimestamp = Math.floor(Date.now() / 1000);
-    const deadline = BigInt(currentTimestamp + 300); // 5 minutes from now
-    
+    const deadline = BigInt(currentTimestamp + 300);
+
     const positionManager = getIPositionManager({
       address: CONTRACT_ADDRESSES.POSITION_MANAGER as Address,
       chain: anvil
@@ -196,15 +231,16 @@ const addLiquidity = async (pool: Pool): Promise<void> => {
 
     const hash = await positionManager.write.modifyLiquidities([unlockData, deadline], {
       account: liquidityProvider,
-      chain: anvil
-    })
+      chain: anvil,
+      value: pool.token0.isNative ? amount0 : (pool.token1.isNative ? amount1 : 0n),
+      gas: 1000000n
+    });
 
     const receipt = await getPublicClient().waitForTransactionReceipt({ hash });
-
     if (receipt.status !== 'success') {
       throw new Error(`Liquidity addition failed with status: ${receipt.status}`);
     }
-    logSuccess('LiquidityProvision', `Liquidity added successfully with Permit2 SignatureTransfer!`);
+    logSuccess('LiquidityProvision', `Liquidity added successfully!`);
   } catch (error) {
     const errorMessage = error instanceof Error ? error.message : String(error);
     logWarning('LiquidityProvision', `Failed to add liquidity: ${errorMessage}`);
