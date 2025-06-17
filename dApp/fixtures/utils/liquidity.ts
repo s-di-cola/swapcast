@@ -5,14 +5,15 @@
  * using the Position Manager contract with proper action encoding and delta resolution.
  */
 
-import {Address, encodeAbiParameters, encodeFunctionData, encodePacked, Hash, parseUnits} from 'viem';
+import {Address, encodeAbiParameters, encodeFunctionData, encodePacked, concatHex, Hash, parseUnits, parseSignature} from 'viem';
 import {anvil} from 'viem/chains';
+import {privateKeyToAccount} from 'viem/accounts';
 import {getIPositionManager} from '../../src/generated/types/IPositionManager';
 import {getPoolManager} from '../../src/generated/types/PoolManager';
-import {getPublicClient, impersonateAccount, stopImpersonatingAccount} from './client';
+import {getPublicClient, getWalletClient, impersonateAccount, stopImpersonatingAccount} from './client';
 import {logInfo, logSuccess, logWarning, withErrorHandling} from './error';
 import {calculateSqrtPriceX96, getTokenSymbolFromAddress} from './math';
-import {getBestWhaleForToken, getTokenBalance} from './tokens';
+import {getBestWhaleForToken, getTokenBalance, fundAccountWithToken} from './tokens';
 import {CONTRACT_ADDRESSES} from './wallets';
 
 /**
@@ -52,28 +53,66 @@ const ACTIONS = {
  */
 const PERMIT2_ADDRESS = '0x000000000022D473030F116dDEE9F6B43aC78BA3' as Address;
 
-/**
- * Permit2 EIP-712 domain name and version
- */
-const PERMIT2_DOMAIN_NAME = 'Permit2';
-const PERMIT2_DOMAIN_VERSION = '1';
+const ANVIL_ACC_0_PRIVATE_KEY = '0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80';
+const ANVIL_ACC_1_PRIVATE_KEY = '0x59c6995e998f97a5a0044966f0945389dc9e86dae88c7a8412f4603b6b78690d';
 
 /**
- * Type definitions for Permit2 EIP-712 signature
+ * Complete buildSignatureTransferData function (return the data we need)
  */
-type Permit2Types = {
-  PermitDetails: [
-    { name: 'token'; type: 'address' },
-    { name: 'amount'; type: 'uint160' },
-    { name: 'expiration'; type: 'uint48' },
-    { name: 'nonce'; type: 'uint48' },
-  ];
-  PermitSingle: [
-    { name: 'details'; type: 'PermitDetails' },
-    { name: 'spender'; type: 'address' },
-    { name: 'sigDeadline'; type: 'uint256' },
-  ];
-};
+async function buildSignatureTransferData(
+  token: `0x${string}`,
+  amount: bigint,
+  deadline: bigint,
+  privateKey: `0x${string}`)
+{
+  const signer = privateKeyToAccount(privateKey);
+  const publicClient = getPublicClient();
+  const nonce = await publicClient.getTransactionCount({address: signer.address});
+
+  const message = {
+    permitted: {
+      token: token,
+      amount: amount,
+    },
+    spender: CONTRACT_ADDRESSES.POSITION_MANAGER as `0x${string}`,
+    nonce: BigInt(nonce),
+    deadline: deadline,
+  };
+
+  const domain = {
+    name: 'Permit2',
+    version: '1',
+    chainId: anvil.id,
+    verifyingContract: PERMIT2_ADDRESS,
+  } as const;
+
+  const types = {
+    TokenPermissions: [
+      {name: 'token', type: 'address'},
+      {name: 'amount', type: 'uint256'},
+    ],
+    PermitTransferFrom: [
+      {name: 'permitted', type: 'TokenPermissions'},
+      {name: 'spender', type: 'address'},
+      {name: 'nonce', type: 'uint256'},
+      {name: 'deadline', type: 'uint256'},
+    ],
+  } as const;
+
+  const shortSignature = await signer.signTypedData({domain, types, message, primaryType: 'PermitTransferFrom'});
+
+  const { r, s, v } = parseSignature(shortSignature);
+  const signature = concatHex([r, s, `0x${v!.toString(16).padStart(2, '0')}`]);
+
+  return {
+    permit: message,
+    transferDetails: {
+      to: CONTRACT_ADDRESSES.POSITION_MANAGER,
+      requestedAmount: amount,
+    },
+    signature,
+  };
+}
 
 /**
  * Creates a pool key structure for Uniswap V4
@@ -394,18 +433,66 @@ const addLiquidity = async (
 
     await ensureWhaleHasTokens(whaleAddress, token0Address, token1Address, liquidityParams.amount0, liquidityParams.amount1);
 
-    const isNativeETH = token0Address === '0x0000000000000000000000000000000000000000' ||
-        token1Address === '0x0000000000000000000000000000000000000000';
+    const isToken0Native = token0Address === '0x0000000000000000000000000000000000000000';
+    const isToken1Native = token1Address === '0x0000000000000000000000000000000000000000';
+
+    const anvilAccount0 = privateKeyToAccount(ANVIL_ACC_0_PRIVATE_KEY);
+
+    // Create Permit2 signatures only for non-native tokens
+    const deadline = BigInt(Math.floor(Date.now() / 1000) + 3600); // 1 hour from now
+
+    let permit0Data: any, permit1Data: any;
+
+    if (!isToken0Native || !isToken1Native) {
+      logInfo('Permit2Setup', `Creating off-chain Permit2 signatures for non-native tokens`);
+    }
+
+    // Handle token0 - only create signature if it's not native
+    if (!isToken0Native) {
+      logInfo('Permit2Setup', `Creating Permit2 signature for token0 (non-native)`);
+      
+      await fundAccountWithToken(token0Address, anvilAccount0.address, liquidityParams.amount0);
+     
+      permit0Data = await buildSignatureTransferData(
+        token0Address,
+        liquidityParams.amount0,
+        deadline,
+        ANVIL_ACC_0_PRIVATE_KEY
+      );
+      console.log("Token0 Permit2 signature created");
+    }
+
+    if (!isToken1Native) {
+      logInfo('Permit2Setup', `Creating Permit2 signature for token1 (non-native)`);
+
+      await fundAccountWithToken(token1Address, anvilAccount0.address, liquidityParams.amount1);
+
+      permit1Data = await buildSignatureTransferData(
+        token1Address,
+        liquidityParams.amount1,
+        deadline,
+        ANVIL_ACC_0_PRIVATE_KEY
+      );
+      logInfo('Permit2Setup', `Token1 Permit2 signature created`);
+    }
+
+    if (!isToken0Native || !isToken1Native) {
+      logSuccess('Permit2Setup', `Off-chain Permit2 signatures created for non-native tokens`);
+    }
 
     let actions: `0x${string}`;
     const params: `0x${string}`[] = [];
 
-    if (isNativeETH) {
+    const isAnyNative = isToken0Native || isToken1Native;
+    // const isBothNative = isToken0Native && isToken1Native;
+
+    if (isAnyNative) {
       actions = encodePacked(
           ['uint8', 'uint8', 'uint8'],
           [ACTIONS.MINT_POSITION, ACTIONS.SETTLE_PAIR, ACTIONS.SWEEP]
       );
     } else {
+      // Both tokens are ERC20, no native handling needed
       actions = encodePacked(
           ['uint8', 'uint8'],
           [ACTIONS.MINT_POSITION, ACTIONS.SETTLE_PAIR]
@@ -440,7 +527,7 @@ const addLiquidity = async (
           liquidityParams.liquidity,
           liquidityParams.amount0,
           liquidityParams.amount1,
-          whaleAddress,
+          anvilAccount0.address,
           '0x'
         ]
     );
@@ -453,9 +540,9 @@ const addLiquidity = async (
         [poolKey.currency0, poolKey.currency1]
     );
 
-    if (isNativeETH) {
-      const nativeCurrency = token0Address === '0x0000000000000000000000000000000000000000' ?
-          token0Address : token1Address;
+    // Only add SWEEP parameter if there's a native token
+    if (isAnyNative) {
+      const nativeCurrency = isToken0Native ? token0Address : token1Address;
       params[2] = encodeAbiParameters(
           [
             { name: 'currency', type: 'address' },
@@ -465,10 +552,8 @@ const addLiquidity = async (
       );
     }
 
-    const deadline = BigInt(Math.floor(Date.now() / 1000) + 60);
-    const valueToPass = token0Address === '0x0000000000000000000000000000000000000000' ?
-        liquidityParams.amount0 :
-        (token1Address === '0x0000000000000000000000000000000000000000' ? liquidityParams.amount1 : 0n);
+    const valueToPass = isToken0Native ? amount0Desired : 
+                       (isToken1Native ? amount1Desired : 0n);
 
     const unlockData = encodeAbiParameters(
         [
@@ -487,13 +572,13 @@ const addLiquidity = async (
       args: [unlockData, deadline]
     });
 
-    logInfo('LiquidityProvision', `Calling modifyLiquidities with proper encoding`);
+    logInfo('LiquidityProvision', `Calling modifyLiquidities with ETH value: ${valueToPass.toString()}`);
 
     const hash = await executeSimpleTransaction(
         CONTRACT_ADDRESSES.POSITION_MANAGER as Address,
         modifyLiquiditiesData,
         valueToPass,
-        whaleAddress
+        anvilAccount0.address
     );
 
     const publicClient = getPublicClient();
@@ -503,7 +588,7 @@ const addLiquidity = async (
       throw new Error(`Liquidity provision failed with status: ${receipt.status}`);
     }
 
-    logSuccess('LiquidityProvision', `Liquidity added successfully!`);
+    logSuccess('LiquidityProvision', `Liquidity added successfully with Permit2 SignatureTransfer!`);
     return hash;
   } catch (error) {
     const errorMessage = error instanceof Error ? error.message : String(error);
