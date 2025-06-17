@@ -9,8 +9,7 @@ import { getContract, getPublicClient } from './utils/client';
 import { logInfo, logSuccess, logWarning, withErrorHandling, withRetry } from './utils/error';
 import { sortTokenAddresses } from './utils/helpers';
 import { createPoolKey, mintPool } from './utils/liquidity';
-import { calculateSqrtPriceX96 } from './utils/math';
-import { TokenInfo } from './utils/tokens';
+ import { TokenInfo } from './utils/tokens';
 import { CONTRACT_ADDRESSES } from './utils/wallets';
 
 export interface MarketCreationResult {
@@ -23,7 +22,6 @@ export interface MarketCreationResult {
         tickSpacing: number;
         hooks: Address;
     };
-    sqrtPriceX96: bigint;
     expirationTime: bigint;
     priceThreshold: bigint;
     token0: TokenInfo;
@@ -186,14 +184,8 @@ const createSingleMarketFromRequest = async (
 
             // Calculate initial price
             const basePrice = request.basePrice;
-            const sqrtPriceX96 = calculateSqrtPriceX96(
-                token0.symbol,
-                token1.symbol,
-                basePrice,
-                false
-            );
 
-            logInfo('MarketCreation', `Base price: ${basePrice}, sqrtPriceX96: ${sqrtPriceX96}`);
+            logInfo('MarketCreation', `Base price: ${basePrice}`);
 
             // Initialize pool and mint liquidity in one atomic transaction
             await mintPool(
@@ -228,7 +220,6 @@ const createSingleMarketFromRequest = async (
                 id: `${marketId}`,
                 name: `${token0.symbol}/${token1.symbol}`,
                 poolKey,
-                sqrtPriceX96,
                 expirationTime,
                 priceThreshold,
                 token0,

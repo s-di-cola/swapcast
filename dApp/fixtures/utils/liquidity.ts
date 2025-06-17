@@ -5,17 +5,19 @@
  * using the Position Manager contract with proper action encoding and delta resolution.
  */
 
-import {Address, encodeAbiParameters, encodeFunctionData, encodePacked, concatHex, Hash, parseUnits, parseSignature} from 'viem';
-import {anvil} from 'viem/chains';
-import {privateKeyToAccount} from 'viem/accounts';
-import {getIPositionManager} from '../../src/generated/types/IPositionManager';
-import {getPoolManager} from '../../src/generated/types/PoolManager';
-import {getPublicClient, getWalletClient, impersonateAccount, stopImpersonatingAccount} from './client';
-import {logInfo, logSuccess, logWarning, withErrorHandling} from './error';
-import {calculateSqrtPriceX96, getTokenSymbolFromAddress} from './math';
-import {getBestWhaleForToken, getTokenBalance, fundAccountWithToken} from './tokens';
-import {CONTRACT_ADDRESSES} from './wallets';
-
+import { Address, encodeAbiParameters, encodeFunctionData, encodePacked, concatHex, Hash, parseUnits, parseSignature } from 'viem';
+import { anvil } from 'viem/chains';
+import { privateKeyToAccount } from 'viem/accounts';
+import { getIPositionManager } from '../../src/generated/types/IPositionManager';
+import { getPoolManager } from '../../src/generated/types/PoolManager';
+import { getPublicClient, getWalletClient, impersonateAccount, stopImpersonatingAccount } from './client';
+import { logInfo, logSuccess, logWarning, withErrorHandling } from './error';
+import { calculateSqrtPriceX96FromUSDPrices, getTokenSymbolFromAddress, } from './math';
+import { getBestWhaleForToken, getTokenBalance, getTokenFromAddress } from './tokens';
+import { ANVIL_ACCOUNTS, CONTRACT_ADDRESSES } from './wallets';
+import { Pool } from "@uniswap/v4-sdk"
+import { TickMath } from "@uniswap/v3-sdk"
+import { PriceService } from '../services/price';
 /**
  * Uniswap V4 Position Manager action constants
  * These values are defined in the official v4-periphery Actions.sol library
@@ -63,11 +65,10 @@ async function buildSignatureTransferData(
   token: `0x${string}`,
   amount: bigint,
   deadline: bigint,
-  privateKey: `0x${string}`)
-{
+  privateKey: `0x${string}`) {
   const signer = privateKeyToAccount(privateKey);
   const publicClient = getPublicClient();
-  const nonce = await publicClient.getTransactionCount({address: signer.address});
+  const nonce = await publicClient.getTransactionCount({ address: signer.address });
 
   const message = {
     permitted: {
@@ -88,18 +89,18 @@ async function buildSignatureTransferData(
 
   const types = {
     TokenPermissions: [
-      {name: 'token', type: 'address'},
-      {name: 'amount', type: 'uint256'},
+      { name: 'token', type: 'address' },
+      { name: 'amount', type: 'uint256' },
     ],
     PermitTransferFrom: [
-      {name: 'permitted', type: 'TokenPermissions'},
-      {name: 'spender', type: 'address'},
-      {name: 'nonce', type: 'uint256'},
-      {name: 'deadline', type: 'uint256'},
+      { name: 'permitted', type: 'TokenPermissions' },
+      { name: 'spender', type: 'address' },
+      { name: 'nonce', type: 'uint256' },
+      { name: 'deadline', type: 'uint256' },
     ],
   } as const;
 
-  const shortSignature = await signer.signTypedData({domain, types, message, primaryType: 'PermitTransferFrom'});
+  const shortSignature = await signer.signTypedData({ domain, types, message, primaryType: 'PermitTransferFrom' });
 
   const { r, s, v } = parseSignature(shortSignature);
   const signature = concatHex([r, s, `0x${v!.toString(16).padStart(2, '0')}`]);
@@ -124,40 +125,40 @@ async function buildSignatureTransferData(
  * @returns Pool key object for V4 operations
  */
 const createPoolKey = withErrorHandling(
-    async (
-        token0Address: Address,
-        token1Address: Address,
-        fee: number = 3000,
-        tickSpacing: number = 60,
-        hooksAddress: Address = CONTRACT_ADDRESSES.SWAPCAST_HOOK as Address
-    ): Promise<{
-      currency0: Address;
-      currency1: Address;
-      fee: number;
-      tickSpacing: number;
-      hooks: Address;
-    }> => {
-      const validFeeSpacings = {
-        100: 1,
-        500: 10,
-        3000: 60,
-        10000: 200
-      };
+  async (
+    token0Address: Address,
+    token1Address: Address,
+    fee: number = 3000,
+    tickSpacing: number = 60,
+    hooksAddress: Address = CONTRACT_ADDRESSES.SWAPCAST_HOOK as Address
+  ): Promise<{
+    currency0: Address;
+    currency1: Address;
+    fee: number;
+    tickSpacing: number;
+    hooks: Address;
+  }> => {
+    const validFeeSpacings = {
+      100: 1,
+      500: 10,
+      3000: 60,
+      10000: 200
+    };
 
-      if (validFeeSpacings[fee] !== tickSpacing) {
-        logWarning('PoolKey', `Fee ${fee} doesn't match tick spacing ${tickSpacing}, using correct spacing`);
-        tickSpacing = validFeeSpacings[fee] || 60;
-      }
+    if (validFeeSpacings[fee] !== tickSpacing) {
+      logWarning('PoolKey', `Fee ${fee} doesn't match tick spacing ${tickSpacing}, using correct spacing`);
+      tickSpacing = validFeeSpacings[fee] || 60;
+    }
 
-      return {
-        currency0: token0Address,
-        currency1: token1Address,
-        fee,
-        tickSpacing,
-        hooks: hooksAddress
-      };
-    },
-    'CreatePoolKey'
+    return {
+      currency0: token0Address,
+      currency1: token1Address,
+      fee,
+      tickSpacing,
+      hooks: hooksAddress
+    };
+  },
+  'CreatePoolKey'
 );
 
 /**
@@ -169,10 +170,10 @@ const createPoolKey = withErrorHandling(
  * @returns Liquidity parameters including tick range and amounts
  */
 const calculateLiquiditySimple = async (
-    amount0Desired: bigint,
-    amount1Desired: bigint, 
-    tickSpacing: number,
-    currentTick: number
+  amount0Desired: bigint,
+  amount1Desired: bigint,
+  tickSpacing: number,
+  currentTick: number
 ): Promise<{
   liquidity: bigint;
   tickLower: number;
@@ -182,20 +183,20 @@ const calculateLiquiditySimple = async (
 }> => {
   // Use a much narrower tick range
   const tickRange = tickSpacing * 5;
-  
+
   // Ensure ticks are properly aligned to tick spacing
   const tickLower = Math.floor((currentTick - tickRange) / tickSpacing) * tickSpacing;
   const tickUpper = Math.ceil((currentTick + tickRange) / tickSpacing) * tickSpacing;
-  
+
   // Scale down the liquidity to be very conservative
   const smallerAmount = amount0Desired < amount1Desired ? amount0Desired : amount1Desired;
   const liquidity = smallerAmount / 2n; // Use only half of the smaller amount
-  
+
   logSuccess('LiquidityCalculation', `Calculated liquidity: ${liquidity.toString()}`);
   logInfo('LiquidityCalculation', `Tick range: ${tickLower} to ${tickUpper} (spacing: ${tickSpacing})`);
   logInfo('LiquidityCalculation', `Amount0: ${amount0Desired.toString()}`);
   logInfo('LiquidityCalculation', `Amount1: ${amount1Desired.toString()}`);
-  
+
   return {
     liquidity,
     tickLower,
@@ -213,51 +214,49 @@ const calculateLiquiditySimple = async (
  * @returns Pool initialization data including sqrtPriceX96 and current tick
  */
 const initializePool = async (
-    token0Address: Address,
-    token1Address: Address,
-    basePrice: number
-): Promise<{
-  sqrtPriceX96: bigint;
-  currentTick: number;
-}> => {
+  token0Address: Address,
+  token1Address: Address,
+): Promise<Pool> => {
   try {
-    const token0Symbol = getTokenSymbolFromAddress(token0Address);
-    const token1Symbol = getTokenSymbolFromAddress(token1Address);
-    const poolKey = await createPoolKey(token0Address, token1Address);
-    const sqrtPriceX96 = calculateSqrtPriceX96(token0Symbol, token1Symbol, basePrice);
-    const currentTick = Math.floor(Math.log(basePrice) / Math.log(1.0001));
+    const priceService = new PriceService();
+    const token0 = await getTokenFromAddress(token0Address);
+    const token1 = await getTokenFromAddress(token1Address);
 
-    logInfo('PoolInitialization', `Initializing pool ${token0Symbol}/${token1Symbol} at price ${basePrice}`);
+    const token0Price = await priceService.getPrice(token0.symbol!);
+    const token1Price = await priceService.getPrice(token1.symbol!);
+
+    if (!token0Price || !token1Price) {
+      throw new Error(`Failed to fetch prices for tokens ${token0.symbol} and ${token1.symbol}`);
+    }
+
+    const sqrtPriceX96 = calculateSqrtPriceX96FromUSDPrices(token0Price, token1Price, token0.decimals, token1.decimals);
+    const tick = TickMath.getTickAtSqrtRatio(sqrtPriceX96);
+
+    logInfo('PoolInitialization', `Initializing pool ${token0.symbol}/${token1.symbol} with sqrtPriceX96: ${sqrtPriceX96}`);
+
+    const pool = new Pool(token0, token1, 3000, 60, CONTRACT_ADDRESSES.SWAPCAST_HOOK!, sqrtPriceX96.toString(), 0, tick);
 
     const poolManager = getPoolManager({
       address: CONTRACT_ADDRESSES.POOL_MANAGER as Address,
       chain: anvil
     });
 
-    const data = encodeFunctionData({
-      abi: poolManager.abi,
-      functionName: 'initialize',
-      args: [poolKey, sqrtPriceX96]
-    });
 
-    const defaultAccount = '0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266' as Address;
-    const publicClient = getPublicClient();
+    const tx = await poolManager.write.initialize(
+      [{
+        currency0: pool.poolKey.currency0 as `0x${string}`,
+        currency1: pool.poolKey.currency1 as `0x${string}`,
+        fee: pool.poolKey.fee,
+        tickSpacing: pool.poolKey.tickSpacing,
+        hooks: pool.poolKey.hooks as `0x${string}`
+      }, BigInt(pool.sqrtRatioX96.toString())], // Convert JSBI to bigint
+      {
+        account: ANVIL_ACCOUNTS[0].address as `0x${string}`,
+        chain: anvil
+      }
+    );
 
-    await impersonateAccount(defaultAccount);
-
-    const txHash = await publicClient.request({
-      method: 'eth_sendTransaction' as any,
-      params: [{
-        from: defaultAccount,
-        to: CONTRACT_ADDRESSES.POOL_MANAGER as Address,
-        data,
-        gas: '0x2625A0'
-      }]
-    }) as Hash;
-
-    await stopImpersonatingAccount(defaultAccount);
-
-    const receipt = await publicClient.waitForTransactionReceipt({ hash: txHash });
+    const receipt = await getPublicClient().waitForTransactionReceipt({ hash: tx });
 
     if (receipt.status !== 'success') {
       throw new Error(`Pool initialization failed with status: ${receipt.status}`);
@@ -265,24 +264,9 @@ const initializePool = async (
 
     logSuccess('PoolInitialization', `Pool initialized successfully`);
 
-    return {
-      sqrtPriceX96,
-      currentTick
-    };
+    return pool;
   } catch (error) {
-    const errorStr = String(error);
-    if (errorStr.includes('PoolAlreadyInitialized') || errorStr.includes('pool already initialized')) {
-      logWarning('PoolInitialization', 'Pool already initialized - continuing');
-      const sqrtPriceX96 = calculateSqrtPriceX96(
-          getTokenSymbolFromAddress(token0Address),
-          getTokenSymbolFromAddress(token1Address),
-          basePrice
-      );
-      const currentTick = Math.floor(Math.log(basePrice) / Math.log(1.0001));
-      return { sqrtPriceX96, currentTick };
-    }
-
-    logWarning('PoolInitialization', `Pool initialization failed: ${errorStr}`);
+    logWarning('PoolInitialization', `Pool initialization failed: ${error}`);
     throw error;
   }
 };
@@ -296,10 +280,10 @@ const initializePool = async (
  * @returns Transaction hash
  */
 const executeSimpleTransaction = async (
-    to: Address,
-    data: `0x${string}`,
-    value: bigint = 0n,
-    fromAddress: Address
+  to: Address,
+  data: `0x${string}`,
+  value: bigint = 0n,
+  fromAddress: Address
 ): Promise<Hash> => {
   try {
     const publicClient = getPublicClient();
@@ -334,10 +318,10 @@ const executeSimpleTransaction = async (
  * @returns Address of whale account
  */
 const findWhaleWithBothTokens = async (
-    token0Address: Address,
-    token1Address: Address,
-    amount0: bigint,
-    amount1: bigint
+  token0Address: Address,
+  token1Address: Address,
+  amount0: bigint,
+  amount1: bigint
 ): Promise<Address> => {
   try {
     const whale = await getBestWhaleForToken(token0Address);
@@ -362,11 +346,11 @@ const findWhaleWithBothTokens = async (
  * @param amount1 - Required amount of token1
  */
 const ensureWhaleHasTokens = async (
-    whaleAddress: Address,
-    token0Address: Address,
-    token1Address: Address,
-    amount0: bigint,
-    amount1: bigint
+  whaleAddress: Address,
+  token0Address: Address,
+  token1Address: Address,
+  amount0: bigint,
+  amount1: bigint
 ): Promise<void> => {
   try {
     const balance0 = await getTokenBalance(token0Address, whaleAddress);
@@ -398,13 +382,13 @@ const ensureWhaleHasTokens = async (
  * @returns Transaction hash of the liquidity addition
  */
 const addLiquidity = async (
-    token0Address: Address,
-    token1Address: Address,
-    basePrice: number,
-    amount0: string = '10',
-    amount1: string = '10',
-    sqrtPriceX96: bigint,
-    currentTick: number
+  token0Address: Address,
+  token1Address: Address,
+  basePrice: number,
+  amount0: string = '10',
+  amount1: string = '10',
+  sqrtPriceX96: bigint,
+  currentTick: number
 ): Promise<Hash> => {
   try {
     const poolKey = await createPoolKey(token0Address, token1Address);
@@ -412,10 +396,10 @@ const addLiquidity = async (
     const amount1Desired = parseUnits(amount1, 18);
 
     const liquidityParams = await calculateLiquiditySimple(
-        amount0Desired,
-        amount1Desired,
-        poolKey.tickSpacing,
-        currentTick
+      amount0Desired,
+      amount1Desired,
+      poolKey.tickSpacing,
+      currentTick
     );
 
     logInfo('LiquidityProvision', `Adding liquidity:`);
@@ -425,10 +409,10 @@ const addLiquidity = async (
     logInfo('LiquidityProvision', `  Ticks: ${liquidityParams.tickLower} to ${liquidityParams.tickUpper}`);
 
     const whaleAddress = await findWhaleWithBothTokens(
-        token0Address,
-        token1Address,
-        liquidityParams.amount0,
-        liquidityParams.amount1
+      token0Address,
+      token1Address,
+      liquidityParams.amount0,
+      liquidityParams.amount1
     );
 
     await ensureWhaleHasTokens(whaleAddress, token0Address, token1Address, liquidityParams.amount0, liquidityParams.amount1);
@@ -450,9 +434,9 @@ const addLiquidity = async (
     // Handle token0 - only create signature if it's not native
     if (!isToken0Native) {
       logInfo('Permit2Setup', `Creating Permit2 signature for token0 (non-native)`);
-      
+
       await fundAccountWithToken(token0Address, anvilAccount0.address, liquidityParams.amount0);
-     
+
       permit0Data = await buildSignatureTransferData(
         token0Address,
         liquidityParams.amount0,
@@ -488,79 +472,79 @@ const addLiquidity = async (
 
     if (isAnyNative) {
       actions = encodePacked(
-          ['uint8', 'uint8', 'uint8'],
-          [ACTIONS.MINT_POSITION, ACTIONS.SETTLE_PAIR, ACTIONS.SWEEP]
+        ['uint8', 'uint8', 'uint8'],
+        [ACTIONS.MINT_POSITION, ACTIONS.SETTLE_PAIR, ACTIONS.SWEEP]
       );
     } else {
       // Both tokens are ERC20, no native handling needed
       actions = encodePacked(
-          ['uint8', 'uint8'],
-          [ACTIONS.MINT_POSITION, ACTIONS.SETTLE_PAIR]
+        ['uint8', 'uint8'],
+        [ACTIONS.MINT_POSITION, ACTIONS.SETTLE_PAIR]
       );
     }
 
     params[0] = encodeAbiParameters(
-        [
-          {
-            name: 'poolKey',
-            type: 'tuple',
-            components: [
-              { name: 'currency0', type: 'address' },
-              { name: 'currency1', type: 'address' },
-              { name: 'fee', type: 'uint24' },
-              { name: 'tickSpacing', type: 'int24' },
-              { name: 'hooks', type: 'address' }
-            ]
-          },
-          { name: 'tickLower', type: 'int24' },
-          { name: 'tickUpper', type: 'int24' },
-          { name: 'liquidity', type: 'uint256' },
-          { name: 'amount0Max', type: 'uint128' },
-          { name: 'amount1Max', type: 'uint128' },
-          { name: 'owner', type: 'address' },
-          { name: 'hookData', type: 'bytes' }
-        ],
-        [
-          [poolKey.currency0, poolKey.currency1, poolKey.fee, poolKey.tickSpacing, poolKey.hooks],
-          liquidityParams.tickLower,
-          liquidityParams.tickUpper,
-          liquidityParams.liquidity,
-          liquidityParams.amount0,
-          liquidityParams.amount1,
-          anvilAccount0.address,
-          '0x'
-        ]
+      [
+        {
+          name: 'poolKey',
+          type: 'tuple',
+          components: [
+            { name: 'currency0', type: 'address' },
+            { name: 'currency1', type: 'address' },
+            { name: 'fee', type: 'uint24' },
+            { name: 'tickSpacing', type: 'int24' },
+            { name: 'hooks', type: 'address' }
+          ]
+        },
+        { name: 'tickLower', type: 'int24' },
+        { name: 'tickUpper', type: 'int24' },
+        { name: 'liquidity', type: 'uint256' },
+        { name: 'amount0Max', type: 'uint128' },
+        { name: 'amount1Max', type: 'uint128' },
+        { name: 'owner', type: 'address' },
+        { name: 'hookData', type: 'bytes' }
+      ],
+      [
+        [poolKey.currency0, poolKey.currency1, poolKey.fee, poolKey.tickSpacing, poolKey.hooks],
+        liquidityParams.tickLower,
+        liquidityParams.tickUpper,
+        liquidityParams.liquidity,
+        liquidityParams.amount0,
+        liquidityParams.amount1,
+        anvilAccount0.address,
+        '0x'
+      ]
     );
 
     params[1] = encodeAbiParameters(
-        [
-          { name: 'currency0', type: 'address' },
-          { name: 'currency1', type: 'address' }
-        ],
-        [poolKey.currency0, poolKey.currency1]
+      [
+        { name: 'currency0', type: 'address' },
+        { name: 'currency1', type: 'address' }
+      ],
+      [poolKey.currency0, poolKey.currency1]
     );
 
     // Only add SWEEP parameter if there's a native token
     if (isAnyNative) {
       const nativeCurrency = isToken0Native ? token0Address : token1Address;
       params[2] = encodeAbiParameters(
-          [
-            { name: 'currency', type: 'address' },
-            { name: 'recipient', type: 'address' }
-          ],
-          [nativeCurrency, whaleAddress]
+        [
+          { name: 'currency', type: 'address' },
+          { name: 'recipient', type: 'address' }
+        ],
+        [nativeCurrency, whaleAddress]
       );
     }
 
-    const valueToPass = isToken0Native ? amount0Desired : 
-                       (isToken1Native ? amount1Desired : 0n);
+    const valueToPass = isToken0Native ? amount0Desired :
+      (isToken1Native ? amount1Desired : 0n);
 
     const unlockData = encodeAbiParameters(
-        [
-          { name: 'actions', type: 'bytes' },
-          { name: 'params', type: 'bytes[]' }
-        ],
-        [actions, params]
+      [
+        { name: 'actions', type: 'bytes' },
+        { name: 'params', type: 'bytes[]' }
+      ],
+      [actions, params]
     );
 
     const modifyLiquiditiesData = encodeFunctionData({
@@ -575,10 +559,10 @@ const addLiquidity = async (
     logInfo('LiquidityProvision', `Calling modifyLiquidities with ETH value: ${valueToPass.toString()}`);
 
     const hash = await executeSimpleTransaction(
-        CONTRACT_ADDRESSES.POSITION_MANAGER as Address,
-        modifyLiquiditiesData,
-        valueToPass,
-        anvilAccount0.address
+      CONTRACT_ADDRESSES.POSITION_MANAGER as Address,
+      modifyLiquiditiesData,
+      valueToPass,
+      anvilAccount0.address
     );
 
     const publicClient = getPublicClient();
@@ -607,24 +591,25 @@ const addLiquidity = async (
  * @returns Transaction hash of the liquidity addition
  */
 const mintPool = async (
-    token0Address: Address,
-    token1Address: Address,
-    basePrice: number,
-    amount0: string = '10',
-    amount1: string = '10'
+  token0Address: Address,
+  token1Address: Address,
+  basePrice: number,
+  amount0: string = '10',
+  amount1: string = '10'
 ): Promise<Hash> => {
   try {
-    const { sqrtPriceX96, currentTick } = await initializePool(token0Address, token1Address, basePrice);
+    const pool = await initializePool(token0Address, token1Address);
 
-    return await addLiquidity(
-        token0Address,
-        token1Address,
-        basePrice,
-        amount0,
-        amount1,
-        sqrtPriceX96,
-        currentTick
-    );
+    // return await addLiquidity(
+    //   token0Address,
+    //   token1Address,
+    //   basePrice,
+    //   amount0,
+    //   amount1,
+    //   sqrtPriceX96,
+    //   currentTick
+    // );
+    return '0x'
   } catch (error) {
     const errorMessage = error instanceof Error ? error.message : String(error);
     logWarning('MintPool', `Failed to mint pool: ${errorMessage}`);
@@ -633,8 +618,6 @@ const mintPool = async (
 };
 
 export {
-  addLiquidity,
   createPoolKey,
-  initializePool,
   mintPool
 };
