@@ -161,7 +161,7 @@ async function setupPredictionAccounts() {
 
 	// Add whale accounts
 	for (const [key, address] of Object.entries(WHALE_ADDRESSES)) {
-		await addLiquidityForMarkets(address, 10e7);
+		await addLiquidityForMarkets(address, 500e7);
 		(allPredictionAccounts as any).push({ address });
 		console.log(chalk.green(`✅ Added whale account ${key}`));
 	}
