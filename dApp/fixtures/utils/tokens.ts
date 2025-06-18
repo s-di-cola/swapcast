@@ -61,7 +61,12 @@ export const getTokenBalance = withErrorHandling(
 );
 
 
-export async function approveToken(account: Address, tokenAddress: Address, amount: bigint) {
+export async function approveToken(
+  account: Address, 
+  tokenAddress: Address, 
+  amount: bigint, 
+  spender: Address = CONTRACT_ADDRESSES.POSITION_MANAGER as Address
+) {
   // Skip approval for native ETH
   if (tokenAddress === NATIVE_ETH_ADDRESS || tokenAddress === '0x0000000000000000000000000000000000000000') {
     logInfo('ApproveToken', `Skipping approval for native ETH`);
@@ -70,8 +75,7 @@ export async function approveToken(account: Address, tokenAddress: Address, amou
   
   const walletClient = getWalletClient(account);
   const permit2Address = CONTRACT_ADDRESSES.PERMIT2 as Address;
-  const positionManagerAddress = CONTRACT_ADDRESSES.POSITION_MANAGER as Address;
-  
+   
   try {
     // Get current block timestamp from chain
     const latestBlock = await getPublicClient().getBlock({ blockTag: 'latest' });
@@ -80,6 +84,7 @@ export async function approveToken(account: Address, tokenAddress: Address, amou
     
     logInfo('ApproveToken', `Current block timestamp: ${currentTimestamp}`);
     logInfo('ApproveToken', `Setting Permit2 expiration to: ${expiration} (1 year from now)`);
+    logInfo('ApproveToken', `Approving ${tokenAddress} for spender: ${spender}`);
     
     // Step 1: Check if token is already approved to Permit2
     const currentAllowanceToPermit2 = await getPublicClient().readContract({
@@ -126,8 +131,8 @@ export async function approveToken(account: Address, tokenAddress: Address, amou
       logInfo('ApproveToken', `✅ Token already approved to Permit2`);
     }
     
-    // Step 2: Set Permit2 allowance for Position Manager
-    logInfo('ApproveToken', `Setting Permit2 allowance for Position Manager...`);
+    // Step 2: Set Permit2 allowance for the specified spender
+    logInfo('ApproveToken', `Setting Permit2 allowance for spender: ${spender}...`);
     
     const permit2Abi = [
       {
@@ -156,7 +161,7 @@ export async function approveToken(account: Address, tokenAddress: Address, amou
       functionName: 'approve',
       args: [
         tokenAddress,
-        positionManagerAddress,
+        spender, // Use the passed spender
         permit2Amount,
         expiration
       ],
@@ -169,7 +174,7 @@ export async function approveToken(account: Address, tokenAddress: Address, amou
       throw new Error(`Permit2 approval failed with status: ${permit2Receipt.status}`);
     }
     
-    logSuccess('ApproveToken', `✅ Set Permit2 allowance for Position Manager`);
+    logSuccess('ApproveToken', `✅ Set Permit2 allowance for spender: ${spender}`);
     
     // Step 3: Verify the Permit2 allowance was set correctly
     const permit2AllowanceAbi = [
@@ -194,7 +199,7 @@ export async function approveToken(account: Address, tokenAddress: Address, amou
       address: permit2Address,
       abi: permit2AllowanceAbi,
       functionName: 'allowance',
-      args: [account, tokenAddress, positionManagerAddress],
+      args: [account, tokenAddress, spender], // Use the passed spender
     }) as [bigint, number, number];
     
     logSuccess('ApproveToken', `✅ Verified Permit2 allowance: amount=${finalAllowance[0]}, expiration=${finalAllowance[1]}, nonce=${finalAllowance[2]}`);
