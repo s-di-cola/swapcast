@@ -277,17 +277,17 @@ async function main() {
 			}
 		}
 
-		// // Generate predictions for each market
-		// const { totalSuccessful, totalFailed } = await generatePredictionsForMarkets(
-		// 	markets,
-		// 	allPredictionAccounts
-		// );
+		// Generate predictions for each market
+		const { totalSuccessful, totalFailed } = await generatePredictionsForMarkets(
+			markets,
+			allPredictionAccounts
+		);
 
-		// console.log(chalk.green('✅ Prediction generation completed!'));
-		// console.log(chalk.blue('📝 Summary:'));
-		// console.log(chalk.blue(`- Markets created: ${markets.length}`));
-		// console.log(chalk.blue(`- Successful predictions: ${totalSuccessful}`));
-		// console.log(chalk.blue(`- Failed predictions: ${totalFailed}`));
+		console.log(chalk.green('✅ Prediction generation completed!'));
+		console.log(chalk.blue('📝 Summary:'));
+		console.log(chalk.blue(`- Markets created: ${markets.length}`));
+		console.log(chalk.blue(`- Successful predictions: ${totalSuccessful}`));
+		console.log(chalk.blue(`- Failed predictions: ${totalFailed}`));
 
 		// 🔍 RUN COMPREHENSIVE DIAGNOSTICS
 		console.log(chalk.blue('\n🔍 Running post-generation diagnostics...'));

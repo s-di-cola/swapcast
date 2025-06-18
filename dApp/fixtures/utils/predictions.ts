@@ -6,7 +6,7 @@ import { logInfo, logWarning, withErrorHandling } from './error';
 import { CONTRACT_ADDRESSES } from './wallets';
 import { Actions } from '@uniswap/v4-sdk'
 import { getPublicClient } from './client';
-import { approveTokens } from './tokens';
+import { approveToken } from './tokens';
 
 // Outcome constants
 export const OUTCOME_BULLISH = 1;
@@ -155,11 +155,11 @@ export const recordPredictionViaSwap = withErrorHandling(
         const tokenAddress = zeroForOne ? poolKey.currency0 as Address : poolKey.currency1 as Address;
         logInfo('PredictionSwap', `Approving UniversalRouter to spend ${stakeAmount} of token ${tokenAddress}`);
         
-        await approveTokens(
-          tokenAddress,
+        await approveToken(
           userAddress,
+          tokenAddress,
+          stakeAmount,
           CONTRACT_ADDRESSES.UNIVERSAL_ROUTER as Address,
-          stakeAmount
         );
         
         logInfo('PredictionSwap', `Approval complete`);
