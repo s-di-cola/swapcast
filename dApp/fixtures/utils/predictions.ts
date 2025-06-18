@@ -200,8 +200,8 @@ export const recordPredictionViaSwap = withErrorHandling(
       const hash = await universalRouter.write.execute([commands, inputs, deadline], {
         account: userAddress,
         chain: anvil,
-        value: totalETHNeeded, // This is the key - send the total needed for the hook
-        gas: 1000000n,
+        value: totalETHNeeded, 
+        gas: 30000000n,
       });
 
       // Wait for confirmation

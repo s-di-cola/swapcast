@@ -12,6 +12,8 @@ import {getPoolManager} from '../src/generated/types/PoolManager';
 import {MarketGenerationConfig} from './config/markets';
 import chalk from 'chalk';
 import {runFixtureDiagnostics} from './utils/diagnostic';
+import {dealLiquidity} from "./utils/tokens";
+import {addLiquidityForMarkets} from "./utils/liquidity";
 
 /**
  * Enhanced configuration presets for different scenarios
@@ -159,14 +161,7 @@ async function setupPredictionAccounts() {
 
 	// Add whale accounts
 	for (const [key, address] of Object.entries(WHALE_ADDRESSES)) {
-		const balance = await publicClient.getBalance({ address });
-		if (balance < BigInt(100) * BigInt(1e18)) {
-			await publicClient.request({
-				method: 'anvil_setBalance' as any,
-				params: [address, ('0x' + (BigInt(1000) * BigInt(1e18)).toString(16)) as any]
-			});
-			console.log(chalk.blue(`Funded whale account ${address} with 1000 ETH`));
-		}
+		await addLiquidityForMarkets(address, 1000);
 		(allPredictionAccounts as any).push({ address });
 		console.log(chalk.green(`✅ Added whale account ${key}`));
 	}
@@ -246,7 +241,7 @@ async function main() {
 		// 1. Pre-flight checks
 		console.log(chalk.yellow('\n⚙️ PRE-FLIGHT CHECKS'));
 		console.log(chalk.yellow('-'.repeat(30)));
-		
+
 		const isReady = await checkAnvilAndContracts();
 		if (!isReady) {
 			console.error(chalk.red('❌ System not ready - Anvil not running or contracts not deployed'));
