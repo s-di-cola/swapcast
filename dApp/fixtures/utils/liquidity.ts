@@ -43,7 +43,7 @@ const initializePool = async (
       throw new Error(`Failed to fetch prices for tokens ${token0.symbol} and ${token1.symbol}`);
     }
 
-    const sqrtPriceX96 = calculateSqrtPriceX96FromUSDPrices(token0Price, token1Price, token0.decimals, token1.decimals);
+    const sqrtPriceX96 = calculateSqrtPriceX96FromUSDPrices(token0Price, token1Price);
     const tick = TickMath.getTickAtSqrtRatio(sqrtPriceX96);
 
     logInfo('PoolInitialization', `Initializing pool ${token0.symbol}/${token1.symbol} with sqrtPriceX96: ${sqrtPriceX96}`);
@@ -197,6 +197,7 @@ const addLiquidity = async (pool: Pool): Promise<void> => {
     }
     logSuccess('LiquidityProvision', `Liquidity added successfully!`);
     await logPoolLiquidity(pool);
+    await logPoolState(pool);
   } catch (error) {
     const errorMessage = error instanceof Error ? error.message : String(error);
     logWarning('LiquidityProvision', `Failed to add liquidity: ${errorMessage}`);
@@ -219,6 +220,21 @@ async function logPoolLiquidity(pool: Pool) {
   
   logInfo('LogPoolLiquidity', `Liquidity: ${liquidityStr} (${formatted} units)`);
   logSuccess('LogPoolLiquidity', `✅ Pool has substantial liquidity!`);
+}
+
+
+
+async function logPoolState(pool: Pool) {
+  logInfo('LogPoolState', `Checking state for pool ${pool.poolKey.currency0}/${pool.poolKey.currency1}`);
+  const stateview = getStateView({
+    address: CONTRACT_ADDRESSES.STATE_VIEW as Address,
+    chain: anvil
+  });
+
+  const state = await stateview.read.getSlot0([pool.poolId as `0x${string}`]);
+
+  logInfo('LogPoolState', `State: ${state.map((value) => value.toString())}`);
+  logSuccess('LogPoolState', `✅ Pool state checked!`);
 }
 
 
