@@ -1,4 +1,4 @@
-import { type Address, formatEther, parseEther } from 'viem';
+import { type Address, formatEther, parseEther, getAddress } from 'viem';
 import { getPublicClient } from './client';
 import { getTokenBalance, isNativeEth } from './tokens';
 import { logInfo, logSuccess, logWarning } from './error';
@@ -9,18 +9,18 @@ import { TOKEN_CONFIGS } from '../config/tokens';
  */
 export const WHALE_ACCOUNTS: Record<string, Address> = {
     // The GOOD whale that has everything
-    BINANCE_MAIN: '0x28C6c06298d514db089934071355e5743bf21d60',
+    BINANCE_MAIN: getAddress('0x28C6c06298d514db089934071355e5743bf21d60'),
     
     // Other whales
-    BINANCE_COLD: '0xdfd5293d8e347dfe59e90efd55b2956a1343963d',
-    JUMPTRADING: '0xf977814e90da44bfa03b6295a0616a897441acec',
-    COINBASE_1: '0x71660c4005ba85c37ccec55d0c4493e66fe775d3',
-    COINBASE_2: '0x503828976d22510aad0201ac7ec88293211d23da',
-    KRAKEN_1: '0x2910543af39aba0cd09dbb2d50200b3e800a63d2',
-    KRAKEN_2: '0x0a869d79a7052c7f1b55a8ebabbea3420f0d1e13',
-    CUMBERLAND: '0x176f3dab24a159341c0509bb36b833e7fdd0a132',
-    ETHEREUM_FOUNDATION: '0xde0b295669a9fd93d5f28d9ec85e40f4cb697bae',
-    ALAMEDA: '0x477573f212a7bdd5f7c12889bd1ad0aa44fb82aa'
+    BINANCE_COLD: getAddress('0xdfd5293d8e347dfe59e90efd55b2956a1343963d'),
+    JUMPTRADING: getAddress('0xf977814e90da44bfa03b6295a0616a897441acec'),
+    COINBASE_1: getAddress('0x71660c4005ba85c37ccec55d0c4493e66fe775d3'),
+    COINBASE_2: getAddress('0x503828976d22510aad0201ac7ec88293211d23da'),
+    KRAKEN_1: getAddress('0x2910543af39aba0cd09dbb2d50200b3e800a63d2'),
+    KRAKEN_2: getAddress('0x0a869d79a7052c7f1b55a8ebabbea3420f0d1e13'),
+    CUMBERLAND: getAddress('0x176f3dab24a159341c0509bb36b833e7fdd0a132'),
+    ETHEREUM_FOUNDATION: getAddress('0xde0b295669a9fd93d5f28d9ec85e40f4cb697bae'),
+    ALAMEDA: getAddress('0x477573f212a7bdd5f7c12889bd1ad0aa44fb82aa')
 };
 
 /**
