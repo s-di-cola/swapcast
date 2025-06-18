@@ -187,8 +187,8 @@ const addLiquidity = async (pool: Pool): Promise<void> => {
     const positionParams = getPositionParams(pool);
     const token0Address = pool.token0.isToken ? pool.token0.address : NATIVE_ETH_ADDRESS;
     const token1Address = pool.token1.isToken ? pool.token1.address : NATIVE_ETH_ADDRESS;
-    const amount0 = parseUnits(positionParams.amount0, pool.token0.decimals);
-    const amount1 = parseUnits(positionParams.amount1, pool.token1.decimals);
+    const amount0 = BigInt(positionParams.amount0)
+    const amount1 = BigInt(positionParams.amount1)
 
     const liquidityProvider = ANVIL_ACCOUNTS[1].address;
     await dealLiquidity(liquidityProvider, token0Address as Address, token1Address as Address, amount0, amount1);
