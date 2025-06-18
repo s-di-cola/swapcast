@@ -256,16 +256,16 @@ async function logPoolState(pool: Pool) {
  * Creates a pool and adds initial liquidity
  * @param token0Address - Address of the first token
  * @param token1Address - Address of the second token
- * @returns Transaction hash of the liquidity addition
+ * @returns The created pool
  */
 const mintPool = async (
   token0Address: Address,
   token1Address: Address,
-): Promise<PoolKey> => {
+): Promise<Pool> => {
   try {
     const pool = await initializePool(token0Address, token1Address);
     await addLiquidity(pool);
-    return pool.poolKey;
+    return pool;
   } catch (error) {
     const errorMessage = error instanceof Error ? error.message : String(error);
     logWarning('MintPool', `Failed to mint pool: ${errorMessage}`);
