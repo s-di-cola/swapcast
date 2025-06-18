@@ -83,7 +83,12 @@ const initializePool = async (
   }
 };
 
-
+/**
+ * Get position parameters for a given pool
+ * 
+ * @param pool  The pool to get position parameters for 
+ * @returns Position parameters
+ */
 function getPositionParams(pool: Pool): {
   tickLower: number;
   tickUpper: number;
@@ -205,6 +210,11 @@ const addLiquidity = async (pool: Pool): Promise<void> => {
   }
 };
 
+
+/**
+ * Logs the liquidity for a given pool
+ * @param pool The pool to log liquidity for
+ */
 async function logPoolLiquidity(pool: Pool) {
   logInfo('LogPoolLiquidity', `Checking liquidity for pool ${pool.poolKey.currency0}/${pool.poolKey.currency1}`);
   const stateview = getStateView({
@@ -213,17 +223,20 @@ async function logPoolLiquidity(pool: Pool) {
   });
 
   const liquidity = await stateview.read.getLiquidity([pool.poolId as `0x${string}`]);
-  
+
   // Format the number for readability
   const liquidityStr = liquidity.toString();
   const formatted = Number(liquidityStr).toLocaleString();
-  
+
   logInfo('LogPoolLiquidity', `Liquidity: ${liquidityStr} (${formatted} units)`);
   logSuccess('LogPoolLiquidity', `✅ Pool has substantial liquidity!`);
 }
 
 
-
+/**
+ * Logs the state for a given pool
+ * @param pool The pool to log state for
+ */
 async function logPoolState(pool: Pool) {
   logInfo('LogPoolState', `Checking state for pool ${pool.poolKey.currency0}/${pool.poolKey.currency1}`);
   const stateview = getStateView({
