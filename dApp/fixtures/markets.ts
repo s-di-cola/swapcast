@@ -11,6 +11,7 @@ import { sortTokenAddresses } from './utils/helpers';
 import { mintPool } from './utils/liquidity';
 import { TokenInfo } from './utils/tokens';
 import { CONTRACT_ADDRESSES } from './utils/wallets';
+import { Pool } from '@uniswap/v4-sdk';
 
 export interface MarketCreationResult {
     id: string;
@@ -28,6 +29,7 @@ export interface MarketCreationResult {
     token1: TokenInfo;
     priceConfidence: string;
     category: string;
+    pool: Pool; // Add the pool object for direct access
 }
 
 /**
@@ -53,7 +55,7 @@ function tokenConfigToInfo(symbol: string): TokenInfo {
  * Creates prediction market for the pool
  * @param predictionManager - The prediction manager contract instance
  * @param request - The market request configuration
- * @param poolKey - The pool key configuration
+ * @param pool - The pool object containing all pool information
  * @param adminClient - The wallet client with admin permissions
  * @param token0Info - Information about token0
  * @param token1Info - Information about token1
@@ -63,13 +65,7 @@ const createPredictionMarket = withErrorHandling(
     async (
         predictionManager: ReturnType<typeof getPredictionManager>,
         request: MarketRequest,
-        poolKey: {
-            currency0: Address;
-            currency1: Address;
-            fee: number;
-            tickSpacing: number;
-            hooks: Address;
-        },
+        pool: Pool,
         adminClient: WalletClient,
         token0Info: TokenInfo,
         token1Info: TokenInfo
@@ -88,6 +84,15 @@ const createPredictionMarket = withErrorHandling(
         if (!adminClient.account) {
             throw new Error('No account available in admin client');
         }
+
+        // Use the pool's poolKey directly
+        const poolKey = {
+            currency0: pool.poolKey.currency0 as Address,
+            currency1: pool.poolKey.currency1 as Address,
+            fee: pool.poolKey.fee,
+            tickSpacing: pool.poolKey.tickSpacing,
+            hooks: pool.poolKey.hooks as Address
+        };
 
         // Based on the contract ABI, createMarket expects:
         // - name (string)
@@ -108,7 +113,7 @@ const createPredictionMarket = withErrorHandling(
                 CONTRACT_ADDRESSES.ORACLE_RESOLVER as Address,
                 // Price threshold
                 priceThreshold,
-                // Pool key
+                // Pool key from the actual pool
                 poolKey
             ],
             {
@@ -178,11 +183,13 @@ const createSingleMarketFromRequest = async (
 
             logInfo('MarketCreation', `Base price: ${basePrice}`);
 
-            // Initialize pool and mint liquidity in 
-            const poolKey = await mintPool(
+            // Initialize pool and mint liquidity - this returns a Pool object
+            const pool = await mintPool(
                 token0Address,
                 token1Address,
             );
+
+            logInfo('MarketCreation', `Pool created with ID: ${pool.poolId}`);
 
             // Calculate expiration time based on request's expirationDays or default to 7 days
             const expirationDays = request.expirationDays || 7;
@@ -192,28 +199,35 @@ const createSingleMarketFromRequest = async (
             const priceThresholdPercentage = Math.floor((request.priceThresholdMultiplier - 1) * 100);
             const priceThreshold = BigInt(priceThresholdPercentage);
 
-            // Create prediction market with token info
+            // Create prediction market with pool information
             const marketHash = await createPredictionMarket(
                 predictionManager,
                 request,
-                { currency0: token0Address, currency1: token1Address, fee: 3000, tickSpacing: 60, hooks: CONTRACT_ADDRESSES.SWAPCAST_HOOK as Address },
+                pool,
                 adminClient,
                 token0,
                 token1
             );
             logInfo('MarketCreation', `Market transaction hash: ${marketHash}`);
 
-            // Return market info
+            // Return market info with the pool object
             return {
                 id: `${marketId}`,
                 name: `${token0.symbol}/${token1.symbol}`,
-                poolKey: { currency0: token0Address, currency1: token1Address, fee: 3000, tickSpacing: 60, hooks: CONTRACT_ADDRESSES.SWAPCAST_HOOK as Address },
+                poolKey: {
+                    currency0: pool.poolKey.currency0 as Address,
+                    currency1: pool.poolKey.currency1 as Address,
+                    fee: pool.poolKey.fee,
+                    tickSpacing: pool.poolKey.tickSpacing,
+                    hooks: pool.poolKey.hooks as Address
+                },
                 expirationTime,
                 priceThreshold,
                 token0,
                 token1,
                 priceConfidence: request.priceConfidence || 'medium',
-                category: request.category || 'unknown'
+                category: request.category || 'unknown',
+                pool // Include the actual pool object
             };
         } catch (error) {
             logWarning('MarketCreation', `Failed to create market #${marketId}: ${error instanceof Error ? error.message : String(error)}`);

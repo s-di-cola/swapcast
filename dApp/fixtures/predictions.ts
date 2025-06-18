@@ -94,7 +94,7 @@ const calculateStakeAmount = withErrorHandling(
 const getProtocolConfig = withErrorHandling(
 	async (): Promise<{ protocolFeeBasisPoints: bigint; minStakeAmount: bigint }> => {
 		const predictionManager = getContract(
-			getPredictionManager, 
+			getPredictionManager,
 			CONTRACT_ADDRESSES.PREDICTION_MANAGER as Address
 		);
 
@@ -115,7 +115,7 @@ const validateMarket = withErrorHandling(
 	async (market: MarketCreationResult): Promise<boolean> => {
 		const publicClient = getPublicClient();
 		const predictionManager = getContract(
-			getPredictionManager, 
+			getPredictionManager,
 			CONTRACT_ADDRESSES.PREDICTION_MANAGER as Address
 		);
 
@@ -147,27 +147,24 @@ const validateMarket = withErrorHandling(
 
 			// Check if market is active
 			const currentTimestamp = BigInt(Math.floor(Date.now() / 1000));
-			
+
 			if (expirationTime <= currentTimestamp) {
 				logWarning('MarketValidation', `Market ${market.id} has expired`);
 				return false;
 			}
-			
+
 			// Check if market has been resolved
 			if (resolved) {
 				logWarning('MarketValidation', `Market ${market.id} has already been resolved`);
 				return false;
 			}
-			
-			// For now, we'll skip the pool check since we don't have poolId in the market details
-			// We would need to get the pool ID from elsewhere or modify the contract to include it
-			const poolExists = true; // Assume pool exists for now
-			
-			if (!poolExists) {
+
+			// Pool validation using the pool object from the market
+			if (!market.pool || !market.pool.poolId) {
 				logWarning('MarketValidation', `Market ${market.id} has an invalid pool`);
 				return false;
 			}
-			
+
 			logInfo('MarketValidation', `Market ${market.id} is valid and active`);
 			return true;
 		} catch (error) {
@@ -179,48 +176,7 @@ const validateMarket = withErrorHandling(
 );
 
 /**
- * Gets latest pool key for market
- */
-const getLatestPoolKey = withErrorHandling(
-	async (marketId: string | bigint) => {
-		const predictionManager = getContract(
-			getPredictionManager, 
-			CONTRACT_ADDRESSES.PREDICTION_MANAGER as Address
-		);
-		
-		// Get market details
-		const marketDetails = await predictionManager.read.getMarketDetails([BigInt(marketId.toString())]);
-		
-		// Destructure the array to get the specific fields we need
-		const [
-			_marketId,
-			name,
-			assetSymbol,
-			exists,
-			resolved,
-			winningOutcome,
-			totalConvictionStakeOutcome0,
-			totalConvictionStakeOutcome1,
-			expirationTime,
-			priceAggregator,
-			priceThreshold
-		] = marketDetails;
-		
-		// Since we don't have direct access to poolKey in the market details,
-		// we construct a pool key using the available market information
-		return {
-			currency0: TOKEN_ADDRESSES.USDC as Address,
-			currency1: TOKEN_ADDRESSES.ETH as Address,
-			fee: 3000,
-			tickSpacing: 60,
-			hooks: CONTRACT_ADDRESSES.SWAPCAST_HOOK as Address
-		};
-	},
-	'GetLatestPoolKey'
-);
-
-/**
- * Enhanced single prediction recording with correct fee calculation
+ * Enhanced single prediction recording with direct pool access
  */
 const recordSinglePredictionImpl = async (
 	userAccount: UserAccount,
@@ -236,31 +192,33 @@ const recordSinglePredictionImpl = async (
 			logWarning('PredictionRecording', `Market ${market.id} is not valid for predictions`);
 			return false;
 		}
-		
-		// Get latest pool key (in case it changed)
-		const poolKey = await getLatestPoolKey(market.id);
-		
+
+		// Use the pool key directly from the market (no need to regenerate)
+		const poolKey = market.poolKey;
+
+		logInfo('PredictionRecording', `Using pool key from market: ${JSON.stringify(poolKey)}`);
+
 		// Calculate stake amount based on user type
 		const baseStakeAmount = await calculateStakeAmount(userAccount.address, protocolConfig.minStakeAmount);
-		
+
 		// Calculate exact fee
 		const { fee, total: totalAmount } = await calculateCorrectFee(baseStakeAmount);
-		
+
 		// Check user balance
 		const userBalance = await getUserBalance(userAccount.address);
-		
+
 		if (userBalance < totalAmount) {
 			logWarning('PredictionRecording', `User ${userAccount.address} has insufficient balance: ${formatEther(userBalance)} ETH`);
 			return false;
 		}
-		
+
 		// Randomly select outcome (bullish or bearish)
 		const outcome = Math.random() > 0.5 ? OUTCOME_BULLISH : OUTCOME_BEARISH;
-		
+
 		// Create wallet client for user
 		const userClient = await getWalletClient(userAccount.address);
-		
-		// Record prediction via swap
+
+		// Record prediction via swap using the poolKey from the market
 		const hash = await recordPredictionViaSwap(
 			userClient,
 			userAccount.address,
@@ -269,9 +227,9 @@ const recordSinglePredictionImpl = async (
 			outcome,
 			baseStakeAmount
 		);
-		
+
 		logSuccess('PredictionRecording', `Recorded ${outcome === OUTCOME_BULLISH ? 'BULLISH' : 'BEARISH'} prediction for market ${market.id} with ${formatEther(baseStakeAmount)} ETH (tx: ${hash.slice(0, 10)}...)`);
-		
+
 		return true;
 	} catch (error) {
 		logWarning('PredictionRecording', `Attempt ${attemptNumber}/${totalAttempts} failed: ${error instanceof Error ? error.message : String(error)}`);
@@ -312,21 +270,22 @@ const generatePredictions = withErrorHandling(
 	): Promise<number> => {
 		// Get protocol configuration
 		const protocolConfig = await getProtocolConfig();
-		
+
 		logInfo('PredictionGeneration', `Generating ${count} predictions for market ${market.id} (${market.name})`);
-		
+		logInfo('PredictionGeneration', `Pool details: ${market.pool ? `ID: ${market.pool.poolId}` : 'No pool info'}`);
+
 		// Shuffle user accounts to distribute predictions
 		const shuffledAccounts = [...userAccounts].sort(() => Math.random() - 0.5);
-		
+
 		// Track successful predictions
 		let successCount = 0;
-		
+
 		// Record predictions
 		for (let i = 0; i < count && i < shuffledAccounts.length; i++) {
 			const userAccount = shuffledAccounts[i];
-			
+
 			logInfo('PredictionGeneration', `Recording prediction ${i + 1}/${count} for market ${market.id} with user ${userAccount.address.slice(0, 10)}...`);
-			
+
 			const success = await recordSinglePrediction(
 				userAccount,
 				market,
@@ -334,19 +293,19 @@ const generatePredictions = withErrorHandling(
 				i + 1,
 				count
 			);
-			
+
 			if (success) {
 				successCount++;
 			}
-			
+
 			// Add small delay between predictions to avoid nonce issues
 			if (i < count - 1) {
 				await new Promise(resolve => setTimeout(resolve, 500));
 			}
 		}
-		
+
 		logSuccess('PredictionGeneration', `Generated ${successCount}/${count} predictions for market ${market.id}`);
-		
+
 		return successCount;
 	},
 	'GeneratePredictions'
@@ -361,41 +320,42 @@ export const generatePredictionsForMarkets = withErrorHandling(
 		allPredictionAccounts: UserAccount[]
 	): Promise<{ totalSuccessful: number; totalFailed: number }> => {
 		logInfo('PredictionGeneration', `Generating predictions for ${markets.length} markets with ${allPredictionAccounts.length} accounts`);
-		
+
 		// Calculate predictions per market based on configuration
 		const baseCount = CONFIG.PREDICTIONS_PER_MARKET || 5;
 		const variability = CONFIG.PREDICTION_COUNT_VARIABILITY || 3;
-		
+
 		let totalSuccessful = 0;
 		let totalFailed = 0;
-		
+
 		// Process each market
 		for (let i = 0; i < markets.length; i++) {
 			const market = markets[i];
-			
+
 			// Calculate random count with variability
 			const predictionsForMarket = baseCount + Math.floor(Math.random() * variability);
-			
+
 			logInfo('PredictionGeneration', `Market ${i + 1}/${markets.length}: ${market.name} - Generating ${predictionsForMarket} predictions`);
-			
+			logInfo('PredictionGeneration', `Market has pool: ${market.pool ? 'Yes' : 'No'}`);
+
 			// Generate predictions for this market
 			const successCount = await generatePredictions(
 				market,
 				allPredictionAccounts,
 				predictionsForMarket
 			);
-			
+
 			totalSuccessful += successCount;
 			totalFailed += (predictionsForMarket - successCount);
-			
+
 			// Add delay between markets
 			if (i < markets.length - 1) {
 				await new Promise(resolve => setTimeout(resolve, 1000));
 			}
 		}
-		
+
 		logSuccess('PredictionGeneration', `Total predictions: ${totalSuccessful} successful, ${totalFailed} failed`);
-		
+
 		return { totalSuccessful, totalFailed };
 	},
 	'GeneratePredictionsForMarkets'
