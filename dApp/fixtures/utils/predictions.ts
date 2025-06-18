@@ -5,28 +5,24 @@ import { getContract, impersonateAccount, stopImpersonatingAccount } from './cli
 import { logInfo, logWarning, withErrorHandling } from './error';
 import { CONTRACT_ADDRESSES } from './wallets';
 import { getPublicClient } from './client';
-import { approveToken } from './tokens';
+import { approveToken, NATIVE_ETH_ADDRESS } from './tokens';
+import { getIV4Router, IV4RouterAbi } from '../../src/generated/types/IV4Router';
 
 // Outcome constants
 export const OUTCOME_BULLISH = 1;
 export const OUTCOME_BEARISH = 0;
 
-// Universal Router command constants
-const V4_SWAP_COMMAND = 0x0B;
+// Universal Router command constants (from Uniswap documentation)
+const V4_SWAP_COMMAND = 0x10; // Commands.V4_SWAP
 
-// V4Router action constants (from Uniswap V4 SDK)
-const SWAP_EXACT_IN_SINGLE = 0;
-const SETTLE_ALL = 1;
-const TAKE_ALL = 2;
+// V4Router action constants (from Uniswap V4 documentation)
+const SWAP_EXACT_IN_SINGLE = 0x06;
+const SETTLE_ALL = 0x0c; 
+const TAKE_ALL = 0x0f;
+
 
 /**
  * Creates properly formatted hookData for the SwapCastHook
- * According to the hook contract, it expects:
- * - bytes 0-19: actualUser (address) - 20 bytes
- * - bytes 20-51: marketId (uint256) - 32 bytes  
- * - bytes 52: outcome (uint8) - 1 byte
- * - bytes 53-68: convictionStake (uint128) - 16 bytes
- * Total: 69 bytes (PREDICTION_HOOK_DATA_LENGTH)
  */
 function createPredictionHookData(
   userAddress: Address,
@@ -34,30 +30,22 @@ function createPredictionHookData(
   outcome: number,
   stakeAmount: bigint
 ): `0x${string}` {
-  // Ensure stake amount fits in uint128 (16 bytes)
   const maxUint128 = (2n ** 128n) - 1n;
   if (stakeAmount > maxUint128) {
     throw new Error(`Stake amount ${stakeAmount} exceeds uint128 maximum`);
   }
 
-  // Encode using encodePacked for exact byte layout expected by the hook
   const hookData = encodePacked(
     ['address', 'uint256', 'uint8', 'uint128'],
     [userAddress, marketId, outcome, stakeAmount]
   );
 
-  logInfo('HookData', `Created hookData: ${hookData} (length: ${(hookData.length - 2) / 2} bytes)`);
-  logInfo('HookData', `  User: ${userAddress}`);
-  logInfo('HookData', `  MarketId: ${marketId}`);
-  logInfo('HookData', `  Outcome: ${outcome}`);
-  logInfo('HookData', `  Stake: ${stakeAmount}`);
-
+  logInfo('HookData', `Created hookData: ${hookData}`);
   return hookData;
 }
 
 /**
  * Calculate the total ETH amount needed for prediction
- * This must match exactly what PredictionManager.recordPrediction expects
  */
 function calculateTotalETHNeeded(stakeAmount: bigint, feeBasisPoints: bigint): bigint {
   const MAX_BASIS_POINTS = 10000n;
@@ -70,11 +58,10 @@ function calculateTotalETHNeeded(stakeAmount: bigint, feeBasisPoints: bigint): b
 
 /**
  * Records a prediction via a swap transaction using the Universal Router
- * This function creates a minimal swap that triggers the SwapCastHook to record a prediction
+ * 
  */
 export const recordPredictionViaSwap = withErrorHandling(
   async (
-    walletClient: WalletClient,
     userAddress: Address,
     poolKey: {
       currency0: Address;
@@ -90,45 +77,52 @@ export const recordPredictionViaSwap = withErrorHandling(
 
     const universalRouter = getContract(getIUniversalRouter, CONTRACT_ADDRESSES.UNIVERSAL_ROUTER as Address);
     
-    // Get the protocol fee basis points from the contract
-    // We'll use the deployed value: 200 basis points (2%)
     const PROTOCOL_FEE_BASIS_POINTS = 200n;
-    
-    // Calculate the total ETH needed (stake + fee) - this is what PredictionManager expects
     const totalETHNeeded = calculateTotalETHNeeded(stakeAmount, PROTOCOL_FEE_BASIS_POINTS);
     
-    // Prepare swap parameters
-    const zeroForOne = outcome === OUTCOME_BEARISH; // Direction of swap based on outcome
-
-    // Create properly formatted hookData for the SwapCastHook
+    // Determine swap direction based on outcome
+    const zeroForOne = outcome === OUTCOME_BEARISH;
+    
+    // Create hookData for the SwapCastHook
     const hookData = createPredictionHookData(userAddress, marketId, outcome, stakeAmount);
 
-    logInfo(
-      'PredictionSwap',
-      `Recording ${outcome === OUTCOME_BULLISH ? 'BULLISH' : 'BEARISH'} prediction for market ${marketId.toString()}`
-    );
-    logInfo('PredictionSwap', `Stake amount: ${stakeAmount} wei`);
-    logInfo('PredictionSwap', `Total ETH needed (stake + fee): ${totalETHNeeded} wei`);
+    logInfo('PredictionSwap', `Recording ${outcome === OUTCOME_BULLISH ? 'BULLISH' : 'BEARISH'} prediction`);
+    
+    
+    try {
+      await impersonateAccount(userAddress);
 
-    // Define the Universal Router commands
-    // V4_SWAP command (0x0B) as per Universal Router documentation
-    const commands = encodePacked(['uint8'], [V4_SWAP_COMMAND]);
+      // Check balance
+      const balance = await getPublicClient().getBalance({ address: userAddress });
+      if (balance < totalETHNeeded) {
+        throw new Error(`Insufficient balance. Need: ${totalETHNeeded}, Have: ${balance}`);
+      }
 
-    // For the actual swap, we use a minimal amount since this is just to trigger the hook
-    // The hook will receive the full totalETHNeeded as msg.value
-    const minimalSwapAmount = 1n; // 1 wei for the actual swap
+      // Handle token approvals if needed (for non-ETH tokens)
+      const inputCurrency = zeroForOne ? poolKey.currency0 : poolKey.currency1;
+      if (inputCurrency.toLowerCase() !== NATIVE_ETH_ADDRESS) {
+        await approveToken(
+          userAddress,
+          inputCurrency,
+          stakeAmount,
+          CONTRACT_ADDRESSES.UNIVERSAL_ROUTER as Address,
+        );
+      }
 
-    // Encode V4Router actions according to the official documentation format
-    const actions = encodePacked(
-      ['uint8', 'uint8', 'uint8'],
-      [SWAP_EXACT_IN_SINGLE, SETTLE_ALL, TAKE_ALL]
-    );
+      // Step 1: Encode the Universal Router command (V4_SWAP)
+      const commands = encodePacked(['uint8'], [V4_SWAP_COMMAND]);
 
-    // Prepare parameters for each action according to the official Uniswap documentation
-    // Each parameter should be ABI-encoded separately
-    const params = [
-      // First parameter: ExactInputSingleParams struct
-      encodeAbiParameters(
+      // Step 2: Encode V4Router actions according to documentation
+      const actions = encodePacked(
+        ['uint8', 'uint8', 'uint8'],
+        [SWAP_EXACT_IN_SINGLE, SETTLE_ALL, TAKE_ALL]
+      );
+
+      // Step 3: Prepare parameters for each action
+      const params = new Array(3);
+
+      // First parameter: ExactInputSingleParams for SWAP_EXACT_IN_SINGLE
+      params[0] = encodeAbiParameters(
         [
           {
             name: 'poolKey',
@@ -142,8 +136,8 @@ export const recordPredictionViaSwap = withErrorHandling(
             ]
           },
           { name: 'zeroForOne', type: 'bool' },
-          { name: 'amountIn', type: 'uint256' },
-          { name: 'amountOutMinimum', type: 'uint256' },
+          { name: 'amountIn', type: 'uint128' },
+          { name: 'amountOutMinimum', type: 'uint128' },
           { name: 'hookData', type: 'bytes' }
         ],
         [
@@ -155,122 +149,75 @@ export const recordPredictionViaSwap = withErrorHandling(
             hooks: poolKey.hooks
           },
           zeroForOne,
-          minimalSwapAmount,
-          BigInt(0), // amountOutMinimum
+          stakeAmount,
+          BigInt(0), // amountOutMinimum - accept any amount out
           hookData
         ]
-      ),
+      );
 
-      // Second parameter: SETTLE_ALL - currency and amount
-      encodeAbiParameters(
+      // Second parameter: SETTLE_ALL - specify input currency and amount
+      params[1] = encodeAbiParameters(
         [
           { name: 'currency', type: 'address' },
           { name: 'amount', type: 'uint256' }
         ],
         [
-          zeroForOne ? poolKey.currency0 : poolKey.currency1,
-          minimalSwapAmount
+          zeroForOne ? poolKey.currency0 : poolKey.currency1, // Input currency
+          stakeAmount // Input amount
         ]
-      ),
+      );
 
-      // Third parameter: TAKE_ALL - currency and amount
-      encodeAbiParameters(
+      // Third parameter: TAKE_ALL - specify output currency (amount is 0 for take all)
+      params[2] = encodeAbiParameters(
         [
           { name: 'currency', type: 'address' },
           { name: 'amount', type: 'uint256' }
         ],
         [
-          zeroForOne ? poolKey.currency1 : poolKey.currency0,
-          BigInt(0)
+          zeroForOne ? poolKey.currency1 : poolKey.currency0, // Output currency
+          BigInt(0) // Amount 0 means take all available
         ]
-      )
-    ];
+      );
 
-    // According to the documentation, inputs should be: 
-    // inputs[0] = abi.encode(actions, params)
-    const inputs = [
-      encodeAbiParameters(
-        [
-          { name: 'actions', type: 'bytes' },
-          { name: 'params', type: 'bytes[]' }
-        ],
-        [actions, params]
-      )
-    ];
+      // Step 4: Combine actions and params into inputs
+      const inputs = [
+        encodeAbiParameters(
+          [
+            { name: 'actions', type: 'bytes' },
+            { name: 'params', type: 'bytes[]' }
+          ],
+          [actions, params]
+        )
+      ];
 
-    // Set deadline (60 seconds from now)
-    const deadline = BigInt(Math.floor(Date.now() / 1000) + 60);
+      // Step 5: Set deadline
+      const deadline = BigInt(Math.floor(Date.now() / 1000) + 60);
 
-    // Check if we're dealing with ETH (native token) or an ERC20
-    const ZERO_ADDRESS = '0x0000000000000000000000000000000000000000';
-    const inputTokenAddress = zeroForOne ? poolKey.currency0 : poolKey.currency1;
-    const isNativeToken = inputTokenAddress.toLowerCase() === ZERO_ADDRESS;
-    
-    logInfo('PredictionSwap', `Input token: ${inputTokenAddress} (${isNativeToken ? 'native ETH' : 'ERC20'})`);
-    logInfo('PredictionSwap', `Minimal swap amount: ${minimalSwapAmount} wei`);
+      logInfo('PredictionSwap', `Executing Universal Router with msg.value: ${totalETHNeeded}`);
+      logInfo('PredictionSwap', `Swap amount: ${stakeAmount}, Hook data length: ${hookData.length}`);
 
-    try {
-      // Impersonate the user account for the transaction
-      await impersonateAccount(userAddress);
-
-      // Check user balance
-      const balance = await getPublicClient().getBalance({ address: userAddress });
-      logInfo('PredictionSwap', `User balance: ${balance} wei`);
-      
-      // Verify user has enough ETH for the total amount needed
-      if (balance < totalETHNeeded) {
-        throw new Error(`Insufficient balance. Need: ${totalETHNeeded}, Have: ${balance}`);
-      }
-
-      // For ERC20 tokens, we need to approve the UniversalRouter to spend tokens
-      // But we only need to approve for the minimal swap amount, not the stake
-      if (!isNativeToken) {
-        logInfo('PredictionSwap', `Approving UniversalRouter to spend ${minimalSwapAmount} wei of token ${inputTokenAddress}`);
-        
-        await approveToken(
-          userAddress,
-          inputTokenAddress,
-          minimalSwapAmount,
-          CONTRACT_ADDRESSES.UNIVERSAL_ROUTER as Address,
-        );
-        
-        logInfo('PredictionSwap', `Approval complete`);
-      }
-
-      // The key: Send the exact amount that PredictionManager expects
-      // This is totalETHNeeded (stake + fee), not just the stake amount
-      const msgValue = totalETHNeeded;
-
-      logInfo('PredictionSwap', `Executing Universal Router with msg.value: ${msgValue} wei`);
-      logInfo('PredictionSwap', `Commands: ${commands}`);
-      logInfo('PredictionSwap', `Inputs length: ${inputs.length}`);
-      logInfo('PredictionSwap', `Actions encoded length: ${actions.length}`);
-      logInfo('PredictionSwap', `Params array length: ${params.length}`);
-
+      // Step 6: Execute the swap
       const hash = await universalRouter.write.execute([commands, inputs, deadline], {
         account: userAddress,
         chain: anvil,
-        value: msgValue, // This must match what PredictionManager expects exactly
-        gas: 1000000n, // Increase gas limit for complex operations
+        value: totalETHNeeded, // This is the key - send the total needed for the hook
+        gas: 1000000n,
       });
 
-      logInfo('PredictionSwap', `Transaction submitted: ${hash}`);
-      
-      // Wait for transaction to be confirmed
+      // Wait for confirmation
       const tx = await getPublicClient().waitForTransactionReceipt({ hash });
       
-      // Check if the transaction was successful
       if (tx.status !== 'success') {
         throw new Error(`Transaction failed with status ${tx.status}`);
       }
       
-      logInfo('PredictionSwap', `Transaction confirmed successfully!`);
+      logInfo('PredictionSwap', `Transaction confirmed successfully: ${hash}`);
       return hash;
+
     } catch (error) {
-      logWarning('PredictionSwap', `Failed to execute swap via UniversalRouter: ${error instanceof Error ? error.message : String(error)}`);
+      logWarning('PredictionSwap', `Swap execution failed: ${error instanceof Error ? error.message : String(error)}`);
       throw error;
     } finally {
-      // Always stop impersonating, even if there was an error
       await stopImpersonatingAccount(userAddress);
     }
   },

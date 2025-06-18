@@ -215,17 +215,13 @@ const recordSinglePredictionImpl = async (
 		// Randomly select outcome (bullish or bearish)
 		const outcome = Math.random() > 0.5 ? OUTCOME_BULLISH : OUTCOME_BEARISH;
 
-		// Create wallet client for user
-		const userClient = await getWalletClient(userAccount.address);
-
 		// Record prediction via swap using the poolKey from the market
 		const hash = await recordPredictionViaSwap(
-			userClient,
-			userAccount.address,
-			poolKey,
-			BigInt(market.id),
-			outcome,
-			baseStakeAmount
+			 userAccount.address,
+			 poolKey,
+			 BigInt(market.id),
+			 outcome,
+			 baseStakeAmount
 		);
 
 		logSuccess('PredictionRecording', `Recorded ${outcome === OUTCOME_BULLISH ? 'BULLISH' : 'BEARISH'} prediction for market ${market.id} with ${formatEther(baseStakeAmount)} ETH (tx: ${hash.slice(0, 10)}...)`);
