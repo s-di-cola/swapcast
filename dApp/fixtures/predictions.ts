@@ -2,15 +2,18 @@ import { type Address, formatEther, parseEther } from 'viem';
 import { getPredictionManager } from '../src/generated/types/PredictionManager';
 import { CONFIG } from "./config/fixtures";
 import { MarketCreationResult } from './markets';
-import { getContract, getPublicClient, getWalletClient } from './utils/client';
+import { getContract, getPublicClient } from './utils/client';
 import { logInfo, logSuccess, logWarning, withErrorHandling, withRetry } from './utils/error';
 import { OUTCOME_BEARISH, OUTCOME_BULLISH, recordPredictionViaSwap } from './utils/predictions';
-import { CONTRACT_ADDRESSES, TOKEN_ADDRESSES, WHALE_ADDRESSES } from './utils/wallets';
-
-interface UserAccount {
-	address: Address;
-	privateKey?: string;
-}
+import { CONTRACT_ADDRESSES } from './utils/wallets';
+import {
+	WhaleAccount,
+	initializeWhaleAccounts,
+	selectWhaleForMarket,
+	getMarketTokens,
+	resetWhaleUsage,
+	getWhaleStats
+} from './utils/whales';
 
 const DEPLOYED_FEE_BASIS_POINTS = BigInt(200); // 2% as deployed (confirmed from contract)
 const MAX_BASIS_POINTS = BigInt(10000);
@@ -25,67 +28,6 @@ const calculateCorrectFee = withErrorHandling(
 		return { fee, total };
 	},
 	'CalculateFee'
-);
-
-/**
- * Checks if address is a whale account
- */
-const isWhaleAccount = withErrorHandling(
-	async (address: Address): Promise<boolean> => {
-		const addressLower = address.toLowerCase();
-		return Object.values(WHALE_ADDRESSES)
-			.map((addr) => (addr as string).toLowerCase())
-			.includes(addressLower);
-	},
-	'IsWhaleAccount'
-);
-
-/**
- * Gets user balance in ETH
- */
-const getUserBalance = withErrorHandling(
-	async (userAddress: Address): Promise<bigint> => {
-		const publicClient = getPublicClient();
-		return await publicClient.getBalance({ address: userAddress });
-	},
-	'GetUserBalance'
-);
-
-/**
- * Calculates stake amount based on user type and balance
- */
-const calculateStakeAmount = withErrorHandling(
-	async (userAddress: Address, minStakeAmount: bigint): Promise<bigint> => {
-		const balance = await getUserBalance(userAddress);
-		const isWhale = await isWhaleAccount(userAddress);
-
-		if (isWhale) {
-			// Use amounts similar to our successful test (0.05 ETH worked perfectly)
-			const whaleAmounts = [
-				parseEther('0.05'),  // We know this works
-				parseEther('0.1'),   // Double the working amount
-				parseEther('0.25'),  // Larger amount
-				parseEther('0.5')    // Even larger
-			];
-			const randomAmount = whaleAmounts[Math.floor(Math.random() * whaleAmounts.length)];
-
-			logInfo('PredictionStake', `Whale account ${userAddress} making a prediction of ${formatEther(randomAmount)} ETH`);
-			return randomAmount;
-		}
-
-		// Use conservative amounts that we know work for regular accounts
-		const regularAmounts = [
-			parseEther('0.05'),  // We know this works from our test
-			parseEther('0.1'),   // Double the working amount
-			parseEther('0.15'),  // 3x the working amount
-			parseEther('0.2')    // 4x the working amount
-		];
-		const randomAmount = regularAmounts[Math.floor(Math.random() * regularAmounts.length)];
-
-		// Ensure we meet minimum stake requirements
-		return randomAmount < minStakeAmount ? minStakeAmount * BigInt(2) : randomAmount;
-	},
-	'CalculateStakeAmount'
 );
 
 /**
@@ -176,10 +118,10 @@ const validateMarket = withErrorHandling(
 );
 
 /**
- * Enhanced single prediction recording with direct pool access
+ * Enhanced single prediction recording with whale account
  */
-const recordSinglePredictionImpl = async (
-	userAccount: UserAccount,
+const recordSinglePredictionWithWhale = async (
+	whale: WhaleAccount,
 	market: MarketCreationResult,
 	protocolConfig: { protocolFeeBasisPoints: bigint; minStakeAmount: bigint },
 	attemptNumber: number,
@@ -198,17 +140,29 @@ const recordSinglePredictionImpl = async (
 
 		logInfo('PredictionRecording', `Using pool key from market: ${JSON.stringify(poolKey)}`);
 
-		// Calculate stake amount based on user type
-		const baseStakeAmount = await calculateStakeAmount(userAccount.address, protocolConfig.minStakeAmount);
+		// Calculate stake amount (0.05 to 0.5 ETH equivalent)
+		const stakeAmounts = [
+			parseEther('0.05'),  // Conservative
+			parseEther('0.1'),   // Standard
+			parseEther('0.25'),  // Moderate
+			parseEther('0.5')    // Aggressive
+		];
+		const baseStakeAmount = stakeAmounts[Math.floor(Math.random() * stakeAmounts.length)];
+
+		// Ensure we meet minimum stake requirements
+		const finalStakeAmount = baseStakeAmount < protocolConfig.minStakeAmount
+			? protocolConfig.minStakeAmount * BigInt(2)
+			: baseStakeAmount;
 
 		// Calculate exact fee
-		const { fee, total: totalAmount } = await calculateCorrectFee(baseStakeAmount);
+		const { fee, total: totalAmount } = await calculateCorrectFee(finalStakeAmount);
 
-		// Check user balance
-		const userBalance = await getUserBalance(userAccount.address);
+		// Check whale balance (simplified - just check ETH for now)
+		const publicClient = getPublicClient();
+		const whaleBalance = await publicClient.getBalance({ address: whale.address });
 
-		if (userBalance < totalAmount) {
-			logWarning('PredictionRecording', `User ${userAccount.address} has insufficient balance: ${formatEther(userBalance)} ETH`);
+		if (whaleBalance < totalAmount) {
+			logWarning('PredictionRecording', `Whale ${whale.name} has insufficient ETH balance: ${formatEther(whaleBalance)} ETH (need ${formatEther(totalAmount)} ETH)`);
 			return false;
 		}
 
@@ -217,109 +171,151 @@ const recordSinglePredictionImpl = async (
 
 		// Record prediction via swap using the poolKey from the market
 		const hash = await recordPredictionViaSwap(
-			 userAccount.address,
-			 poolKey,
-			 BigInt(market.id),
-			 outcome,
-			 baseStakeAmount
+			whale.address,
+			poolKey,
+			BigInt(market.id),
+			outcome,
+			finalStakeAmount
 		);
 
-		logSuccess('PredictionRecording', `Recorded ${outcome === OUTCOME_BULLISH ? 'BULLISH' : 'BEARISH'} prediction for market ${market.id} with ${formatEther(baseStakeAmount)} ETH (tx: ${hash.slice(0, 10)}...)`);
+		logSuccess('PredictionRecording',
+			`${whale.name} recorded ${outcome === OUTCOME_BULLISH ? 'BULLISH' : 'BEARISH'} prediction for market ${market.id} with ${formatEther(finalStakeAmount)} ETH (tx: ${hash.slice(0, 10)}...)`
+		);
 
 		return true;
 	} catch (error) {
-		logWarning('PredictionRecording', `Attempt ${attemptNumber}/${totalAttempts} failed: ${error instanceof Error ? error.message : String(error)}`);
+		logWarning('PredictionRecording',
+			`Attempt ${attemptNumber}/${totalAttempts} failed for whale ${whale.name}: ${error instanceof Error ? error.message : String(error)}`
+		);
 		return false;
 	}
 };
 
 /**
- * Wrapper for recordSinglePredictionImpl with retry logic
+ * Wrapper for recordSinglePredictionWithWhale with retry logic
  */
 const recordSinglePrediction = async (
-	userAccount: UserAccount,
+	whale: WhaleAccount,
 	market: MarketCreationResult,
 	protocolConfig: { protocolFeeBasisPoints: bigint; minStakeAmount: bigint },
 	attemptNumber: number,
 	totalAttempts: number
 ): Promise<boolean> => {
 	return withRetry(
-		async () => recordSinglePredictionImpl(userAccount, market, protocolConfig, attemptNumber, totalAttempts),
+		async () => recordSinglePredictionWithWhale(whale, market, protocolConfig, attemptNumber, totalAttempts),
 		{
 			maxAttempts: 2,
 			context: 'RecordSinglePrediction',
 			onRetry: (attempt, error) => {
-				logInfo('PredictionRecording', `Attempt ${attempt} failed, retrying...`);
+				logInfo('PredictionRecording', `Whale ${whale.name} attempt ${attempt} failed, retrying...`);
 			}
 		}
 	);
 };
 
 /**
- * Enhanced prediction generation with correct fee calculation and better error handling
+ * Enhanced prediction generation with whale rotation system
  */
-const generatePredictions = withErrorHandling(
+const generatePredictionsForMarket = withErrorHandling(
 	async (
 		market: MarketCreationResult,
-		userAccounts: UserAccount[],
-		count: number
+		whaleAccounts: WhaleAccount[],
+		protocolConfig: { protocolFeeBasisPoints: bigint; minStakeAmount: bigint }
 	): Promise<number> => {
-		// Get protocol configuration
-		const protocolConfig = await getProtocolConfig();
-
-		logInfo('PredictionGeneration', `Generating ${count} predictions for market ${market.id} (${market.name})`);
+		logInfo('PredictionGeneration', `Generating predictions for market ${market.id} (${market.name})`);
 		logInfo('PredictionGeneration', `Pool details: ${market.pool ? `ID: ${market.pool.poolId}` : 'No pool info'}`);
 
-		// Shuffle user accounts to distribute predictions
-		const shuffledAccounts = [...userAccounts].sort(() => Math.random() - 0.5);
+		// Get required tokens for this market
+		const requiredTokens = getMarketTokens({
+			base: market.token0.symbol,
+			quote: market.token1.symbol
+		});
+
+		// Calculate how many predictions we want for this market (3-8 per market)
+		const predictionsCount = 3 + Math.floor(Math.random() * 6);
+
+		logInfo('PredictionGeneration', `Target: ${predictionsCount} predictions using whale rotation`);
+		logInfo('PredictionGeneration', `Required tokens: ${requiredTokens.join(', ')}`);
+
+		// Reset whale usage for this market to allow all whales to participate
+		resetWhaleUsage(whaleAccounts);
 
 		// Track successful predictions
 		let successCount = 0;
 
-		// Record predictions
-		for (let i = 0; i < count && i < shuffledAccounts.length; i++) {
-			const userAccount = shuffledAccounts[i];
+		// Record predictions with whale rotation
+		for (let i = 0; i < predictionsCount; i++) {
+			try {
+				// Calculate stake amount for whale selection (use 2x as buffer)
+				const stakeAmount = parseEther((0.05 + Math.random() * 0.45).toFixed(3));
 
-			logInfo('PredictionGeneration', `Recording prediction ${i + 1}/${count} for market ${market.id} with user ${userAccount.address.slice(0, 10)}...`);
+				// Select whale for this prediction
+				const selectedWhale = selectWhaleForMarket(
+					whaleAccounts,
+					market.id,
+					requiredTokens,
+					stakeAmount * 2n // Ensure whale has 2x the stake amount
+				);
 
-			const success = await recordSinglePrediction(
-				userAccount,
-				market,
-				protocolConfig,
-				i + 1,
-				count
-			);
+				if (!selectedWhale) {
+					logWarning('PredictionGeneration', `No whale available for prediction ${i + 1}/${predictionsCount} in market ${market.id}`);
+					continue;
+				}
 
-			if (success) {
-				successCount++;
-			}
+				logInfo('PredictionGeneration', `Recording prediction ${i + 1}/${predictionsCount} for market ${market.id} with whale ${selectedWhale.name}`);
 
-			// Add small delay between predictions to avoid nonce issues
-			if (i < count - 1) {
-				await new Promise(resolve => setTimeout(resolve, 500));
+				const success = await recordSinglePrediction(
+					selectedWhale,
+					market,
+					protocolConfig,
+					i + 1,
+					predictionsCount
+				);
+
+				if (success) {
+					successCount++;
+				}
+
+				// Add small delay between predictions to avoid nonce issues
+				if (i < predictionsCount - 1) {
+					await new Promise(resolve => setTimeout(resolve, 500));
+				}
+
+			} catch (error) {
+				logWarning('PredictionGeneration',
+					`Prediction ${i + 1} failed: ${error instanceof Error ? error.message : String(error)}`
+				);
 			}
 		}
 
-		logSuccess('PredictionGeneration', `Generated ${successCount}/${count} predictions for market ${market.id}`);
+		logSuccess('PredictionGeneration', `Generated ${successCount}/${predictionsCount} predictions for market ${market.id}`);
 
 		return successCount;
 	},
-	'GeneratePredictions'
+	'GeneratePredictionsForMarket'
 );
 
 /**
- * Generate predictions for markets with enhanced distribution
+ * Generate predictions for all markets using whale-based system
  */
 export const generatePredictionsForMarkets = withErrorHandling(
 	async (
-		markets: MarketCreationResult[],
-		allPredictionAccounts: UserAccount[]
+		markets: MarketCreationResult[]
 	): Promise<{ totalSuccessful: number; totalFailed: number }> => {
-		logInfo('PredictionGeneration', `Generating predictions for ${markets.length} markets with ${allPredictionAccounts.length} accounts`);
+		logInfo('PredictionGeneration', `🐋 Initializing whale-based prediction system for ${markets.length} markets`);
 
-		// Calculate predictions per market based on configuration
-		const baseCount = CONFIG.PREDICTIONS_PER_MARKET || 5;
-		const variability = CONFIG.PREDICTION_COUNT_VARIABILITY || 3;
+		// Initialize whale accounts
+		const whaleAccounts = await initializeWhaleAccounts();
+
+		if (whaleAccounts.length === 0) {
+			throw new Error('No whale accounts available for predictions');
+		}
+
+		logInfo('PredictionGeneration', `✅ Initialized ${whaleAccounts.length} whale accounts`);
+
+		// Get protocol configuration once
+		const protocolConfig = await getProtocolConfig();
+		logInfo('PredictionGeneration', `Protocol config: ${protocolConfig.protocolFeeBasisPoints} basis points fee, min stake: ${formatEther(protocolConfig.minStakeAmount)} ETH`);
 
 		let totalSuccessful = 0;
 		let totalFailed = 0;
@@ -328,21 +324,32 @@ export const generatePredictionsForMarkets = withErrorHandling(
 		for (let i = 0; i < markets.length; i++) {
 			const market = markets[i];
 
-			// Calculate random count with variability
-			const predictionsForMarket = baseCount + Math.floor(Math.random() * variability);
+			logInfo('PredictionGeneration', `\n📊 Processing market ${i + 1}/${markets.length}: ${market.name} (ID: ${market.id})`);
 
-			logInfo('PredictionGeneration', `Market ${i + 1}/${markets.length}: ${market.name} - Generating ${predictionsForMarket} predictions`);
-			logInfo('PredictionGeneration', `Market has pool: ${market.pool ? 'Yes' : 'No'}`);
+			try {
+				const successCount = await generatePredictionsForMarket(
+					market,
+					whaleAccounts,
+					protocolConfig
+				);
 
-			// Generate predictions for this market
-			const successCount = await generatePredictions(
-				market,
-				allPredictionAccounts,
-				predictionsForMarket
-			);
+				// Calculate predictions attempted (estimate based on target)
+				const targetPredictions = 3 + Math.floor(Math.random() * 6);
+				const failedCount = Math.max(0, targetPredictions - successCount);
 
-			totalSuccessful += successCount;
-			totalFailed += (predictionsForMarket - successCount);
+				totalSuccessful += successCount;
+				totalFailed += failedCount;
+
+				logInfo('PredictionGeneration',
+					`Market ${market.id} completed: ${successCount} successful predictions`
+				);
+
+			} catch (error) {
+				logWarning('PredictionGeneration',
+					`Market ${market.id} failed: ${error instanceof Error ? error.message : String(error)}`
+				);
+				totalFailed += 5; // Estimate failed predictions
+			}
 
 			// Add delay between markets
 			if (i < markets.length - 1) {
@@ -350,7 +357,16 @@ export const generatePredictionsForMarkets = withErrorHandling(
 			}
 		}
 
-		logSuccess('PredictionGeneration', `Total predictions: ${totalSuccessful} successful, ${totalFailed} failed`);
+		// Log final whale statistics
+		const stats = getWhaleStats(whaleAccounts);
+		logInfo('WhaleStats', `\n🐋 Final Whale Statistics:`);
+		logInfo('WhaleStats', `   Total whales: ${stats.totalWhales}`);
+		logInfo('WhaleStats', `   Average markets per whale: ${stats.averageMarketsPerWhale.toFixed(1)}`);
+		logInfo('WhaleStats', `   Most active whale: ${stats.mostUsedWhale}`);
+		logInfo('WhaleStats', `   Unused whales: ${stats.unusedWhales}/${stats.totalWhales}`);
+
+		logSuccess('PredictionGeneration', `🎉 Whale-based prediction generation completed!`);
+		logSuccess('PredictionGeneration', `📊 Final results: ${totalSuccessful} successful, ${totalFailed} failed`);
 
 		return { totalSuccessful, totalFailed };
 	},

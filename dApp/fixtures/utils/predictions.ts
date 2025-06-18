@@ -1,12 +1,10 @@
-import { type Address, type Hash, type WalletClient, encodePacked, encodeAbiParameters } from 'viem';
-import { anvil } from 'viem/chains';
-import { getIUniversalRouter } from '../../src/generated/types/IUniversalRouter';
-import { getContract, impersonateAccount, stopImpersonatingAccount } from './client';
-import { logInfo, logWarning, withErrorHandling } from './error';
-import { CONTRACT_ADDRESSES } from './wallets';
-import { getPublicClient } from './client';
-import { approveToken, NATIVE_ETH_ADDRESS } from './tokens';
-import { getIV4Router, IV4RouterAbi } from '../../src/generated/types/IV4Router';
+import {type Address, encodeAbiParameters, encodePacked, type Hash} from 'viem';
+import {anvil} from 'viem/chains';
+import {getIUniversalRouter} from '../../src/generated/types/IUniversalRouter';
+import {getContract, getPublicClient, impersonateAccount, stopImpersonatingAccount} from './client';
+import {logInfo, logWarning, withErrorHandling} from './error';
+import {CONTRACT_ADDRESSES} from './wallets';
+import {approveToken, NATIVE_ETH_ADDRESS} from './tokens';
 
 // Outcome constants
 export const OUTCOME_BULLISH = 1;
@@ -17,7 +15,7 @@ const V4_SWAP_COMMAND = 0x10; // Commands.V4_SWAP
 
 // V4Router action constants (from Uniswap V4 documentation)
 const SWAP_EXACT_IN_SINGLE = 0x06;
-const SETTLE_ALL = 0x0c; 
+const SETTLE_ALL = 0x0c;
 const TAKE_ALL = 0x0f;
 
 
@@ -51,14 +49,14 @@ function calculateTotalETHNeeded(stakeAmount: bigint, feeBasisPoints: bigint): b
   const MAX_BASIS_POINTS = 10000n;
   const fee = (stakeAmount * feeBasisPoints) / MAX_BASIS_POINTS;
   const total = stakeAmount + fee;
-  
+
   logInfo('ETHCalculation', `Stake: ${stakeAmount}, Fee: ${fee}, Total: ${total}`);
   return total;
 }
 
 /**
  * Records a prediction via a swap transaction using the Universal Router
- * 
+ *
  */
 export const recordPredictionViaSwap = withErrorHandling(
   async (
@@ -76,19 +74,19 @@ export const recordPredictionViaSwap = withErrorHandling(
   ): Promise<Hash> => {
 
     const universalRouter = getContract(getIUniversalRouter, CONTRACT_ADDRESSES.UNIVERSAL_ROUTER as Address);
-    
+
     const PROTOCOL_FEE_BASIS_POINTS = 200n;
     const totalETHNeeded = calculateTotalETHNeeded(stakeAmount, PROTOCOL_FEE_BASIS_POINTS);
-    
+
     // Determine swap direction based on outcome
     const zeroForOne = outcome === OUTCOME_BEARISH;
-    
+
     // Create hookData for the SwapCastHook
     const hookData = createPredictionHookData(userAddress, marketId, outcome, stakeAmount);
 
     logInfo('PredictionSwap', `Recording ${outcome === OUTCOME_BULLISH ? 'BULLISH' : 'BEARISH'} prediction`);
-    
-    
+
+
     try {
       await impersonateAccount(userAddress);
 
@@ -200,17 +198,17 @@ export const recordPredictionViaSwap = withErrorHandling(
       const hash = await universalRouter.write.execute([commands, inputs, deadline], {
         account: userAddress,
         chain: anvil,
-        value: totalETHNeeded, 
+        value: totalETHNeeded,
         gas: 30000000n,
       });
 
       // Wait for confirmation
       const tx = await getPublicClient().waitForTransactionReceipt({ hash });
-      
+
       if (tx.status !== 'success') {
         throw new Error(`Transaction failed with status ${tx.status}`);
       }
-      
+
       logInfo('PredictionSwap', `Transaction confirmed successfully: ${hash}`);
       return hash;
 
