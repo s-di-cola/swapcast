@@ -248,7 +248,6 @@ deploy_contracts() {
   ORACLE_RESOLVER=$(grep -A 15 "SwapCast Deployment Summary" "$LOG_DIR"/deploy.log | grep "OracleResolver:" | awk '{print $2}')
   REWARD_DISTRIBUTOR=$(grep -A 15 "SwapCast Deployment Summary" "$LOG_DIR"/deploy.log | grep "RewardDistributor:" | awk '{print $2}')
   SWAP_CAST_HOOK=$(grep -A 15 "SwapCast Deployment Summary" "$LOG_DIR"/deploy.log | grep "SwapCastHook:" | awk '{print $2}')
-  POOL_STATE_READER=$(grep -A 15 "SwapCast Deployment Summary" "$LOG_DIR"/deploy.log | grep "PoolStateReader:" | awk '{print $2}')
 
   # Check if we found the PredictionManager address
   if [ -z "$PREDICTION_MANAGER" ]; then
@@ -266,17 +265,17 @@ deploy_contracts() {
 
   # Add Uniswap v4 PoolManager address (mainnet)
   echo "PUBLIC_UNIV4_POOLMANAGER_ADDRESS=0x000000000004444c5dc75cB358380D2e3dE08A90" >> "$DAPP_ENV_FILE"
-  # Add our custom PoolStateReader address (from our local deployment)
-  if [ -n "$POOL_STATE_READER" ]; then
-    echo "PUBLIC_UNIV4_POOLSTATEREADER_ADDRESS=$POOL_STATE_READER" >> "$DAPP_ENV_FILE"
-  else
-    log_warning "Could not find locally deployed PoolStateReader"
-  fi
   # Add Uniswap Universal Router address (mainnet)
   echo "PUBLIC_UNIVERSAL_ROUTER_ADDRESS=0x66a9893cc07d91d95644aedd05d03f95e1dba8af" >> "$DAPP_ENV_FILE"
 
   # Add Uniswap PositionManager address (mainnet)
   echo "PUBLIC_UNIV4_POSITIONMANAGER_ADDRESS=0xbd216513d74c8cf14cf4747e6aaa6420ff64ee9e" >> "$DAPP_ENV_FILE"
+
+  # Add Uniswap StateView address (mainnet)
+  echo "PUBLIC_STATEVIEW_ADDRESS=0x7ffe42c4a5deea5b0fec41c94c136cf115597227" >> "$DAPP_ENV_FILE"
+
+  # Add Uniswap Permit2 address (mainnet)
+  echo "PUBLIC_PERMIT2_ADDRESS=0x000000000022D473030F116dDEE9F6B43aC78BA3" >> "$DAPP_ENV_FILE"
 
   # Add the admin private key and address (using first Anvil account)
   echo "PUBLIC_ADMIN_PRIVATE_KEY=$PRIVATE_KEY" >> "$DAPP_ENV_FILE"

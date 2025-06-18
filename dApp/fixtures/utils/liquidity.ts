@@ -1,344 +1,276 @@
 /**
- * Liquidity utilities for Uniswap v4 pools
+ * Uniswap V4 Liquidity Provision
+ *
+ * Provides functionality for creating pools and adding liquidity to Uniswap V4
+ * using the Position Manager contract with proper action encoding and delta resolution.
  */
 
-import { Actions } from '@uniswap/v4-sdk';
-import {
-  type Address,
-  type Hash,
-  type WalletClient,
-  encodeAbiParameters,
-  encodeFunctionData,
-  encodePacked,
-  parseUnits
-} from 'viem';
+import { TickMath } from "@uniswap/v3-sdk";
+import { Pool, PoolKey, Position, V4PositionPlanner } from "@uniswap/v4-sdk";
+import { Address, decodeAbiParameters, erc20Abi, Hash, http, parseUnits } from 'viem';
 import { anvil } from 'viem/chains';
-import { getWalletClient, impersonateAccount, stopImpersonatingAccount } from './client';
-import { logSuccess, logWarning, withErrorHandling } from './error';
-import { calculateSqrtPriceX96, getTokenSymbolFromAddress } from './math';
-import { approveTokens, findWhaleWithBalance } from './tokens';
-import { CONTRACT_ADDRESSES } from './wallets';
-import {getIPositionManager} from '../../src/generated/types/IPositionManager';
+import { getPoolManager } from '../../src/generated/types/PoolManager';
+import { PriceService } from '../services/price';
+import { getPublicClient, getWalletClient } from './client';
+import { logInfo, logSuccess, logWarning } from './error';
+import { calculateSqrtPriceX96FromUSDPrices, } from './math';
+import { dealLiquidity, getTokenFromAddress, NATIVE_ETH_ADDRESS } from './tokens';
+import { ANVIL_ACCOUNTS, CONTRACT_ADDRESSES } from './wallets';
+import { getIPositionManager } from '../../src/generated/types/IPositionManager';
+
 /**
- * Setup a whale account for liquidity operations
+ * Initializes a Uniswap V4 pool with the specified price
+ * @param token0Address - Address of token0
+ * @param token1Address - Address of token1
+ * @returns Pool initialization data including sqrtPriceX96 and current tick
  */
-const setupWhaleForLiquidity = async (
+const initializePool = async (
   token0Address: Address,
   token1Address: Address,
-  amount0Desired: bigint,
-  amount1Desired: bigint
-): Promise<{ whaleAddress: Address; whaleClient: WalletClient }> => {
-  // Get whale with sufficient tokens for token0
-  const whaleAddress = await findWhaleWithBalance(token0Address);
-
-  // Impersonate whale for transaction
-  await impersonateAccount(whaleAddress);
-  const whaleClient = await getWalletClient(whaleAddress);
-
-  const NATIVE_ETH_ADDRESS = '0x0000000000000000000000000000000000000000';
-
-  // Only approve token0 if it's not native ETH
-  if (token0Address !== NATIVE_ETH_ADDRESS) {
-    await approveTokens(
-      token0Address,
-      whaleAddress,
-      CONTRACT_ADDRESSES.POSITION_MANAGER as Address,
-      amount0Desired
-    );
-  }
-
-  // Only approve token1 if it's not native ETH
-  if (token1Address !== NATIVE_ETH_ADDRESS) {
-    await approveTokens(
-      token1Address,
-      whaleAddress,
-      CONTRACT_ADDRESSES.POSITION_MANAGER as Address,
-      amount1Desired
-    );
-  }
-
-  return { whaleAddress, whaleClient };
-};
-
-/**
- * Calculates tick range based on current price and range percentage
- */
-const calculateTickRangeFromPrice = (currentPrice: number, rangePercentage = 10): { tickLower: number; tickUpper: number } => {
-  // Calculate price range
-  const lowerPrice = currentPrice * (1 - rangePercentage / 100);
-  const upperPrice = currentPrice * (1 + rangePercentage / 100);
-
-  // Calculate ticks using logarithmic formula
-  // tick = log(price) / log(1.0001)
-  const tickLower = Math.floor(Math.log(lowerPrice) / Math.log(1.0001));
-  const tickUpper = Math.floor(Math.log(upperPrice) / Math.log(1.0001));
-
-  return { tickLower, tickUpper };
-};
-
-/**
- * Calculate tick from price
- * @param price - The price to convert to tick
- * @returns The nearest tick for the given price
- */
-const calculateTickRange = (price: number): number => {
-  return Math.floor(Math.log(price) / Math.log(1.0001));
-};
-
-/**
- * Wrapper for tick range calculation with error handling
- * Converts the synchronous function to async to be compatible with withErrorHandling
- */
-const getTickRange = withErrorHandling(
-  async (currentPrice: number, rangePercentage = 10): Promise<{ tickLower: number; tickUpper: number }> => {
-    return calculateTickRangeFromPrice(currentPrice, rangePercentage);
-  },
-  'GetTickRange'
-);
-
-/**
- * Creates a pool key object for Uniswap V4
- */
-const createPoolKey = withErrorHandling(
-  async (
-    token0Address: Address,
-    token1Address: Address,
-    fee: number = 3000,
-    tickSpacing: number = 60,
-    hooksAddress: Address = CONTRACT_ADDRESSES.SWAPCAST_HOOK as Address
-  ): Promise<{
-    currency0: Address;
-    currency1: Address;
-    fee: number;
-    tickSpacing: number;
-    hooks: Address;
-  }> => {
-    return {
-      currency0: token0Address,
-      currency1: token1Address,
-      fee,
-      tickSpacing,
-      hooks: hooksAddress
-    };
-  },
-  'CreatePoolKey'
-);
-
-/**
- * Calculate ETH value and determine if native ETH is involved
- */
-const calculateETHValue = (
-  poolKey: { currency0: Address; currency1: Address },
-  amount0Desired: bigint,
-  amount1Desired: bigint
-): { value: bigint; hasNativeETH: boolean } => {
-  const NATIVE_ETH_ADDRESS = '0x0000000000000000000000000000000000000000';
-  let value = 0n;
-  let hasNativeETH = false;
-
-  if (poolKey.currency0 === NATIVE_ETH_ADDRESS) {
-    value = amount0Desired;
-    hasNativeETH = true;
-  } else if (poolKey.currency1 === NATIVE_ETH_ADDRESS) {
-    value = amount1Desired;
-    hasNativeETH = true;
-  }
-
-  return { value, hasNativeETH };
-};
-
-/**
- * Encode initializePool parameters for multicall using encodeFunctionData
- */
-const encodeInitializePoolParams = (
-  poolKey: { currency0: Address; currency1: Address; fee: number; tickSpacing: number; hooks: Address },
-  sqrtPriceX96: bigint
-): `0x${string}` => {
-  return encodeFunctionData({
-    abi: [{
-      name: 'initializePool',
-      type: 'function',
-      inputs: [
-        {
-          name: 'key',
-          type: 'tuple',
-          components: [
-            { name: 'currency0', type: 'address' },
-            { name: 'currency1', type: 'address' },
-            { name: 'fee', type: 'uint24' },
-            { name: 'tickSpacing', type: 'int24' },
-            { name: 'hooks', type: 'address' }
-          ]
-        },
-        { name: 'sqrtPriceX96', type: 'uint160' }
-      ],
-      outputs: [],
-      stateMutability: 'nonpayable'
-    }],
-    functionName: 'initializePool',
-    args: [poolKey, sqrtPriceX96]
-  });
-};
-
-/**
- * Encode mint parameters for liquidity provision
- */
-const encodeMintParams = (
-  poolKey: { currency0: Address; currency1: Address; fee: number; tickSpacing: number; hooks: Address },
-  tickLower: number,
-  tickUpper: number,
-  amount0Desired: bigint,
-  amount1Desired: bigint,
-  whaleAddress: Address
-): `0x${string}`[] => {
-  const mintParams: `0x${string}`[] = [];
-
-  mintParams[0] = encodeAbiParameters(
-    [
-      {
-        name: 'pool',
-        type: 'tuple',
-        components: [
-          { name: 'currency0', type: 'address' },
-          { name: 'currency1', type: 'address' },
-          { name: 'fee', type: 'uint24' },
-          { name: 'tickSpacing', type: 'int24' },
-          { name: 'hooks', type: 'address' }
-        ]
-      },
-      { name: 'tickLower', type: 'int24' },
-      { name: 'tickUpper', type: 'int24' },
-      { name: 'liquidity', type: 'uint128' },
-      { name: 'amount0Max', type: 'uint256' },
-      { name: 'amount1Max', type: 'uint256' },
-      { name: 'recipient', type: 'address' },
-      { name: 'hookData', type: 'bytes' }
-    ],
-    [
-      poolKey,
-      tickLower,
-      tickUpper,
-      1000000n,
-      amount0Desired,
-      amount1Desired,
-      whaleAddress,
-      '0x'
-    ]
-  );
-
-  // SETTLE_PAIR parameters
-  mintParams[1] = encodeAbiParameters(
-    [{ type: 'address' }, { type: 'address' }],
-    [poolKey.currency0, poolKey.currency1]
-  );
-
-  return mintParams;
-};
-
-/**
- * Encode modifyLiquidities parameters for multicall
- */
-const encodeModifyLiquiditiesParams = (
-  hasNativeETH: boolean,
-  mintParams: `0x${string}`[]
-): `0x${string}` => {
-  // Create actions based on whether we have native ETH
-  const actions = hasNativeETH 
-    ? encodePacked(['uint8', 'uint8', 'uint8'], [Actions.MINT_POSITION, Actions.SETTLE_PAIR, Actions.SWEEP]) // MINT_POSITION, SETTLE_PAIR, SWEEP
-    : encodePacked(['uint8', 'uint8'], [Actions.MINT_POSITION, Actions.SETTLE_PAIR]); // MINT_POSITION, SETTLE_PAIR
-
-  const deadline = BigInt(Math.floor(Date.now() / 1000) + 60);
-  const modifyLiquiditiesSelector = '0xdd46508f';
-
-  return `${modifyLiquiditiesSelector}${encodeAbiParameters(
-    [
-      { name: 'unlockData', type: 'bytes' },
-      { name: 'deadline', type: 'uint256' }
-    ],
-    [
-      encodeAbiParameters(
-        [{ type: 'bytes' }, { type: 'bytes[]' }],
-        [actions, mintParams]
-      ),
-      deadline
-    ]
-  ).slice(2)}` as `0x${string}`;
-};
-
-/**
- * Initialize pool and mint liquidity in one atomic transaction using multicall
- * Following the official Uniswap V4 guide
- */
-const mintPool = async (
-  token0Address: Address,
-  token1Address: Address,
-  basePrice: number,
-  amount0: string = '10',
-  amount1: string = '10'
-): Promise<Hash> => {
-  const whaleAddress = await findWhaleWithBalance(token0Address);
-  await impersonateAccount(whaleAddress);
-  
+): Promise<Pool> => {
   try {
-    // Setup basic parameters
-    const token0Symbol = getTokenSymbolFromAddress(token0Address);
-    const token1Symbol = getTokenSymbolFromAddress(token1Address);
-    const poolKey = await createPoolKey(token0Address, token1Address);
-    const sqrtPriceX96 = calculateSqrtPriceX96(token0Symbol, token1Symbol, basePrice);
-    const { tickLower, tickUpper } = calculateTickRangeFromPrice(basePrice);
-    const amount0Desired = parseUnits(amount0, 18);
-    const amount1Desired = parseUnits(amount1, 18);
+    const priceService = new PriceService();
 
-    // Setup whale and approvals
-    const { whaleAddress } = await setupWhaleForLiquidity(token0Address, token1Address, amount0Desired, amount1Desired);
+    // Get token info
+    const token0 = await getTokenFromAddress(token0Address);
+    const token1 = await getTokenFromAddress(token1Address);
 
-    // Calculate ETH value
-    const { value, hasNativeETH } = calculateETHValue(poolKey, amount0Desired, amount1Desired);
+    // Get current prices
+    const token0Price = await priceService.getPrice(token0.symbol!);
+    const token1Price = await priceService.getPrice(token1.symbol!);
+    if (!token0Price || !token1Price) {
+      throw new Error(`Failed to fetch prices for tokens ${token0.symbol} and ${token1.symbol}`);
+    }
 
-    // Encode multicall parameters using encodeFunctionData
-    const initializeParams = encodeInitializePoolParams(poolKey, sqrtPriceX96);
-    const mintParams = encodeMintParams(poolKey, tickLower, tickUpper, amount0Desired, amount1Desired, whaleAddress);
-    const modifyLiquiditiesParams = encodeModifyLiquiditiesParams(hasNativeETH, mintParams);
+    const sqrtPriceX96 = calculateSqrtPriceX96FromUSDPrices(token0Price, token1Price, token0.decimals, token1.decimals);
+    const tick = TickMath.getTickAtSqrtRatio(sqrtPriceX96);
 
-    const params = [initializeParams, modifyLiquiditiesParams];
+    logInfo('PoolInitialization', `Initializing pool ${token0.symbol}/${token1.symbol} with sqrtPriceX96: ${sqrtPriceX96}`);
 
-    console.log('Multicall params:', params);
+    const pool = new Pool(token0, token1, 3000, 60, CONTRACT_ADDRESSES.SWAPCAST_HOOK!, sqrtPriceX96.toString(), 0, tick);
 
-    // Execute multicall with account specified
-    const positionManager = await getIPositionManager({
-      address: CONTRACT_ADDRESSES.POSITION_MANAGER as Address,
+    const poolManager = getPoolManager({
+      address: CONTRACT_ADDRESSES.POOL_MANAGER as Address,
       chain: anvil
     });
 
-    const hash = await positionManager.write.multicall(
-      [params],
+    const tx = await poolManager.write.initialize(
+      [{
+        currency0: pool.poolKey.currency0 as `0x${string}`,
+        currency1: pool.poolKey.currency1 as `0x${string}`,
+        fee: pool.poolKey.fee,
+        tickSpacing: pool.poolKey.tickSpacing,
+        hooks: pool.poolKey.hooks as `0x${string}`
+      }, BigInt(pool.sqrtRatioX96.toString())], // Convert JSBI to bigint
       {
-        account: whaleAddress,
-        ...(hasNativeETH && { value }),
+        account: ANVIL_ACCOUNTS[0].address as `0x${string}`,
         chain: anvil
       }
     );
 
-    logSuccess('PoolInitialization', `Pool initialized and liquidity minted with hash: ${hash}`);
-    return hash;
+    const receipt = await getPublicClient().waitForTransactionReceipt({ hash: tx });
+
+    if (receipt.status !== 'success') {
+      throw new Error(`Pool initialization failed with status: ${receipt.status}`);
+    }
+
+    logSuccess('PoolInitialization', `Pool initialized successfully: ${JSON.stringify(pool)}`);
+    return pool;
+  } catch (error) {
+    logWarning('PoolInitialization', `Pool initialization failed: ${error}`);
+    throw error;
+  }
+};
+
+
+function getPositionParams(pool: Pool): {
+  tickLower: number;
+  tickUpper: number;
+  liquidity: string;
+  amount0: string;
+  amount1: string;
+} {
+
+  // Get current tick and round it to the nearest tick spacing
+  const currentTick = pool.tickCurrent;
+  const tickSpacing = pool.tickSpacing;
+
+  const tickLower = Math.floor(currentTick / tickSpacing) * tickSpacing - (tickSpacing * 10);
+  const tickUpper = Math.ceil(currentTick / tickSpacing) * tickSpacing + (tickSpacing * 10);
+
+
+  const amount0Desired = parseUnits("1000", pool.token0.decimals); // e.g., 100 of token0
+  const amount1Desired = parseUnits("1000", pool.token1.decimals); // e.g., 100 of token1
+
+  const position = Position.fromAmounts({
+    pool,
+    tickLower,
+    tickUpper,
+    amount0: amount0Desired.toString(),
+    amount1: amount1Desired.toString(),
+    useFullPrecision: true // Use full precision for the calculation
+  });
+
+  const mintAmounts = position.mintAmounts;
+  const liquidity = position.liquidity;
+
+  return {
+    tickLower,
+    tickUpper,
+    liquidity: liquidity.toString(),
+    amount0: mintAmounts.amount0.toString(),
+    amount1: mintAmounts.amount1.toString(),
+  };
+}
+
+
+async function approveToken(account: Address, tokenAddress: Address, amount: bigint) {
+  const walletClient = getWalletClient(account);
+  
+  // First approve Permit2 contract (not position manager directly)
+  const permit2Address = "0x000000000022D473030F116dDEE9F6B43aC78BA3"; // Canonical Permit2
+  
+  const hash = await walletClient.writeContract({
+    address: tokenAddress,
+    abi: erc20Abi,
+    functionName: 'approve',
+    args: [permit2Address, amount], // Approve Permit2, not position manager
+    account: account,
+    chain: anvil,
+  });
+  
+  const receipt = await getPublicClient().waitForTransactionReceipt({ hash });
+  if (receipt.status !== 'success') {
+    throw new Error(`Approve token failed with status: ${receipt.status}`);
+  }
+  
+  // Then approve position manager through Permit2 with longer deadline
+  const currentTimestamp = Math.floor(Date.now() / 1000);
+  const expiration = BigInt(currentTimestamp + 86400); // 24 hours, not 5 minutes
+  
+  const hash2 = await walletClient.writeContract({
+    address: permit2Address,
+    abi: [
+      {
+        name: 'approve',
+        type: 'function',
+        inputs: [
+          { name: 'token', type: 'address' },
+          { name: 'spender', type: 'address' },
+          { name: 'amount', type: 'uint160' },
+          { name: 'expiration', type: 'uint48' }
+        ],
+        outputs: []
+      }
+    ],
+    functionName: 'approve',
+    args: [tokenAddress, CONTRACT_ADDRESSES.POSITION_MANAGER as Address, amount, expiration],
+    account: account,
+    chain: anvil,
+  });
+  
+  const receipt2 = await getPublicClient().waitForTransactionReceipt({ hash: hash2 });
+  if (receipt2.status !== 'success') {
+    throw new Error(`Permit2 approve failed with status: ${receipt2.status}`);
+  }
+  
+  logSuccess('ApproveToken', `Approved token ${tokenAddress} for position manager via Permit2`);
+}
+
+/**
+ * Adds liquidity to a Uniswap V4 pool using the Position Manager
+ * @param pool - The pool to add liquidity to
+ * @returns Transaction hash of the liquidity addition
+ */
+const addLiquidity = async (pool: Pool): Promise<void> => {
+  try {
+    const positionParams = getPositionParams(pool);
+    const token0Address = pool.token0.isToken ? pool.token0.address : NATIVE_ETH_ADDRESS;
+    const token1Address = pool.token1.isToken ? pool.token1.address : NATIVE_ETH_ADDRESS;
+    const amount0 = BigInt(positionParams.amount0)
+    const amount1 = BigInt(positionParams.amount1)
+
+    const liquidityProvider = ANVIL_ACCOUNTS[1].address;
+    await dealLiquidity(liquidityProvider, token0Address as Address, token1Address as Address, amount0, amount1);
+
+    // Approve for POSITION MANAGER
+    if (!pool.token0.isNative) {
+      await approveToken(liquidityProvider, token0Address as Address, amount0);
+    }
+    if (!pool.token1.isNative) {
+      await approveToken(liquidityProvider, token1Address as Address, amount1);
+    }
+
+    const planner = new V4PositionPlanner();
+    
+    planner.addMint(
+      pool,
+      positionParams.tickLower,
+      positionParams.tickUpper,
+      positionParams.liquidity,
+      positionParams.amount0,
+      positionParams.amount1,
+      liquidityProvider
+    );
+    
+    planner.addSettlePair(pool.currency0, pool.currency1);
+    
+    if (pool.token0.isNative || pool.token1.isNative) {
+      const nativeCurrency = pool.token0.isNative ? pool.currency0 : pool.currency1;
+      planner.addSweep(nativeCurrency, liquidityProvider);
+    }
+
+    const unlockData = planner.finalize() as `0x${string}`;
+    const currentTimestamp = Math.floor(Date.now() / 1000);
+    const deadline = BigInt(currentTimestamp + 300);
+
+    const positionManager = getIPositionManager({
+      address: CONTRACT_ADDRESSES.POSITION_MANAGER as Address,
+      chain: anvil
+    });
+
+    const hash = await positionManager.write.modifyLiquidities([unlockData, deadline], {
+      account: liquidityProvider,
+      chain: anvil,
+      value: pool.token0.isNative ? amount0 : (pool.token1.isNative ? amount1 : 0n),
+      gas: 1000000n
+    });
+
+    const receipt = await getPublicClient().waitForTransactionReceipt({ hash });
+    if (receipt.status !== 'success') {
+      throw new Error(`Liquidity addition failed with status: ${receipt.status}`);
+    }
+    logSuccess('LiquidityProvision', `Liquidity added successfully!`);
   } catch (error) {
     const errorMessage = error instanceof Error ? error.message : String(error);
-    logWarning('PoolInitialization', `Failed to initialize pool and mint liquidity: ${errorMessage}`);
-    if (error.cause) {
-      logWarning('PoolInitialization', `Error cause: ${JSON.stringify(error.cause)}`);
-    }
+    logWarning('LiquidityProvision', `Failed to add liquidity: ${errorMessage}`);
+    throw new Error(`addLiquidity failed: ${errorMessage}`);
+  }
+};
+
+/**
+ * Creates a pool and adds initial liquidity
+ * @param token0Address - Address of the first token
+ * @param token1Address - Address of the second token
+ * @returns Transaction hash of the liquidity addition
+ */
+const mintPool = async (
+  token0Address: Address,
+  token1Address: Address,
+): Promise<PoolKey> => {
+  try {
+    const pool = await initializePool(token0Address, token1Address);
+    await addLiquidity(pool);
+    return pool.poolKey;
+  } catch (error) {
+    const errorMessage = error instanceof Error ? error.message : String(error);
+    logWarning('MintPool', `Failed to mint pool: ${errorMessage}`);
     throw new Error(`mintPool failed: ${errorMessage}`);
-  } finally {
-    await stopImpersonatingAccount(whaleAddress);
   }
 };
 
 export {
-  calculateETHValue, calculateTickRange,
-  calculateTickRangeFromPrice,
-  createPoolKey, encodeInitializePoolParams,
-  encodeMintParams,
-  encodeModifyLiquiditiesParams, getTickRange,
-  mintPool,
-  setupWhaleForLiquidity
+  mintPool
 };
+
+

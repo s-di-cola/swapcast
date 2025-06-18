@@ -8,8 +8,7 @@ import { MarketGenerator, MarketRequest } from './services/marketGenerator';
 import { getContract, getPublicClient } from './utils/client';
 import { logInfo, logSuccess, logWarning, withErrorHandling, withRetry } from './utils/error';
 import { sortTokenAddresses } from './utils/helpers';
-import { createPoolKey, mintPool } from './utils/liquidity';
-import { calculateSqrtPriceX96 } from './utils/math';
+import { mintPool } from './utils/liquidity';
 import { TokenInfo } from './utils/tokens';
 import { CONTRACT_ADDRESSES } from './utils/wallets';
 
@@ -23,7 +22,6 @@ export interface MarketCreationResult {
         tickSpacing: number;
         hooks: Address;
     };
-    sqrtPriceX96: bigint;
     expirationTime: bigint;
     priceThreshold: bigint;
     token0: TokenInfo;
@@ -42,7 +40,7 @@ function tokenConfigToInfo(symbol: string): TokenInfo {
     if (!config) {
         throw new Error(`Token config not found for: ${symbol}`);
     }
-    
+
     return {
         address: config.address as Address,
         symbol: config.symbol,
@@ -90,7 +88,7 @@ const createPredictionMarket = withErrorHandling(
         if (!adminClient.account) {
             throw new Error('No account available in admin client');
         }
-        
+
         // Based on the contract ABI, createMarket expects:
         // - name (string)
         // - assetSymbol (string)
@@ -106,14 +104,14 @@ const createPredictionMarket = withErrorHandling(
                 token0Info.symbol,
                 // Expiration time
                 expirationTime,
-                // Price aggregator - using zero address as placeholder
-                '0x0000000000000000000000000000000000000000' as Address,
+                // Price aggregator - using Oracle Resolver address
+                CONTRACT_ADDRESSES.ORACLE_RESOLVER as Address,
                 // Price threshold
                 priceThreshold,
                 // Pool key
                 poolKey
             ],
-            { 
+            {
                 account: adminClient.account,
                 chain: anvil
             }
@@ -123,7 +121,7 @@ const createPredictionMarket = withErrorHandling(
         await publicClient.waitForTransactionReceipt({ hash });
 
         logSuccess('MarketCreation', `Market created successfully!`);
-        
+
         return hash;
     },
     'CreatePredictionMarket'
@@ -140,9 +138,9 @@ const createPredictionMarket = withErrorHandling(
 const createSingleMarketFromRequest = async (
     request: MarketRequest,
     marketId: number,
-    contracts: { 
-        poolManager: ReturnType<typeof getPoolManager>; 
-        predictionManager: ReturnType<typeof getPredictionManager> 
+    contracts: {
+        poolManager: ReturnType<typeof getPoolManager>;
+        predictionManager: ReturnType<typeof getPredictionManager>
     },
     adminClient: WalletClient
 ): Promise<MarketCreationResult | null> => {
@@ -154,11 +152,11 @@ const createSingleMarketFromRequest = async (
             // Get token configs first
             const baseConfig = TOKEN_CONFIGS[request.base];
             const quoteConfig = TOKEN_CONFIGS[request.quote];
-            
+
             if (!baseConfig || !quoteConfig) {
                 throw new Error(`Token config not found for: ${!baseConfig ? request.base : request.quote}`);
             }
-            
+
             // Sort token addresses to match Uniswap's convention
             const [token0Address, token1Address] = sortTokenAddresses(
                 baseConfig.address as Address,
@@ -175,33 +173,15 @@ const createSingleMarketFromRequest = async (
 
             logInfo('MarketCreation', `Creating market #${marketId}: ${token0.symbol}/${token1.symbol}`);
 
-            // Create pool key - await the Promise to get the actual pool key object
-            const poolKey = await createPoolKey(
-                token0Address, 
-                token1Address,
-                3000,
-                60,
-                CONTRACT_ADDRESSES.SWAPCAST_HOOK as Address
-            );
-
             // Calculate initial price
             const basePrice = request.basePrice;
-            const sqrtPriceX96 = calculateSqrtPriceX96(
-                token0.symbol,
-                token1.symbol,
-                basePrice,
-                false
-            );
 
-            logInfo('MarketCreation', `Base price: ${basePrice}, sqrtPriceX96: ${sqrtPriceX96}`);
+            logInfo('MarketCreation', `Base price: ${basePrice}`);
 
-            // Initialize pool and mint liquidity in one atomic transaction
-            await mintPool(
+            // Initialize pool and mint liquidity in 
+            const poolKey = await mintPool(
                 token0Address,
                 token1Address,
-                basePrice,
-                '10', // Default amount0
-                '10'  // Default amount1
             );
 
             // Calculate expiration time based on request's expirationDays or default to 7 days
@@ -211,12 +191,12 @@ const createSingleMarketFromRequest = async (
             // Calculate price threshold based on priceThresholdMultiplier
             const priceThresholdPercentage = Math.floor((request.priceThresholdMultiplier - 1) * 100);
             const priceThreshold = BigInt(priceThresholdPercentage);
-            
+
             // Create prediction market with token info
             const marketHash = await createPredictionMarket(
-                predictionManager, 
-                request, 
-                poolKey, 
+                predictionManager,
+                request,
+                { currency0: token0Address, currency1: token1Address, fee: 3000, tickSpacing: 60, hooks: CONTRACT_ADDRESSES.SWAPCAST_HOOK as Address },
                 adminClient,
                 token0,
                 token1
@@ -227,8 +207,7 @@ const createSingleMarketFromRequest = async (
             return {
                 id: `${marketId}`,
                 name: `${token0.symbol}/${token1.symbol}`,
-                poolKey,
-                sqrtPriceX96,
+                poolKey: { currency0: token0Address, currency1: token1Address, fee: 3000, tickSpacing: 60, hooks: CONTRACT_ADDRESSES.SWAPCAST_HOOK as Address },
                 expirationTime,
                 priceThreshold,
                 token0,
@@ -241,7 +220,7 @@ const createSingleMarketFromRequest = async (
             return null;
         }
     };
-    
+
     // Use withRetry with the wrapped function
     return await withRetry(wrappedFn, {
         maxAttempts: 2,
@@ -286,7 +265,7 @@ export const generateMarketsV2 = withErrorHandling(
         for (let i = 0; i < Math.min(marketRequests.length, config.maxMarkets); i++) {
             const request = marketRequests[i];
 
-            logInfo('MarketGeneration', `Processing market request ${i+1}/${Math.min(marketRequests.length, config.maxMarkets)}: ${request.base}/${request.quote}`);
+            logInfo('MarketGeneration', `Processing market request ${i + 1}/${Math.min(marketRequests.length, config.maxMarkets)}: ${request.base}/${request.quote}`);
 
             const market = await createSingleMarketFromRequest(
                 request,
@@ -297,7 +276,7 @@ export const generateMarketsV2 = withErrorHandling(
 
             if (market) {
                 markets.push(market);
-                logSuccess('MarketGeneration', `Created market ${i+1}: ${market.name}`);
+                logSuccess('MarketGeneration', `Created market ${i + 1}: ${market.name}`);
             }
         }
 
