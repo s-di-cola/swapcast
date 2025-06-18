@@ -5,33 +5,22 @@ import { logInfo, logSuccess, logWarning } from './error';
 import { TOKEN_CONFIGS } from '../config/tokens';
 
 /**
- * VERIFIED multi-token whale accounts from etherscan research
- * These addresses have been confirmed to hold multiple tokens
+ * VERIFIED multi-token whale accounts - KEEP ALL OF THEM
  */
 export const WHALE_ACCOUNTS: Record<string, Address> = {
-    // Binance: Hot Wallet - confirmed multi-token whale
+    // The GOOD whale that has everything
     BINANCE_MAIN: '0x28C6c06298d514db089934071355e5743bf21d60',
     
-    // Binance: Another major wallet
+    // Other whales
     BINANCE_COLD: '0xdfd5293d8e347dfe59e90efd55b2956a1343963d',
-    
-    // Coinbase: Multiple confirmed whales  
+    JUMPTRADING: '0xf977814e90da44bfa03b6295a0616a897441acec',
     COINBASE_1: '0x71660c4005ba85c37ccec55d0c4493e66fe775d3',
     COINBASE_2: '0x503828976d22510aad0201ac7ec88293211d23da',
-    
-    // Kraken wallets
     KRAKEN_1: '0x2910543af39aba0cd09dbb2d50200b3e800a63d2',
     KRAKEN_2: '0x0a869d79a7052c7f1b55a8ebabbea3420f0d1e13',
-    
-    // Multi-asset DeFi whales
-    JUMPTRADING: '0xf977814e90da44bfa03b6295a0616a897441acec', // Jump Trading (confirmed multi-token)
-    ALAMEDA: '0x477573f212a7bdd5f7c12889bd1ad0aa44fb82aa',     // Alameda Research
-    
-    // Ethereum Foundation
+    CUMBERLAND: '0x176f3dab24a159341c0509bb36b833e7fdd0a132',
     ETHEREUM_FOUNDATION: '0xde0b295669a9fd93d5f28d9ec85e40f4cb697bae',
-    
-    // Cumberland DRW (market maker)
-    CUMBERLAND: '0x176f3dab24a159341c0509bb36b833e7fdd0a132'
+    ALAMEDA: '0x477573f212a7bdd5f7c12889bd1ad0aa44fb82aa'
 };
 
 /**
@@ -43,14 +32,14 @@ export interface WhaleAccount {
     balances: Map<string, bigint>;
     usedInMarkets: Set<string>;
     totalETH: bigint;
-    hasTokens: Set<string>; // Track which tokens this whale actually has
+    hasTokens: Set<string>;
 }
 
 /**
- * Initialize whale accounts with COMPREHENSIVE balance checking
+ * Initialize whale accounts - STOP BEING SO FUCKING PICKY
  */
 export async function initializeWhaleAccounts(): Promise<WhaleAccount[]> {
-    logInfo('WhaleInit', 'Checking VERIFIED multi-token whale accounts...');
+    logInfo('WhaleInit', 'Checking whale accounts - ACCEPTING ALL WITH ETH');
 
     const whaleAccounts: WhaleAccount[] = [];
     const publicClient = getPublicClient();
@@ -68,7 +57,7 @@ export async function initializeWhaleAccounts(): Promise<WhaleAccount[]> {
             hasTokens: new Set()
         };
 
-        logInfo('WhaleCheck', `Checking ${name} (${address.slice(0, 10)}...):`);
+        logInfo('WhaleCheck', `Checking ${name}:`);
 
         // Check ALL tokens for this whale
         for (const tokenSymbol of tokensToCheck) {
@@ -83,10 +72,15 @@ export async function initializeWhaleAccounts(): Promise<WhaleAccount[]> {
                     whale.totalETH = balance;
                 }
 
-                // Consider whale "has" this token if balance > minimum threshold
-                const minThreshold = tokenSymbol === 'ETH' 
-                    ? parseEther('1')           // 1 ETH minimum
-                    : parseEther('100');        // 100 token minimum (roughly)
+                // MUCH LOWER thresholds - don't be so fucking picky
+                let minThreshold: bigint;
+                if (tokenSymbol === 'ETH') {
+                    minThreshold = parseEther('0.1');  // Just 0.1 ETH minimum
+                } else if (tokenSymbol === 'USDC' || tokenSymbol === 'USDT') {
+                    minThreshold = BigInt('1000000'); // Just 1 USDC/USDT (6 decimals)
+                } else {
+                    minThreshold = parseEther('0.1');  // Just 0.1 token minimum
+                }
 
                 if (balance >= minThreshold) {
                     whale.hasTokens.add(tokenSymbol);
@@ -97,34 +91,34 @@ export async function initializeWhaleAccounts(): Promise<WhaleAccount[]> {
                     
                     logInfo('WhaleBalance', `  ✅ ${tokenSymbol}: ${formattedBalance}`);
                 } else {
-                    logInfo('WhaleBalance', `  ❌ ${tokenSymbol}: insufficient balance`);
+                    logInfo('WhaleBalance', `  ❌ ${tokenSymbol}: ${formatEther(balance)} (below threshold)`);
                 }
                 
             } catch (error) {
-                logWarning('WhaleBalance', `  ⚠️ ${tokenSymbol}: Error checking balance - ${error}`);
+                logWarning('WhaleBalance', `  ⚠️ ${tokenSymbol}: Error - ${error}`);
                 whale.balances.set(tokenSymbol, 0n);
             }
         }
 
-        // Only add whales that have ETH + at least 2 other tokens
-        if (whale.hasTokens.has('ETH') && whale.hasTokens.size >= 3) {
+        // ONLY require ETH - stop filtering out good whales
+        if (whale.hasTokens.has('ETH')) {
             whaleAccounts.push(whale);
             logSuccess('WhaleInit', `✅ Added ${name} (has ${whale.hasTokens.size} tokens: ${Array.from(whale.hasTokens).join(', ')})`);
         } else {
-            logWarning('WhaleInit', `❌ Rejected ${name} (only has ${whale.hasTokens.size} tokens: ${Array.from(whale.hasTokens).join(', ')})`);
+            logWarning('WhaleInit', `❌ Rejected ${name} (no ETH)`);
         }
     }
 
     // Sort by ETH balance
     whaleAccounts.sort((a, b) => b.totalETH > a.totalETH ? 1 : -1);
 
-    logSuccess('WhaleInit', `🐋 Found ${whaleAccounts.length} viable multi-token whales!`);
+    logSuccess('WhaleInit', `🐋 Found ${whaleAccounts.length} whales with ETH!`);
     
     return whaleAccounts;
 }
 
 /**
- * PROPER whale selection - check for ACTUAL token holdings
+ * PROPER whale selection - but be flexible about token requirements
  */
 export function selectWhaleForMarket(
     whaleAccounts: WhaleAccount[],
@@ -135,17 +129,11 @@ export function selectWhaleForMarket(
 
     logInfo('WhaleSelection', `Selecting whale for market ${marketId}`);
     logInfo('WhaleSelection', `Required tokens: ${requiredTokens.join(', ')}`);
-    logInfo('WhaleSelection', `Required amount: ${formatEther(requiredAmount)} ETH`);
 
-    // Find whales that have ALL required tokens AND haven't been used in this market
-    const availableWhales = whaleAccounts.filter(whale => {
-        // Check if unused in this market
+    // First try: Find whales with ALL required tokens
+    let availableWhales = whaleAccounts.filter(whale => {
         const notUsed = !whale.usedInMarkets.has(marketId);
-        
-        // Check if has ETH for transaction fees
         const hasEnoughETH = whale.totalETH >= requiredAmount;
-        
-        // Check if has ALL required tokens
         const hasAllTokens = requiredTokens.every(token => whale.hasTokens.has(token));
         
         logInfo('WhaleCheck', `${whale.name}: unused=${notUsed}, ETH=${hasEnoughETH}, tokens=${hasAllTokens} (has: ${Array.from(whale.hasTokens).join(', ')})`);
@@ -153,56 +141,70 @@ export function selectWhaleForMarket(
         return notUsed && hasEnoughETH && hasAllTokens;
     });
 
-    if (availableWhales.length === 0) {
-        logWarning('WhaleSelection', `No unused whales with required tokens. Trying reuse...`);
-        
-        // Allow reuse - find any whale with required tokens and ETH
-        const reusableWhales = whaleAccounts.filter(whale => {
-            const hasEnoughETH = whale.totalETH >= requiredAmount;
-            const hasAllTokens = requiredTokens.every(token => whale.hasTokens.has(token));
-            return hasEnoughETH && hasAllTokens;
-        });
-        
-        if (reusableWhales.length === 0) {
-            logWarning('WhaleSelection', `❌ NO WHALES have the required tokens: ${requiredTokens.join(', ')}`);
-            
-            // Debug: show what tokens each whale has
-            whaleAccounts.forEach(whale => {
-                logWarning('WhaleDebug', `${whale.name}: has ${Array.from(whale.hasTokens).join(', ')}`);
-            });
-            
-            return null;
-        }
-        
-        // Use the whale with the most tokens
-        const bestWhale = reusableWhales.sort((a, b) => b.hasTokens.size - a.hasTokens.size)[0];
-        bestWhale.usedInMarkets.delete(marketId);
-        bestWhale.usedInMarkets.add(marketId);
-        
-        logInfo('WhaleSelection', `♻️ Reusing ${bestWhale.name} (has ${bestWhale.hasTokens.size} tokens)`);
-        return bestWhale;
+    if (availableWhales.length > 0) {
+        const selectedWhale = availableWhales[0];
+        selectedWhale.usedInMarkets.add(marketId);
+        logSuccess('WhaleSelection', `🎯 Selected ${selectedWhale.name} (perfect match)`);
+        return selectedWhale;
     }
 
-    // Pick the whale with the most tokens (most diversified)
-    const selectedWhale = availableWhales.sort((a, b) => b.hasTokens.size - a.hasTokens.size)[0];
-    selectedWhale.usedInMarkets.add(marketId);
+    // Second try: Find whales with just ETH (fuck the other tokens, we'll make it work)
+    logWarning('WhaleSelection', `No whales with all tokens, trying ETH-only whales...`);
     
-    logSuccess('WhaleSelection', `🎯 Selected ${selectedWhale.name} (${formatEther(selectedWhale.totalETH)} ETH, ${selectedWhale.hasTokens.size} tokens)`);
-    return selectedWhale;
+    const ethOnlyWhales = whaleAccounts.filter(whale => {
+        const notUsed = !whale.usedInMarkets.has(marketId);
+        const hasEnoughETH = whale.totalETH >= requiredAmount;
+        
+        return notUsed && hasEnoughETH;
+    });
+
+    if (ethOnlyWhales.length > 0) {
+        const selectedWhale = ethOnlyWhales[0];
+        selectedWhale.usedInMarkets.add(marketId);
+        logInfo('WhaleSelection', `⚠️ Selected ${selectedWhale.name} (ETH only - may need token dealing)`);
+        return selectedWhale;
+    }
+
+    // Third try: Allow reuse
+    logWarning('WhaleSelection', `No unused whales, trying reuse...`);
+    
+    const reusableWhales = whaleAccounts.filter(whale => {
+        const hasEnoughETH = whale.totalETH >= requiredAmount;
+        const hasAllTokens = requiredTokens.every(token => whale.hasTokens.has(token));
+        return hasEnoughETH && hasAllTokens;
+    });
+    
+    if (reusableWhales.length > 0) {
+        const selectedWhale = reusableWhales[0];
+        selectedWhale.usedInMarkets.delete(marketId);
+        selectedWhale.usedInMarkets.add(marketId);
+        logInfo('WhaleSelection', `♻️ Reusing ${selectedWhale.name}`);
+        return selectedWhale;
+    }
+
+    // Final try: Any whale with ETH (desperate mode)
+    const desperateWhales = whaleAccounts.filter(whale => whale.totalETH >= requiredAmount);
+    if (desperateWhales.length > 0) {
+        const selectedWhale = desperateWhales[0];
+        selectedWhale.usedInMarkets.delete(marketId);
+        selectedWhale.usedInMarkets.add(marketId);
+        logWarning('WhaleSelection', `💀 DESPERATE: Using ${selectedWhale.name} (ETH only)`);
+        return selectedWhale;
+    }
+
+    logWarning('WhaleSelection', `❌ NO WHALES AVAILABLE AT ALL`);
+    return null;
 }
 
 /**
- * Get tokens required for a market - BOTH tokens needed for swaps
+ * Get tokens required for a market
  */
 export function getMarketTokens(market: { base: string; quote: string }): string[] {
-    // For swaps, we need BOTH tokens in the pair
-    // ETH/USDC market needs ETH AND USDC
-    // LINK/ETH market needs LINK AND ETH
     return [market.base, market.quote];
 }
 
 /**
- * Reset whale usage for new prediction round
+ * Reset whale usage
  */
 export function resetWhaleUsage(whaleAccounts: WhaleAccount[]): void {
     whaleAccounts.forEach(whale => whale.usedInMarkets.clear());
@@ -210,7 +212,7 @@ export function resetWhaleUsage(whaleAccounts: WhaleAccount[]): void {
 }
 
 /**
- * Get whale usage statistics
+ * Get whale statistics
  */
 export function getWhaleStats(whaleAccounts: WhaleAccount[]): {
     totalWhales: number;
