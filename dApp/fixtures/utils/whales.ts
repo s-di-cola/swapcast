@@ -130,11 +130,27 @@ export function selectWhaleForMarket(
     logInfo('WhaleSelection', `Selecting whale for market ${marketId}`);
     logInfo('WhaleSelection', `Required tokens: ${requiredTokens.join(', ')}`);
 
-    // First try: Find whales with ALL required tokens
+    // Check if required tokens include any ERC20s and their minimum amounts
+    const tokenRequirements = requiredTokens.map(symbol => {
+        const tokenConfig = TOKEN_CONFIGS[symbol];
+        if (!tokenConfig) return { symbol, minAmount: 0n };
+        
+        // For prediction stakes, we need the actual stake amount
+        return { 
+            symbol, 
+            minAmount: symbol !== 'ETH' ? requiredAmount : 0n // For ERC20s, use the stake amount
+        };
+    });
+
+    // First try: Find whales with ALL required tokens in sufficient amounts
     let availableWhales = whaleAccounts.filter(whale => {
         const notUsed = !whale.usedInMarkets.has(marketId);
         const hasEnoughETH = whale.totalETH >= requiredAmount;
-        const hasAllTokens = requiredTokens.every(token => whale.hasTokens.has(token));
+        
+        const hasAllTokens = tokenRequirements.every(req => {
+            const balance = whale.balances.get(req.symbol) || 0n;
+            return balance >= req.minAmount;
+        });
         
         logInfo('WhaleCheck', `${whale.name}: unused=${notUsed}, ETH=${hasEnoughETH}, tokens=${hasAllTokens} (has: ${Array.from(whale.hasTokens).join(', ')})`);
         
