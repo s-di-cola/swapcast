@@ -4,7 +4,9 @@ import {getIUniversalRouter} from '../../src/generated/types/IUniversalRouter';
 import {getContract, getPublicClient, impersonateAccount, stopImpersonatingAccount} from './client';
 import {logInfo, logWarning, withErrorHandling} from './error';
 import {CONTRACT_ADDRESSES} from './wallets';
-import {approveToken, NATIVE_ETH_ADDRESS} from './tokens';
+import {approveToken, NATIVE_ETH_ADDRESS, getTokenBalance} from './tokens';
+import { TickMath } from '@uniswap/v3-sdk'
+import JSBI from 'jsbi'
 
 // Outcome constants
 export const OUTCOME_BULLISH = 1;
@@ -76,45 +78,62 @@ export const recordPredictionViaSwap = withErrorHandling(
     const universalRouter = getContract(getIUniversalRouter, CONTRACT_ADDRESSES.UNIVERSAL_ROUTER as Address);
 
     const PROTOCOL_FEE_BASIS_POINTS = 200n;
-    const totalETHNeeded = calculateTotalETHNeeded(stakeAmount, PROTOCOL_FEE_BASIS_POINTS);
 
     // Determine swap direction based on outcome
     const zeroForOne = outcome === OUTCOME_BEARISH;
+    const inputCurrency = zeroForOne ? poolKey.currency0 : poolKey.currency1;
+
+    // Check if we're dealing with ETH or ERC20
+    const isETHInput = inputCurrency.toLowerCase() === NATIVE_ETH_ADDRESS.toLowerCase();
+
+    // Calculate total needed - only for ETH inputs
+    const totalETHNeeded = isETHInput ? calculateTotalETHNeeded(stakeAmount, PROTOCOL_FEE_BASIS_POINTS) : 0n;
 
     // Create hookData for the SwapCastHook
     const hookData = createPredictionHookData(userAddress, marketId, outcome, stakeAmount);
 
     logInfo('PredictionSwap', `Recording ${outcome === OUTCOME_BULLISH ? 'BULLISH' : 'BEARISH'} prediction`);
-
+    logInfo('PredictionSwap', `Input currency: ${inputCurrency}, isETH: ${isETHInput}`);
 
     try {
       await impersonateAccount(userAddress);
 
-      // Check balance
-      const balance = await getPublicClient().getBalance({ address: userAddress });
-      if (balance < totalETHNeeded) {
-        throw new Error(`Insufficient balance. Need: ${totalETHNeeded}, Have: ${balance}`);
-      }
+      // Handle different currency types
+      if (isETHInput) {
+        // Check ETH balance
+        const balance = await getPublicClient().getBalance({ address: userAddress });
+        if (balance < totalETHNeeded) {
+          throw new Error(`Insufficient ETH balance. Need: ${totalETHNeeded}, Have: ${balance}`);
+        }
+        logInfo('PredictionSwap', `Using ETH input: ${totalETHNeeded}`);
+      } else {
+        // Handle ERC20 token
+        const tokenBalance = await getTokenBalance(inputCurrency, userAddress);
+        if (tokenBalance < stakeAmount) {
+          throw new Error(`Insufficient ${inputCurrency} balance. Need: ${stakeAmount}, Have: ${tokenBalance}`);
+        }
 
-      // Handle token approvals if needed (for non-ETH tokens)
-      const inputCurrency = zeroForOne ? poolKey.currency0 : poolKey.currency1;
-      if (inputCurrency.toLowerCase() !== NATIVE_ETH_ADDRESS) {
         await approveToken(
           userAddress,
           inputCurrency,
           stakeAmount,
           CONTRACT_ADDRESSES.UNIVERSAL_ROUTER as Address,
         );
+        logInfo('PredictionSwap', `Using ERC20 input: ${inputCurrency}, amount: ${stakeAmount}`);
       }
 
-      // Step 1: Encode the Universal Router command (V4_SWAP)
+      // Step 1: Encode the Universal Router command (V4_SWAP only)
       const commands = encodePacked(['uint8'], [V4_SWAP_COMMAND]);
 
-      // Step 2: Encode V4Router actions according to documentation
+      // Step 2: For V4_SWAP, encode the V4Router actions
       const actions = encodePacked(
         ['uint8', 'uint8', 'uint8'],
         [SWAP_EXACT_IN_SINGLE, SETTLE_ALL, TAKE_ALL]
       );
+
+      // fix PriceLimitAlreadyExceeded(uint160,uint160) by calculating sqrtPriceLimit
+      const sqrtPriceLimitJSBI = zeroForOne ? JSBI.add(JSBI.BigInt(TickMath.MIN_SQRT_RATIO), JSBI.BigInt(1)) : JSBI.BigInt(TickMath.MAX_SQRT_RATIO);
+      const sqrtPriceLimit = BigInt(sqrtPriceLimitJSBI.toString());
 
       // Step 3: Prepare parameters for each action
       const params = new Array(3);
@@ -136,6 +155,7 @@ export const recordPredictionViaSwap = withErrorHandling(
           { name: 'zeroForOne', type: 'bool' },
           { name: 'amountIn', type: 'uint128' },
           { name: 'amountOutMinimum', type: 'uint128' },
+          { name: 'sqrtPriceLimitX96', type: 'uint160' },
           { name: 'hookData', type: 'bytes' }
         ],
         [
@@ -149,6 +169,7 @@ export const recordPredictionViaSwap = withErrorHandling(
           zeroForOne,
           stakeAmount,
           BigInt(0), // amountOutMinimum - accept any amount out
+          sqrtPriceLimit,
           hookData
         ]
       );
@@ -160,7 +181,7 @@ export const recordPredictionViaSwap = withErrorHandling(
           { name: 'amount', type: 'uint256' }
         ],
         [
-          zeroForOne ? poolKey.currency0 : poolKey.currency1, // Input currency
+          inputCurrency, // Input currency
           stakeAmount // Input amount
         ]
       );
@@ -193,13 +214,18 @@ export const recordPredictionViaSwap = withErrorHandling(
 
       logInfo('PredictionSwap', `Executing Universal Router with msg.value: ${totalETHNeeded}`);
       logInfo('PredictionSwap', `Swap amount: ${stakeAmount}, Hook data length: ${hookData.length}`);
+      logInfo('PredictionSwap', `Input currency: ${inputCurrency}, Output currency: ${zeroForOne ? poolKey.currency1 : poolKey.currency0}`);
 
-      // Step 6: Execute the swap
+      // Step 6: Execute the swap with correct value - ONLY send ETH if input is ETH
+      const txValue = isETHInput ? totalETHNeeded : 0n;
+
+      logInfo('PredictionSwap', `Transaction value: ${txValue} (isETHInput: ${isETHInput})`);
+
       const hash = await universalRouter.write.execute([commands, inputs, deadline], {
         account: userAddress,
         chain: anvil,
-        value: totalETHNeeded,
-        gas: 30000000n,
+        value: txValue, // Only send ETH if input currency is ETH
+        gas: 30_000_000n,
       });
 
       // Wait for confirmation
