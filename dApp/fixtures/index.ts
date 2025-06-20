@@ -1,6 +1,6 @@
 /**
  * SwapCast Enhanced Fixture Generator - Whale-Based with Balance Validation
- * 
+ *
  * Features:
  * - Top 25 Ethereum whale accounts from Etherscan
  * - Comprehensive balance validation before swaps
@@ -12,7 +12,7 @@
 import {type Address, createPublicClient, formatEther, http, parseEther} from 'viem';
 import {anvil} from 'viem/chains';
 import {generateMarketsV2, MarketCreationResult} from './markets';
-import {generatePredictionsForMarkets} from './predictions';
+import {generatePredictionsForMarkets} from './predictions/predictions';
 import {CONTRACT_ADDRESSES, setupWallets} from './utils/wallets';
 import {getPredictionManager} from '../src/generated/types/PredictionManager';
 import {getPoolManager} from '../src/generated/types/PoolManager';
@@ -329,7 +329,7 @@ async function main() {
 
 		console.log(chalk.green(`✅ Enhanced whale-based prediction generation completed!`));
 		console.log(chalk.blue(`📊 Results: ${totalSuccessful} successful, ${totalFailed} failed`));
-		
+
 		if (totalFailed > 0) {
 			console.log(chalk.green(`🛡️ Prevented ${totalFailed} potential TRANSFER_FROM errors through balance validation`));
 		}

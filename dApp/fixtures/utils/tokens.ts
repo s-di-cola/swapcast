@@ -39,6 +39,22 @@ export function isNativeEth(address: Address): boolean {
   return address.toLowerCase() === NATIVE_ETH_ADDRESS.toLowerCase();
 }
 
+
+/**
+ * Normalize any token balance to 18 decimals for consistent comparison
+ */
+export function normalizeToEther(balance: bigint, decimals: number): bigint {
+  if (decimals === 18) {
+    return balance;
+  } else if (decimals < 18) {
+    const scaleFactor = 10n ** BigInt(18 - decimals);
+    return balance * scaleFactor;
+  } else {
+    const scaleFactor = 10n ** BigInt(decimals - 18);
+    return balance / scaleFactor;
+  }
+}
+
 /**
  * Get token balance for an account
  */
@@ -62,9 +78,9 @@ export const getTokenBalance = withErrorHandling(
 
 
 export async function approveToken(
-  account: Address, 
-  tokenAddress: Address, 
-  amount: bigint, 
+  account: Address,
+  tokenAddress: Address,
+  amount: bigint,
   spender: Address = CONTRACT_ADDRESSES.POSITION_MANAGER as Address
 ) {
   // Skip approval for native ETH
@@ -72,20 +88,20 @@ export async function approveToken(
     logInfo('ApproveToken', `Skipping approval for native ETH`);
     return;
   }
-  
+
   const walletClient = getWalletClient(account);
   const permit2Address = CONTRACT_ADDRESSES.PERMIT2 as Address;
-   
+
   try {
     // Get current block timestamp from chain
     const latestBlock = await getPublicClient().getBlock({ blockTag: 'latest' });
     const currentTimestamp = Number(latestBlock.timestamp);
     const expiration = currentTimestamp + (365 * 24 * 60 * 60); // 1 year from current block time
-    
+
     logInfo('ApproveToken', `Current block timestamp: ${currentTimestamp}`);
     logInfo('ApproveToken', `Setting Permit2 expiration to: ${expiration} (1 year from now)`);
     logInfo('ApproveToken', `Approving ${tokenAddress} for spender: ${spender}`);
-    
+
     // Step 1: Check if token is already approved to Permit2
     const currentAllowanceToPermit2 = await getPublicClient().readContract({
       address: tokenAddress,
@@ -93,9 +109,9 @@ export async function approveToken(
       functionName: 'allowance',
       args: [account, permit2Address],
     }) as bigint;
-    
+
     logInfo('ApproveToken', `Current ERC20 allowance to Permit2: ${currentAllowanceToPermit2.toString()}`);
-    
+
     if (currentAllowanceToPermit2 < amount) {
       // Handle USDT's reset requirement
       if (currentAllowanceToPermit2 > 0n && tokenAddress.toLowerCase() === "0xdac17f958d2ee523a2206206994597c13d831ec7") {
@@ -111,7 +127,7 @@ export async function approveToken(
         await getPublicClient().waitForTransactionReceipt({ hash: resetHash });
         logSuccess('ApproveToken', `Reset USDT allowance to Permit2`);
       }
-      
+
       logInfo('ApproveToken', `Approving token to Permit2...`);
       const approveHash = await walletClient.writeContract({
         address: tokenAddress,
@@ -121,7 +137,7 @@ export async function approveToken(
         account: account,
         chain: anvil,
       });
-      
+
       const receipt = await getPublicClient().waitForTransactionReceipt({ hash: approveHash });
       if (receipt.status !== 'success') {
         throw new Error(`ERC20 approval to Permit2 failed`);
@@ -130,10 +146,10 @@ export async function approveToken(
     } else {
       logInfo('ApproveToken', `✅ Token already approved to Permit2`);
     }
-    
+
     // Step 2: Set Permit2 allowance for the specified spender
     logInfo('ApproveToken', `Setting Permit2 allowance for spender: ${spender}...`);
-    
+
     const permit2Abi = [
       {
         "inputs": [
@@ -148,13 +164,13 @@ export async function approveToken(
         "type": "function"
       }
     ];
-    
+
     // Ensure amount fits in uint160 (max value is 2^160 - 1)
     const maxUint160 = (2n ** 160n) - 1n;
     const permit2Amount = amount > maxUint160 ? maxUint160 : amount;
-    
+
     logInfo('ApproveToken', `Permit2 amount: ${permit2Amount.toString()}, expiration: ${expiration}`);
-    
+
     const permit2Hash = await walletClient.writeContract({
       address: permit2Address,
       abi: permit2Abi,
@@ -168,14 +184,14 @@ export async function approveToken(
       account: account,
       chain: anvil,
     });
-    
+
     const permit2Receipt = await getPublicClient().waitForTransactionReceipt({ hash: permit2Hash });
     if (permit2Receipt.status !== 'success') {
       throw new Error(`Permit2 approval failed with status: ${permit2Receipt.status}`);
     }
-    
+
     logSuccess('ApproveToken', `✅ Set Permit2 allowance for spender: ${spender}`);
-    
+
     // Step 3: Verify the Permit2 allowance was set correctly
     const permit2AllowanceAbi = [
       {
@@ -194,16 +210,16 @@ export async function approveToken(
         "type": "function"
       }
     ];
-    
+
     const finalAllowance = await getPublicClient().readContract({
       address: permit2Address,
       abi: permit2AllowanceAbi,
       functionName: 'allowance',
       args: [account, tokenAddress, spender], // Use the passed spender
     }) as [bigint, number, number];
-    
+
     logSuccess('ApproveToken', `✅ Verified Permit2 allowance: amount=${finalAllowance[0]}, expiration=${finalAllowance[1]}, nonce=${finalAllowance[2]}`);
-    
+
   } catch (error) {
     const errorMessage = error instanceof Error ? error.message : String(error);
     logWarning('ApproveToken', `Failed to approve token: ${errorMessage}`);
@@ -256,12 +272,12 @@ export async function dealLiquidity(
   const dealTokenWithCast = async (tokenAddress: Address, amount: bigint, tokenName: string) => {
     // Calculate the amount to actually deal (20% extra for ETH, 10% extra for tokens)
     let dealAmount: bigint;
-    
+
     if (tokenAddress === NATIVE_ETH_ADDRESS || tokenAddress === '0x0000000000000000000000000000000000000000') {
       // For ETH, add 20% extra + 0.1 ETH buffer for gas costs
       dealAmount = amount + (amount * 20n) / 100n + BigInt('100000000000000000'); // 0.1 ETH buffer
       logInfo('DealLiquidity', `ETH: Requested ${amount.toString()}, dealing ${dealAmount.toString()} (20% + 0.1 ETH buffer)`);
-      
+
       const cmd = `cast rpc anvil_setBalance ${to} 0x${dealAmount.toString(16)}`;
       await execAsync(cmd);
       logInfo('DealLiquidity', `Set ETH balance: ${dealAmount.toString()}`);
@@ -275,7 +291,7 @@ export async function dealLiquidity(
     // Known balance slots for major tokens
     const KNOWN_SLOTS: Record<string, number> = {
       '0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48': 9,  // USDC (confirmed working)
-      '0xdac17f958d2ee523a2206206994597c13d831ec7': 2,  // USDT  
+      '0xdac17f958d2ee523a2206206994597c13d831ec7': 2,  // USDT
       '0x6b175474e89094c44da98b954eedeac495271d0f': 2,  // DAI
       '0x2260fac5e5542a773aa44fbcfedf7c193bc2c599': 0,  // WBTC (confirmed working)
       '0x514910771af9ca656af840dff83e8264ecf986ca': 1,  // LINK

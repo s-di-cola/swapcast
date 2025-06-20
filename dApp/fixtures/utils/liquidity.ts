@@ -85,12 +85,6 @@ const initializePool = async (
     }
 };
 
-/**
- * Get position parameters for a given pool
- *
- * @param pool  The pool to get position parameters for
- * @returns Position parameters
- */
 function getPositionParams(pool: Pool): {
     tickLower: number;
     tickUpper: number;
@@ -98,17 +92,12 @@ function getPositionParams(pool: Pool): {
     amount0: string;
     amount1: string;
 } {
+    const amount0Desired = parseUnits("1000000000", pool.token0.decimals);
+    const amount1Desired = parseUnits("1000000000", pool.token1.decimals);
 
-    // Get current tick and round it to the nearest tick spacing
-    const currentTick = pool.tickCurrent;
-    const tickSpacing = pool.tickSpacing;
-
-    const tickLower = Math.floor(currentTick / tickSpacing) * tickSpacing - (tickSpacing * 10);
-    const tickUpper = Math.ceil(currentTick / tickSpacing) * tickSpacing + (tickSpacing * 10);
-
-
-    const amount0Desired = parseUnits("10000", pool.token0.decimals);
-    const amount1Desired = parseUnits("10000", pool.token1.decimals);
+    // Align ticks to spacing if needed
+    const tickLower = Math.ceil(TickMath.MIN_TICK / pool.tickSpacing) * pool.tickSpacing;
+    const tickUpper = Math.floor(TickMath.MAX_TICK / pool.tickSpacing) * pool.tickSpacing;
 
     const position = Position.fromAmounts({
         pool,
@@ -116,21 +105,17 @@ function getPositionParams(pool: Pool): {
         tickUpper,
         amount0: amount0Desired.toString(),
         amount1: amount1Desired.toString(),
-        useFullPrecision: true // Use full precision for the calculation
+        useFullPrecision: true
     });
 
-    const mintAmounts = position.mintAmounts;
-    const liquidity = position.liquidity;
-
     return {
-        tickLower,
-        tickUpper,
-        liquidity: liquidity.toString(),
-        amount0: mintAmounts.amount0.toString(),
-        amount1: mintAmounts.amount1.toString(),
+        tickLower: position.tickLower,
+        tickUpper: position.tickUpper,
+        liquidity: position.liquidity.toString(),
+        amount0: position.mintAmounts.amount0.toString(),
+        amount1: position.mintAmounts.amount1.toString(),
     };
 }
-
 /**
  * Adds liquidity to a Uniswap V4 pool using the Position Manager
  * @param pool - The pool to add liquidity to
@@ -320,7 +305,9 @@ async function addLiquidityForMarkets(user: Address, amount: number = 1000): Pro
 
 export {
     mintPool,
-    addLiquidityForMarkets
+    addLiquidityForMarkets,
+    logPoolState,
+    logPoolLiquidity
 };
 
 

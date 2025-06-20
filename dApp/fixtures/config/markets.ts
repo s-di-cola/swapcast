@@ -20,8 +20,8 @@ export interface MarketGenerationConfig {
 export const MARKET_PAIR_CONFIGS: MarketPairConfig[] = [
     // Major crypto pairs (highest priority) - ETH PAIRS ONLY FOR WHALE SYSTEM
     { base: 'ETH', quote: 'USDC', enabled: true, priority: 100, category: 'major' },
-    { base: 'ETH', quote: 'USDT', enabled: true, priority: 95, category: 'major' },
-    { base: 'ETH', quote: 'DAI', enabled: true, priority: 90, category: 'major' },
+    { base: 'ETH', quote: 'USDT', enabled: false, priority: 95, category: 'major' },
+    { base: 'ETH', quote: 'DAI', enabled: false, priority: 90, category: 'major' },
     
     // DISABLE WBTC pairs for whale system (whales don't have WBTC)
     { base: 'WBTC', quote: 'USDC', enabled: false, priority: 85, category: 'major' },
@@ -29,9 +29,9 @@ export const MARKET_PAIR_CONFIGS: MarketPairConfig[] = [
     { base: 'WBTC', quote: 'DAI', enabled: false, priority: 75, category: 'major' },
     
     // DeFi tokens (medium priority) - ONLY ETH-based pairs
-    { base: 'LINK', quote: 'ETH', enabled: true, priority: 45, category: 'defi' },
-    { base: 'UNI', quote: 'ETH', enabled: true, priority: 35, category: 'defi' },
-    { base: 'AAVE', quote: 'ETH', enabled: true, priority: 25, category: 'defi' },
+    { base: 'LINK', quote: 'ETH', enabled: false, priority: 45, category: 'defi' },
+    { base: 'UNI', quote: 'ETH', enabled: false, priority: 35, category: 'defi' },
+    { base: 'AAVE', quote: 'ETH', enabled: false, priority: 25, category: 'defi' },
     
     // DISABLE non-ETH DeFi pairs
     { base: 'LINK', quote: 'USDC', enabled: false, priority: 50, category: 'defi' },
