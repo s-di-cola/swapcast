@@ -165,11 +165,6 @@ async function checkPoolPrices(markets: MarketCreationResult[], results: Diagnos
     console.log(chalk.blue('🔍 Using StateView contract to check actual pool state'));
     console.log('');
     
-    const publicClient = createPublicClient({
-        chain: anvil,
-        transport: http()
-    });
-    
     // Get StateView contract instance
     const stateView = getStateView({
         address: CONTRACT_ADDRESSES.STATE_VIEW as Address,
@@ -186,18 +181,7 @@ async function checkPoolPrices(markets: MarketCreationResult[], results: Diagnos
 
         try {
             // Generate poolId from poolKey
-            const poolId = keccak256(
-                encodePacked(
-                    ['address', 'address', 'uint24', 'int24', 'address'],
-                    [
-                        market.poolKey.currency0 as Address,
-                        market.poolKey.currency1 as Address,
-                        market.poolKey.fee,
-                        market.poolKey.tickSpacing,
-                        market.poolKey.hooks as Address
-                    ]
-                )
-            );
+            const poolId = market.pool.poolId as `0x${string}`;
             
             // Get pool state from StateView contract
             const poolState = await stateView.read.getSlot0([poolId]);
