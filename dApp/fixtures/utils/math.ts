@@ -1,3 +1,9 @@
+/**
+ * @file Mathematical utilities for price calculations
+ * @description Provides functions for price calculations and token conversions
+ * @module utils/math
+ */
+
 import { encodeSqrtRatioX96 } from '@uniswap/v3-sdk';
 import chalk from 'chalk';
 import JSBI from 'jsbi';
@@ -6,32 +12,39 @@ import { TOKEN_CONFIGS } from '../config/tokens';
 import { PriceData } from '../services/price';
 
 /**
- * Calculate sqrtPriceX96 from two separate USD prices
- * @param token0PriceUSD - Price of token0 in USD
- * @param token1PriceUSD - Price of token1 in USD
+ * Calculates the sqrtPriceX96 value from two USD-denominated token prices
+ * @param token0PriceUSD - Price data for the first token
+ * @param token1PriceUSD - Price data for the second token
+ * @returns {JSBI} The calculated sqrtPriceX96 value
+ * @example
+ * const sqrtPrice = calculateSqrtPriceX96FromUSDPrices(ethPrice, usdcPrice);
  */
 export function calculateSqrtPriceX96FromUSDPrices(
 	token0PriceUSD: PriceData,
 	token1PriceUSD: PriceData,
 ): JSBI {
-	// Calculate price ratio in floating point
 	const priceRatio = token0PriceUSD.price / token1PriceUSD.price;
-	
-	// Use a common decimal base (18) for both tokens
 	const commonDecimals = 18;
 	const token0Amount = parseUnits('1', commonDecimals);
 	const token1Amount = parseUnits(priceRatio.toString(), commonDecimals);
 	
-	console.log(`🔍 Debug: ${token0PriceUSD.symbol}/${token1PriceUSD.symbol}`);
-	console.log(`🔍 Price ratio: ${priceRatio}`);
-	console.log(`🔍 Normalized token0Amount: ${token0Amount}`);
-	console.log(`🔍 Normalized token1Amount: ${token1Amount}`);
+	// Debug logging removed in production
+	if (process.env.NODE_ENV === 'development') {
+		console.log(`🔍 Debug: ${token0PriceUSD.symbol}/${token1PriceUSD.symbol}`);
+		console.log(`🔍 Price ratio: ${priceRatio}`);
+		console.log(`🔍 Normalized token0Amount: ${token0Amount}`);
+		console.log(`🔍 Normalized token1Amount: ${token1Amount}`);
+	}
 	
 	return encodeSqrtRatioX96(token1Amount.toString(), token0Amount.toString());
 }
 
 /**
- * Maps token address to symbol (for compatibility)
+ * Retrieves the token symbol from its address
+ * @param address - The token contract address
+ * @returns The token symbol or 'UNKNOWN' if not found
+ * @example
+ * const symbol = getTokenSymbolFromAddress('0x...');
  */
 export function getTokenSymbolFromAddress(address: Address): string {
 	const addressLower = address.toLowerCase();
@@ -46,8 +59,12 @@ export function getTokenSymbolFromAddress(address: Address): string {
 }
 
 /**
- * Get market price for a base asset from our symbol
- * This is a helper to determine which token has the "market price"
+ * Determines if a token symbol represents a base asset with a market price
+ * @param token0Symbol - The symbol of the first token in the pair
+ * @param token1Symbol - The symbol of the second token in the pair
+ * @returns The base asset symbol if found, otherwise null
+ * @example
+ * const baseAsset = getBaseAssetFromPair('WETH', 'USDC'); // Returns 'WETH'
  */
 export function getBaseAssetFromPair(token0Symbol: string, token1Symbol: string): string | null {
 	const token0Config = TOKEN_CONFIGS[token0Symbol];

@@ -10,22 +10,33 @@ import { Pool } from "@uniswap/v4-sdk";
 import { Token } from "@uniswap/sdk-core";
 import { getProtocolConfig } from './prediction-core';
 
-
-// Outcome constants
+/** Bullish market outcome */
 export const OUTCOME_BULLISH = 1;
+
+/** Bearish market outcome */
 export const OUTCOME_BEARISH = 0;
 
-// Universal Router command constants (from Uniswap documentation)
-const V4_SWAP_COMMAND = 0x10; // Commands.V4_SWAP
+/** Universal Router command for V4 swaps */
+const V4_SWAP_COMMAND = 0x10;
 
-// V4Router action constants (from Uniswap V4 documentation)
+/** V4Router action for exact input single swaps */
 const SWAP_EXACT_IN_SINGLE = 0x06;
-const SETTLE_ALL = 0x0c;
-const TAKE_ALL = 0x0f;
 
+/** V4Router action to settle all open positions */
+const SETTLE_ALL = 0x0c;
+
+/** V4Router action to take all available assets */
+const TAKE_ALL = 0x0f;
 
 /**
  * Creates properly formatted hookData for the SwapCastHook
+ * 
+ * @param userAddress - The address of the user making the prediction
+ * @param marketId - The ID of the prediction market
+ * @param outcome - The predicted outcome (0 for bearish, 1 for bullish)
+ * @param stakeAmount - The amount being staked in wei
+ * @returns Formatted hook data as a hex string
+ * @throws If stake amount exceeds uint128 maximum
  */
 function createPredictionHookData(
   userAddress: Address,
@@ -60,8 +71,18 @@ function calculateTotalETHNeeded(stakeAmount: bigint, feeBasisPoints: bigint): b
 }
 
 /**
- * Records a prediction via a swap transaction using the Universal Router
- *
+ * Records a prediction by executing a swap transaction through the Universal Router
+ * @param userAddress - The address of the user making the prediction
+ * @param pool - The Uniswap V4 pool to trade in
+ * @param marketId - The ID of the prediction market
+ * @param tokenIn - The input token for the swap
+ * @param tokenOut - The output token for the swap
+ * @param amountIn - The amount of input tokens to swap
+ * @param minAmountOut - The minimum amount of output tokens to receive
+ * @param stakeAmount - The amount to stake in the prediction
+ * @param isBullish - Whether the prediction is bullish (true) or bearish (false)
+ * @returns The transaction hash of the prediction
+ * @throws If the transaction fails or if the user has insufficient balance
  */
 export const recordPredictionViaSwap = withErrorHandling(
   async (
@@ -233,6 +254,9 @@ export const recordPredictionViaSwap = withErrorHandling(
 
     } catch (error) {
       logWarning('PredictionSwap', `Swap execution failed: ${error instanceof Error ? error.message : String(error)}`);
+      if (error instanceof Error && error.message.includes('revert')) {
+        logWarning('PredictionSwap', `Revert reason: ${JSON.stringify(error)}`);
+      }
       throw error;
     } finally {
       await stopImpersonatingAccount(userAddress);

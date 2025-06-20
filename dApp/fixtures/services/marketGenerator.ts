@@ -1,8 +1,24 @@
+/**
+ * @file Market generation service for test fixtures
+ * @description Generates market requests based on configuration and price data
+ * @module services/marketGenerator
+ */
+
 import { MarketPairConfig, MarketGenerationConfig, MARKET_PAIR_CONFIGS } from '../config/markets';
 import { TOKEN_CONFIGS } from '../config/tokens';
 import { PriceService, PriceData } from './price';
 import chalk from 'chalk';
 
+/**
+ * Represents a request to create a new prediction market
+ * @property base - Base token symbol (e.g., 'ETH')
+ * @property quote - Quote token symbol (e.g., 'USDC')
+ * @property basePrice - Current price of base token in terms of quote token
+ * @property priceConfidence - Confidence level of the price data
+ * @property priceThresholdMultiplier - Multiplier to determine price target
+ * @property expirationDays - Days until market expiration
+ * @property category - Market category (e.g., 'crypto', 'forex')
+ */
 export interface MarketRequest {
     base: string;
     quote: string;
@@ -13,9 +29,18 @@ export interface MarketRequest {
     category: string;
 }
 
+/**
+ * Service for generating market requests based on configuration
+ * Handles filtering, price fetching, and request generation
+ */
 export class MarketGenerator {
     private priceService = new PriceService();
     
+    /**
+     * Generates market requests based on configuration
+     * @param config - Market generation configuration
+     * @returns Array of market requests ready for processing
+     */
     async generateMarketRequests(config: MarketGenerationConfig): Promise<MarketRequest[]> {
         console.log(chalk.blue(`🏗️ Generating market requests:`));
         console.log(chalk.gray(`   Max markets: ${config.maxMarkets}`));
@@ -70,6 +95,11 @@ export class MarketGenerator {
         return marketRequests;
     }
     
+    /**
+     * Filters and sorts available market pairs based on configuration
+     * @param config - Market generation configuration
+     * @returns Array of enabled and valid market pairs
+     */
     private getEnabledPairs(config: MarketGenerationConfig): MarketPairConfig[] {
         return MARKET_PAIR_CONFIGS
             .filter(pair => pair.enabled)
@@ -78,12 +108,22 @@ export class MarketGenerator {
             .sort((a, b) => b.priority - a.priority);
     }
     
+    /**
+     * Validates if a market pair has valid token configurations
+     * @param pair - Market pair to validate
+     * @returns True if both tokens in the pair exist in token configs
+     */
     private isValidPair(pair: MarketPairConfig): boolean {
         const baseToken = TOKEN_CONFIGS[pair.base];
         const quoteToken = TOKEN_CONFIGS[pair.quote];
         return !!(baseToken && quoteToken);
     }
     
+    /**
+     * Extracts unique token symbols needed for price fetching
+     * @param pairs - Array of market pairs
+     * @returns Array of unique token symbols (excluding stablecoins for quote tokens)
+     */
     private getRequiredSymbols(pairs: MarketPairConfig[]): string[] {
         const symbols = new Set<string>();
         pairs.forEach(pair => {
@@ -96,6 +136,10 @@ export class MarketGenerator {
         return Array.from(symbols);
     }
     
+    /**
+     * Logs price fetching results with statistics
+     * @param prices - Map of token symbols to their price data
+     */
     private logPriceResults(prices: Map<string, PriceData>): void {
         console.log(chalk.blue(`📊 Price fetch results:`));
         const bySource = new Map<string, number>();

@@ -1,7 +1,7 @@
 /**
- * @fileoverview Comprehensive fixture diagnostics for SwapCast prediction markets
+ * @file Comprehensive fixture diagnostics for SwapCast prediction markets
  * @description Analyzes system health, market states, NFT predictions, and pool prices
- * @author SwapCast Team
+ * @module utils/diagnostic
  */
 
 import { formatEther, type Address, createPublicClient, http } from 'viem';
@@ -14,7 +14,7 @@ import { MarketCreationResult } from '../markets';
 import { anvil } from 'viem/chains';
 
 /**
- * Main diagnostic results interface
+ * Comprehensive diagnostic results for the SwapCast system
  */
 interface DiagnosticResults {
     totalMarkets: number;
@@ -33,7 +33,19 @@ interface DiagnosticResults {
 }
 
 /**
- * Market diagnostic information
+ * Detailed diagnostic information for a single market
+ * @property id - Unique market identifier
+ * @property name - Human-readable market name
+ * @property asset - Asset pair being traded (e.g., 'ETH/USDC')
+ * @property isActive - Whether the market is currently active
+ * @property isResolved - Whether the market has been resolved
+ * @property totalStakeBearish - Total staked on bearish outcome
+ * @property totalStakeBullish - Total staked on bullish outcome
+ * @property totalStake - Combined total staked on all outcomes
+ * @property expirationTime - When the market expires
+ * @property timeUntilExpiration - Human-readable time until expiration
+ * @property priceThreshold - Target price for market resolution
+ * @property status - Current market status
  */
 interface MarketDiagnostic {
     id: number;
@@ -51,7 +63,15 @@ interface MarketDiagnostic {
 }
 
 /**
- * Pool diagnostic information
+ * Detailed diagnostic information for a liquidity pool
+ * @property marketId - Associated market ID
+ * @property poolKey - Pool configuration including tokens and fees
+ * @property sqrtPriceX96 - Current square root price in X96 format
+ * @property tick - Current tick value
+ * @property token0Price - Price of token0 in terms of token1
+ * @property token1Price - Price of token1 in terms of token0
+ * @property priceStatus - Status of the pool price relative to market
+ * @property dataSource - Source of the price data
  */
 interface PoolDiagnostic {
     marketId: number;
@@ -71,7 +91,13 @@ interface PoolDiagnostic {
 }
 
 /**
- * NFT diagnostic information
+ * Diagnostic information for prediction NFTs
+ * @property tokenId - Unique NFT identifier
+ * @property owner - Current owner's address
+ * @property marketId - Associated market ID
+ * @property outcome - Predicted outcome (Bullish/Bearish)
+ * @property stakeAmount - Amount staked in the prediction
+ * @property mintedAt - When the prediction was made
  */
 interface NFTDiagnostic {
     tokenId: number;
@@ -93,10 +119,11 @@ const ADDRESSES = {
 } as const;
 
 /**
- * Convert sqrtPriceX96 to human readable token prices
- * 
- * @param sqrtPriceX96 - The sqrt price in X96 format
- * @returns Object containing token0 and token1 prices
+ * Converts sqrtPriceX96 to human-readable token prices
+ * @param sqrtPriceX96 - The square root price in X96 format
+ * @returns Object containing:
+ *   - token0Price: Price of token0 in terms of token1
+ *   - token1Price: Price of token1 in terms of token0
  */
 function convertSqrtPriceX96(sqrtPriceX96: bigint): { token0Price: number; token1Price: number } {
     if (sqrtPriceX96 === 0n) {
@@ -120,13 +147,14 @@ function convertSqrtPriceX96(sqrtPriceX96: bigint): { token0Price: number; token
 }
 
 /**
- * Analyze pool price status for prediction markets
- * 
- * @param token0Price - Price of token0 in terms of token1
- * @param token1Price - Price of token1 in terms of token0
+ * Analyzes pool price status relative to prediction markets
+ * @param token0Price - Current price of token0 in terms of token1
+ * @param token1Price - Current price of token1 in terms of token0
  * @param currency0 - Address of token0
  * @param currency1 - Address of token1
- * @returns Price status analysis
+ * @returns Object containing:
+ *   - status: Overall health status of the price
+ *   - description: Human-readable explanation of status
  */
 function analyzePoolPrice(
     token0Price: number, 
@@ -180,11 +208,10 @@ function analyzePoolPrice(
 }
 
 /**
- * Calculate time remaining until market expiration
- * 
- * @param expirationDate - Market expiration timestamp
- * @param currentDate - Current timestamp
- * @returns Formatted time string
+ * Calculates time remaining until market expiration
+ * @param expirationDate - Future date when market expires
+ * @param currentDate - Current date for comparison
+ * @returns Human-readable string of time remaining (e.g., '2d 5h 30m')
  */
 function calculateTimeRemaining(expirationDate: Date, currentDate: Date): string {
     const diffMs = expirationDate.getTime() - currentDate.getTime();
@@ -205,10 +232,9 @@ function calculateTimeRemaining(expirationDate: Date, currentDate: Date): string
 }
 
 /**
- * Check balances of key contracts
- * 
- * @param publicClient - Viem public client instance
- * @param results - Results object to populate
+ * Checks ETH balances of key system contracts
+ * @param publicClient - Configured Viem public client
+ * @param results - Diagnostic results object to update with balance info
  */
 async function checkContractBalances(publicClient: any, results: DiagnosticResults): Promise<void> {
     console.log(chalk.yellow('\n💰 CHECKING CONTRACT BALANCES'));
@@ -234,11 +260,10 @@ async function checkContractBalances(publicClient: any, results: DiagnosticResul
 }
 
 /**
- * Analyze all prediction markets
- * 
- * @param predictionManager - PredictionManager contract instance
- * @param markets - Array of market creation results
- * @param results - Results object to populate
+ * Analyzes all prediction markets for diagnostic purposes
+ * @param predictionManager - Initialized PredictionManager contract instance
+ * @param markets - Array of market creation results to analyze
+ * @param results - Diagnostic results object to update with market data
  */
 async function analyzeMarkets(
     predictionManager: any, 

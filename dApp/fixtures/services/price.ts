@@ -1,6 +1,20 @@
+/**
+ * @file Price service for test fixtures
+ * @description Handles price fetching from various sources with caching
+ * @module services/price
+ */
+
 import { TOKEN_CONFIGS } from '../config/tokens';
 import chalk from 'chalk';
 
+/**
+ * Represents price data for a token
+ * @property symbol - Token symbol (e.g., 'ETH')
+ * @property price - Current price in USD
+ * @property source - Source of the price data
+ * @property timestamp - When the price was fetched (unix ms)
+ * @property confidence - Confidence level of the price data
+ */
 export interface PriceData {
     symbol: string;
     price: number;
@@ -9,11 +23,25 @@ export interface PriceData {
     confidence: 'high' | 'medium' | 'low';
 }
 
+/**
+ * Service for fetching and caching token prices
+ * Implements rate limiting and fallback mechanisms
+ */
 export class PriceService {
+    /** @private */
     private cache = new Map<string, PriceData>();
-    private readonly CACHE_TTL = 60 * 1000; // 1 minute
-    private readonly RATE_LIMIT_DELAY = 200; // 200ms between requests
     
+    /** @private Cache TTL in milliseconds */
+    private readonly CACHE_TTL = 60 * 1000;
+    
+    /** @private Delay between API requests in milliseconds */
+    private readonly RATE_LIMIT_DELAY = 200;
+    
+    /**
+     * Fetches the current price for a token
+     * @param symbol - Token symbol (e.g., 'ETH')
+     * @returns Price data or null if not found
+     */
     async getPrice(symbol: string): Promise<PriceData | null> {
         // Check cache first
         const cached = this.getCachedPrice(symbol);
@@ -87,6 +115,11 @@ export class PriceService {
         return null;
     }
     
+    /**
+     * Fetches prices for multiple tokens with rate limiting
+     * @param symbols - Array of token symbols
+     * @returns Map of symbol to price data
+     */
     async getBatchPrices(symbols: string[]): Promise<Map<string, PriceData>> {
         const results = new Map<string, PriceData>();
         
@@ -106,6 +139,12 @@ export class PriceService {
         return results;
     }
     
+    /**
+     * Retrieves a price from cache if valid
+     * @param symbol - Token symbol
+     * @returns Cached price or null if not found/expired
+     * @private
+     */
     private getCachedPrice(symbol: string): PriceData | null {
         const cached = this.cache.get(symbol);
         if (!cached) return null;
@@ -114,6 +153,12 @@ export class PriceService {
         return isValid ? cached : null;
     }
     
+    /**
+     * Fetches price from CoinGecko API
+     * @param coinId - CoinGecko coin ID
+     * @returns Price in USD or null if not found
+     * @private
+     */
     private async fetchFromCoinGecko(coinId: string): Promise<number | null> {
         const apiKey = process.env.PRIVATE_COINGECKO_API_KEY;
         const baseUrl = process.env.PUBLIC_COINGECKO_API_URL || 'https://api.coingecko.com/api/v3';

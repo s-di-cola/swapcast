@@ -3,54 +3,23 @@ import { getPublicClient } from './client';
 import { getTokenBalance, isNativeEth, dealLiquidity } from './tokens';
 import { logInfo, logSuccess, logWarning } from './error';
 import { TOKEN_CONFIGS } from '../config/tokens';
-
+import { OUTCOME_BEARISH, OUTCOME_BULLISH } from '../predictions/prediction-swap';
+import { validatePredictionRequirements } from './swap';
  
 export const WHALE_ACCOUNTS: Record<string, Address> = {
-    // The ACTUAL whales from your successful output:
-    BEACON_DEPOSIT: '0x00000000219ab540356cBB839Cbe05303d7705Fa',      
-    WRAPPED_ETHER: '0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2',       
-    BINANCE_7: '0xBE0eB53F46cd790Cd13851d5EFf43D12404d33E8',          
-    ROBINHOOD: '0x40B38765696e3d5d8d9d834D8AaD4bB6e418E489',          
-    BASE_PORTAL: '0x49048044D57e1C92A77f79988d21Fa8fAF74E97e',        
-    BINANCE_HOT_2: '0xF977814e90da44bfa03b6295a0616a897441acec',       
-    BINANCE_PEG: '0x47ac0Fb4F2D84898e4D9E7b4DaB3C24507a6D503',        
-    BITFINEX_19: '0xE92d1A43df510F82C66382592a047d288f85226f',        
-    GEMINI_33: '0x61EDCDf5bb737ADffe5043706e7C5bb1f1a56eEA',          
-    BINANCE_14: '0x28C6c06298d514db089934071355e5743bf21d60',         
-    UNKNOWN_CA: '0xcA8Fa8f0b631EcDB18cda619C4Fc9D197c8aFfCA',         
-    BITFINEX_MULTI_3: '0xc61b9BB3A7a0767E3179713f3A5c7a9aedCE193C',   
-    BINANCE_28: '0x5a52E96BAcdaBb82fd05763E25335261B270Efcb',         
-    UNKNOWN_0A: '0x0a4c79cE84202b03e95B7a692E5D728d83C44c76',         
-
-    // Additional VERIFIED rich individual wallets (known to have substantial holdings):
-    VITALIK_BUTERIN: '0xd8dA6BF26964aF9D7eEd9e03E53415D37aA96045',    
-    ETHEREUM_FOUNDATION: '0xde0B295669a9Fd93d5F28D9Ec85E40f4cb697BAe', 
-
-    // More known rich wallets:
+    BINANCE_7: '0xBE0eB53F46cd790Cd13851d5EFf43D12404d33E8',
+    ROBINHOOD: '0x40B38765696e3d5d8d9d834D8AaD4bB6e418E489',
+    BINANCE_PEG: '0x47ac0Fb4F2D84898e4D9E7b4DaB3C24507a6D503',
+    BITFINEX_19: '0xE92d1A43df510F82C66382592a047d288f85226f',
+    BINANCE_28: '0x5a52E96BAcdaBb82fd05763E25335261B270Efcb',
+    UNKNOWN_0A: '0x0a4c79cE84202b03e95B7a692E5D728d83C44c76',
     KRAKEN_1: '0x2910543af39aba0cd09dbb2d50200b3e800a63d2',           
-    KRAKEN_2: '0x0a869d79a7052c7f1b55a8ebabbea3420f0d1e13',           
-
-    // DeFi whales (known to have diverse token holdings):
-    ALAMEDA_RESEARCH: '0x477573f212a7bdd5f7c12889bd1ad0aa44fb82aa',    
-    JUMP_TRADING: '0xf977814e90da44bfa03b6295a0616a897441acec',        
-
-    // Individual whale wallets (verified rich addresses):
-    WHALE_1: '0x220866B1A2219f40e72f5c628B65D54268cA3A9D',             
+    JUMP_TRADING: '0xf977814e90da44bfa03b6295a0616a897441acec',
     WHALE_2: '0x564286362092D8e7936f0549571a803B203aAceD',             
-    WHALE_3: '0x57757E3D981446D585Af0D9Ae4d7DF6D64647806',             
+    WHALE_3: '0x57757E3D981446D585Af0D9Ae4d7DF6D64647806',
     WHALE_4: '0x6cc5f688a315f3dc28a7781717a9a798a59fda7b',             
-    WHALE_5: '0x1522900b6dafac587d499a862861c0869be6e428',             
-
-    // Exchange cold wallets (typically very rich):
-    COINBASE_1: '0x71660c4005ba85c37ccec55d0c4493e66fe775d3',          
-    COINBASE_2: '0x503828976d22510aad0201ac7ec88293211d23da',          
-    HUOBI_1: '0x6748f50f686bfbca6fe8ad62b22228b87f31ff2b',            
-    HUOBI_2: '0x90e63c3d53e0ea496845b7a03ec7548b70014a91',            
-
-    // More Binance wallets (they tend to be loaded):
-    BINANCE_COLD_1: '0x4e9ce36e442e55ecd9025b9a6e0d88485d628a67',       
-    BINANCE_COLD_2: '0x4976fb03c32e5b8cfe2b6ccb31c09ba78ebaba41',       
-    BINANCE_COLD_3: '0xd551234ae421e3bcba99a0da6d736074f22192ff',       
+    COINBASE_1: '0x71660c4005ba85c37ccec55d0c4493e66fe775d3',
+    COINBASE_2: '0x503828976d22510aad0201ac7ec88293211d23da',
 };
 
 /**

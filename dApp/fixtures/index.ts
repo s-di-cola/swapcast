@@ -2,7 +2,6 @@
  * SwapCast Enhanced Fixture Generator - Whale-Based with Balance Validation
  *
  * Features:
- * - Top 25 Ethereum whale accounts from Etherscan
  * - Comprehensive balance validation before swaps
  * - Automatic token dealing for insufficient balances
  * - Prevents TRANSFER_FROM_FAILED errors
@@ -318,13 +317,6 @@ async function main() {
 		}
 
 		// 6. Generate predictions using enhanced whale system
-		console.log(chalk.yellow('\n🐋 ENHANCED WHALE-BASED PREDICTION GENERATION'));
-		console.log(chalk.yellow('-'.repeat(60)));
-		console.log(chalk.cyan('🎯 Initializing enhanced whale system with balance validation...'));
-		console.log(chalk.cyan('💰 Using top 25 Ethereum whale accounts from Etherscan'));
-		console.log(chalk.cyan('🛡️ Real-time balance checking prevents TRANSFER_FROM errors'));
-		console.log(chalk.cyan('🔄 Automatic whale rotation with intelligent selection'));
-
 		const { totalSuccessful, totalFailed } = await generatePredictionsForMarkets(markets);
 
 		console.log(chalk.green(`✅ Enhanced whale-based prediction generation completed!`));

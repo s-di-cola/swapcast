@@ -1,3 +1,13 @@
+/**
+ * Configuration for a token in the SwapCast system
+ * @property address - Contract address of the token
+ * @property symbol - Ticker symbol (e.g., 'ETH', 'USDC')
+ * @property name - Full name of the token
+ * @property decimals - Number of decimal places for the token
+ * @property coingeckoId - ID used to fetch price data from CoinGecko
+ * @property isStablecoin - Whether this is a stablecoin
+ * @property category - Classification of the token
+ */
 export interface TokenConfig {
     address: string;
     symbol: string;
@@ -8,6 +18,10 @@ export interface TokenConfig {
     category: 'crypto' | 'stablecoin' | 'altcoin';
 }
 
+/**
+ * Default token configurations for supported assets
+ * Maps token symbols to their configuration objects
+ */
 export const TOKEN_CONFIGS: Record<string, TokenConfig> = {
     ETH: {
         address: '0x0000000000000000000000000000000000000000',
@@ -54,7 +68,6 @@ export const TOKEN_CONFIGS: Record<string, TokenConfig> = {
         isStablecoin: true,
         category: 'stablecoin'
     },
-    // Easy to add more tokens
     LINK: {
         address: '0x514910771AF9Ca656af840dff83E8264EcF986CA',
         symbol: 'LINK',

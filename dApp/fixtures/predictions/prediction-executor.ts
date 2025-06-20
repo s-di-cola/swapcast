@@ -4,6 +4,14 @@ import { OUTCOME_BEARISH, OUTCOME_BULLISH, recordPredictionViaSwap } from './pre
 import { ensureWhaleHasTokens, getMarketTokens, validateWhaleBalanceForSwap, WhaleAccount } from '../utils/whales';
 import { calculateFee, validateMarket } from './prediction-core';
 
+/**
+ * Records a single prediction for a whale account
+ * @param whale - The whale account making the prediction
+ * @param market - The market to predict on
+ * @param stakeAmount - The amount to stake in the prediction
+ * @param minStakeAmount - The minimum allowed stake amount
+ * @returns Promise that resolves to true if prediction was successful, false otherwise
+ */
 const recordSinglePrediction = async (
     whale: WhaleAccount,
     market: MarketCreationResult,
@@ -16,14 +24,14 @@ const recordSinglePrediction = async (
         const finalStake = stakeAmount < minStakeAmount ? minStakeAmount * 2n : stakeAmount;
         const { total } = calculateFee(finalStake);
 
-        // Check ETH balance
+        // Validate ETH balance for transaction fees
         const ethCheck = await validateWhaleBalanceForSwap(whale, 'ETH', total);
         if (!ethCheck.valid) {
             logWarning('Prediction', `${whale.name} insufficient ETH`);
             return false;
         }
 
-        // Ensure tokens
+        // Ensure required tokens are available
         const requiredTokens = getMarketTokens({
             base: market.token0.symbol,
             quote: market.token1.symbol
@@ -33,9 +41,7 @@ const recordSinglePrediction = async (
             return false;
         }
 
-        // Execute prediction
-
-        // Check which outcomes are possible
+        // Determine possible prediction outcomes based on token balances
         const token0Check = await validateWhaleBalanceForSwap(whale, market.token0.symbol, finalStake);
         const token1Check = await validateWhaleBalanceForSwap(whale, market.token1.symbol, finalStake);
 
@@ -65,7 +71,15 @@ const recordSinglePrediction = async (
     }
 };
 
-export const recordPredictionWithRetry = (
+/**
+ * Records a prediction with retry logic
+ * @param whale - The whale account making the prediction
+ * @param market - The market to predict on
+ * @param stakeAmount - The amount to stake in the prediction
+ * @param minStakeAmount - The minimum allowed stake amount
+ * @returns Promise that resolves to true if prediction was successful after retries
+ */
+export const recordPredictionWithRetry = async (
     whale: WhaleAccount,
     market: MarketCreationResult,
     stakeAmount: bigint,

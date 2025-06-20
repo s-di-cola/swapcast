@@ -1,17 +1,20 @@
 /**
- * @fileoverview Fix swap direction logic for predictions
- * @description Corrects the mismatch between prediction outcome and swap direction
+ * @file Swap direction and validation utilities for predictions
+ * @description Handles swap direction determination and validation for prediction markets
+ * @module utils/swap
  */
 
 import { logInfo, logWarning } from '../utils/error';
 import { OUTCOME_BEARISH, OUTCOME_BULLISH } from '../predictions/prediction-swap';
 
 /**
- * Determine the correct swap direction and required token for a prediction
- * 
+ * Determines the correct swap direction and required token for a prediction
  * @param outcome - The prediction outcome (BULLISH or BEARISH)
  * @param market - Market with token0 and token1 information
- * @returns Object with swap direction and required token information
+ * @returns Object containing:
+ *   - zeroForOne: Boolean indicating swap direction
+ *   - requiredTokenSymbol: Symbol of the token needed for the swap
+ *   - swapDescription: Human-readable description of the swap
  */
 export function getSwapRequirements(
     outcome: typeof OUTCOME_BULLISH | typeof OUTCOME_BEARISH,
@@ -21,11 +24,11 @@ export function getSwapRequirements(
     requiredTokenSymbol: string;
     swapDescription: string;
 } {
+    const isBearish = outcome === OUTCOME_BEARISH;
+    
     // For ETH/USDC markets:
     // - BEARISH prediction: Sell ETH for USDC (zeroForOne = true)
     // - BULLISH prediction: Sell USDC for ETH (zeroForOne = false)
-    
-    const isBearish = outcome === OUTCOME_BEARISH;
     
     if (market.token0.symbol === 'ETH' && market.token1.symbol === 'USDC') {
         if (isBearish) {
@@ -60,14 +63,15 @@ export function getSwapRequirements(
 }
 
 /**
- * Validate that a whale has the required token for their prediction
- * 
- * @param whale - The whale account
- * @param outcome - The prediction outcome
- * @param market - Market information
- * @param stakeAmount - Amount needed for the prediction
- * @param validateBalance - Function to validate whale balance
- * @returns Promise<boolean> - True if whale has sufficient balance
+ * Validates that a whale has the required token for their prediction
+ * @param whale - The whale account to validate
+ * @param outcome - The prediction outcome (BULLISH or BEARISH)
+ * @param market - Market information containing token details
+ * @param stakeAmount - Amount needed for the prediction in wei
+ * @param validateBalance - Async function to validate whale's token balance
+ * @returns Promise resolving to an object with:
+ *   - valid: boolean indicating if requirements are met
+ *   - error?: optional error message if validation fails
  */
 export async function validatePredictionRequirements(
     whale: any,
@@ -107,14 +111,13 @@ export async function validatePredictionRequirements(
 }
 
 /**
- * Enhanced whale selection that considers prediction requirements
- * 
- * @param whales - Array of available whales
- * @param marketId - Market ID
- * @param market - Market information
- * @param stakeAmount - Required stake amount
- * @param validateBalance - Balance validation function
- * @returns Promise<WhaleAccount | null> - Selected whale or null
+ * Selects a suitable whale for making a prediction based on token requirements
+ * @param whales - Array of available whale accounts
+ * @param marketId - ID of the target market
+ * @param market - Market information including token pairs
+ * @param stakeAmount - Required stake amount in wei
+ * @param validateBalance - Async function to validate token balances
+ * @returns Promise resolving to the selected whale or null if none suitable
  */
 export async function selectWhaleForPrediction(
     whales: any[],

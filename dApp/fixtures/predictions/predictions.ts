@@ -1,7 +1,8 @@
 /**
- * @fileoverview Enhanced prediction generation system with whale tracking
+ * @file Enhanced prediction generation system with whale tracking
  * @description Manages the creation of predictions across multiple markets using a whale-based
  * system with balance validation and duplicate prediction prevention.
+ * @module predictions
  */
 
 import { parseEther } from 'viem';
@@ -20,12 +21,11 @@ import { getProtocolConfig } from './prediction-core';
 import { recordPredictionWithRetry } from './prediction-executor';
 
 /**
- * Generate predictions for a single market with corrected swap logic
- * 
- * @param market - Market to generate predictions for
- * @param whales - Array of whale accounts
- * @param minStakeAmount - Minimum stake amount
- * @returns Promise<number> - Number of successful predictions
+ * Generates predictions across multiple markets using available whale accounts
+ * @param markets - Array of markets to generate predictions for
+ * @param whales - Array of available whale accounts
+ * @param minStakeAmount - Minimum stake amount in wei
+ * @returns Promise that resolves to the total number of successful predictions
  */
 const generatePredictionsForMarket = async (
     market: MarketCreationResult,
@@ -98,14 +98,13 @@ const generatePredictionsForMarket = async (
 };
 
 /**
- * Record a prediction with a specific outcome (instead of random)
- * 
- * @param whale - Whale account
- * @param market - Market information
- * @param outcome - Specific outcome to predict
- * @param stakeAmount - Stake amount
- * @param minStakeAmount - Minimum stake amount
- * @returns Promise<boolean> - Success status
+ * Records a prediction with a specific outcome
+ * @param whale - The whale account making the prediction
+ * @param market - The target market information
+ * @param outcome - The specific outcome to predict (0 for bearish, 1 for bullish)
+ * @param stakeAmount - The amount to stake in wei
+ * @param minStakeAmount - The minimum allowed stake amount in wei
+ * @returns Promise that resolves to true if prediction was successful
  */
 async function recordPredictionWithSpecificOutcome(
     whale: WhaleAccount,

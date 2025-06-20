@@ -1,5 +1,7 @@
 /**
- * Token management utilities for fixtures
+ * @file Token Management Utilities
+ * @description Handles token operations including approvals, balance checks, and liquidity management
+ * @module utils/tokens
  */
 
 import { Token } from '@uniswap/sdk-core';
@@ -19,11 +21,20 @@ import { CONTRACT_ADDRESSES } from './wallets';
 
 const execAsync = promisify(exec);
 
-// Native ETH is represented as the zero address in Uniswap V4
+/**
+ * Native ETH address constant (zero address in Uniswap V4)
+ * @constant
+ * @type {Address}
+ */
 export const NATIVE_ETH_ADDRESS = '0x0000000000000000000000000000000000000000' as Address;
 
 /**
- * Token information interface
+ * Interface representing token metadata
+ * @interface TokenInfo
+ * @property {Address} address - Token contract address
+ * @property {string} symbol - Token symbol (e.g., 'WETH', 'USDC')
+ * @property {string} name - Full token name
+ * @property {number} decimals - Token decimals (e.g., 18 for WETH, 6 for USDC)
  */
 export interface TokenInfo {
   address: Address;
@@ -33,15 +44,23 @@ export interface TokenInfo {
 }
 
 /**
- * Check if an address represents native ETH
+ * Checks if an address represents native ETH (zero address)
+ * @param {Address} address - The address to check
+ * @returns {boolean} True if the address is the native ETH address
+ * @example
+ * const isEth = isNativeEth('0x0000000000000000000000000000000000000000'); // true
  */
 export function isNativeEth(address: Address): boolean {
   return address.toLowerCase() === NATIVE_ETH_ADDRESS.toLowerCase();
 }
 
-
 /**
- * Normalize any token balance to 18 decimals for consistent comparison
+ * Normalizes token balance to 18 decimal places for consistent comparison
+ * @param {bigint} balance - The token balance in its native decimals
+ * @param {number} decimals - The number of decimals the token uses
+ * @returns {bigint} Balance normalized to 18 decimal places
+ * @example
+ * const normalized = normalizeToEther(1000000n, 6); // 1000000000000000000n (1.0 with 18 decimals)
  */
 export function normalizeToEther(balance: bigint, decimals: number): bigint {
   if (decimals === 18) {
@@ -56,7 +75,11 @@ export function normalizeToEther(balance: bigint, decimals: number): bigint {
 }
 
 /**
- * Get token balance for an account
+ * Retrieves the token balance for a given account
+ * @param {Address} account - The account address
+ * @param {Address} tokenAddress - The token contract address
+ * @returns {Promise<bigint>} The token balance in its native decimals
+ * @throws {Error} If the token balance cannot be fetched
  */
 export const getTokenBalance = withErrorHandling(
   async (tokenAddress: Address, account: Address): Promise<bigint> => {
@@ -76,7 +99,16 @@ export const getTokenBalance = withErrorHandling(
   'GetTokenBalance'
 );
 
-
+/**
+ * Approves a spender to spend tokens on behalf of the signer
+ * @param {Address} account - The account approving the spending
+ * @param {Address} tokenAddress - The token contract address
+ * @param {bigint} amount - The amount to approve (in token decimals)
+ * @param {Address} [spender=CONTRACT_ADDRESSES.POSITION_MANAGER] - The spender address
+ * @returns {Promise<void>}
+ * @example
+ * await approveToken(account, tokenAddress, amount);
+ */
 export async function approveToken(
   account: Address,
   tokenAddress: Address,
@@ -227,7 +259,16 @@ export async function approveToken(
   }
 }
 
-
+/**
+ * Transfers tokens to an account to provide liquidity
+ * @param {Address} to - The recipient address
+ * @param {Address} token0Address - First token address
+ * @param {Address} token1Address - Second token address
+ * @param {bigint} amount0 - Amount of token0 to transfer
+ * @param {bigint} amount1 - Amount of token1 to transfer
+ * @returns {Promise<void>}
+ * @throws {Error} If token transfer fails
+ */
 export async function dealLiquidity(
   to: Address,
   token0Address: Address,
@@ -381,9 +422,11 @@ export async function dealLiquidity(
   }
 }
 
-
 /**
- * Get token decimals
+ * Retrieves the number of decimals for a token
+ * @param {Address} tokenAddress - The token contract address
+ * @returns {Promise<number>} The number of decimals
+ * @throws {Error} If the token decimals cannot be fetched
  */
 export const getTokenDecimals = withErrorHandling(
   async (tokenAddress: Address): Promise<number> => {

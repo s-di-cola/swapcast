@@ -1,8 +1,7 @@
 /**
- * Uniswap V4 Liquidity Provision
- *
- * Provides functionality for creating pools and adding liquidity to Uniswap V4
- * using the Position Manager contract with proper action encoding and delta resolution.
+ * @file Uniswap V4 Liquidity Provision
+ * @description Handles pool creation and liquidity management for test fixtures
+ * @module utils/liquidity
  */
 
 import {TickMath} from "@uniswap/v3-sdk";
@@ -23,9 +22,10 @@ import {TOKEN_CONFIGS} from "../config/tokens";
 
 /**
  * Initializes a Uniswap V4 pool with the specified price
- * @param token0Address - Address of token0
- * @param token1Address - Address of token1
- * @returns Pool initialization data including sqrtPriceX96 and current tick
+ * @param token0Address - Address of the first token in the pair
+ * @param token1Address - Address of the second token in the pair
+ * @returns Promise resolving to an initialized Pool instance
+ * @throws {Error} If price fetching fails for either token
  */
 const initializePool = async (
     token0Address: Address,
@@ -116,10 +116,12 @@ function getPositionParams(pool: Pool): {
         amount1: position.mintAmounts.amount1.toString(),
     };
 }
+
 /**
- * Adds liquidity to a Uniswap V4 pool using the Position Manager
- * @param pool - The pool to add liquidity to
- * @returns Transaction hash of the liquidity addition
+ * Adds liquidity to a Uniswap V4 pool
+ * @param pool - Target pool for liquidity provision
+ * @returns Promise that resolves when liquidity is added
+ * @throws {Error} If liquidity addition fails
  */
 const addLiquidity = async (pool: Pool): Promise<void> => {
     try {
@@ -197,10 +199,9 @@ const addLiquidity = async (pool: Pool): Promise<void> => {
     }
 };
 
-
 /**
- * Logs the liquidity for a given pool
- * @param pool The pool to log liquidity for
+ * Logs detailed liquidity information for a pool
+ * @param pool - The pool to analyze
  */
 async function logPoolLiquidity(pool: Pool) {
     logInfo('LogPoolLiquidity', `Checking liquidity for pool ${pool.poolKey.currency0}/${pool.poolKey.currency1}`);
@@ -219,10 +220,9 @@ async function logPoolLiquidity(pool: Pool) {
     logSuccess('LogPoolLiquidity', `✅ Pool has substantial liquidity!`);
 }
 
-
 /**
- * Logs the state for a given pool
- * @param pool The pool to log state for
+ * Logs current state information for a pool
+ * @param pool - The pool to inspect
  */
 async function logPoolState(pool: Pool) {
     logInfo('LogPoolState', `Checking state for pool ${pool.poolKey.currency0}/${pool.poolKey.currency1}`);
@@ -237,12 +237,12 @@ async function logPoolState(pool: Pool) {
     logSuccess('LogPoolState', `✅ Pool state checked!`);
 }
 
-
 /**
- * Creates a pool and adds initial liquidity
+ * Creates a new pool and seeds it with initial liquidity
  * @param token0Address - Address of the first token
  * @param token1Address - Address of the second token
- * @returns The created pool
+ * @returns Promise resolving to the created Pool instance
+ * @throws {Error} If pool creation or liquidity addition fails
  */
 const mintPool = async (
     token0Address: Address,
@@ -261,8 +261,9 @@ const mintPool = async (
 
 /**
  * Adds liquidity for all enabled market pairs
- * @param user The address to add liquidity for
- * @param amount The amount of each token to add (in base units, e.g., 1000 USDC, 1000 ETH)
+ * @param user - Address that will provide the liquidity
+ * @param amount - Amount of each token to add (in base units)
+ * @returns Promise that resolves when all liquidity is added
  */
 async function addLiquidityForMarkets(user: Address, amount: number = 1000): Promise<void> {
 
@@ -303,11 +304,16 @@ async function addLiquidityForMarkets(user: Address, amount: number = 1000): Pro
     logSuccess('MarketLiquidity', 'Completed adding liquidity for all enabled markets');
 }
 
+/**
+ * @exports
+ * @description Public API for liquidity management
+ */
 export {
     mintPool,
     addLiquidityForMarkets,
     logPoolState,
-    logPoolLiquidity
+    logPoolLiquidity,
+    addLiquidity,
+    initializePool,
+    getPositionParams,
 };
-
-

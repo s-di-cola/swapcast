@@ -1,5 +1,7 @@
 /**
- * Shared client utilities for fixtures
+ * @file Shared client utilities for test fixtures
+ * @description Provides client management and Anvil interaction utilities
+ * @module utils/client
  */
 
 import { 
@@ -12,11 +14,12 @@ import {
 } from 'viem';
 import { anvil } from 'viem/chains';
 
-// Cache for clients to avoid redundant creation
+/** @private */
 let cachedPublicClient: PublicClient | null = null;
 
 /**
- * Get a shared public client instance
+ * Gets or creates a singleton public client instance
+ * @returns Configured Viem PublicClient instance
  */
 export function getPublicClient(): PublicClient {
     if (!cachedPublicClient) {
@@ -29,7 +32,9 @@ export function getPublicClient(): PublicClient {
 }
 
 /**
- * Create a wallet client for a specific account
+ * Creates a wallet client for a specific account
+ * @param account - The account address to use with the wallet client
+ * @returns Configured Viem WalletClient instance
  */
 export function getWalletClient(account: Address): WalletClient {
     return createWalletClient({
@@ -40,7 +45,11 @@ export function getWalletClient(account: Address): WalletClient {
 }
 
 /**
- * Get contract instances with proper typing
+ * Creates a type-safe contract instance
+ * @template T - The contract type to create
+ * @param contractGetter - Factory function that creates the contract instance
+ * @param address - The contract address
+ * @returns Typed contract instance
  */
 export function getContract<T>(
     contractGetter: (params: { address: Address, chain: typeof anvil, transport: ReturnType<typeof http> }) => T,
