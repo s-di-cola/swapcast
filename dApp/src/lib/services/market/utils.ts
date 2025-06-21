@@ -5,6 +5,8 @@
  */
 
 import type { Address } from 'viem';
+import { formatEther } from 'viem';
+import { formatDistanceToNow } from 'date-fns';
 import type {
 	Market,
 	MarketStatus,
@@ -149,59 +151,64 @@ export function createDefaultMarket(id: bigint): Market {
  * Transforms raw contract data into Market interface with better price handling
  *
  * @param details - Raw market details from contract
+ * @param assetPair - Asset pair string
  * @returns Properly formatted Market object
  */
-export function transformMarketDetails(details: MarketDetailsResult): Market {
-	const now = Math.floor(Date.now() / 1000);
-	const timeRemaining = Number(details.expirationTimestamp) - now;
-	const { status, expirationDisplay } = getMarketStatus(details.resolved, timeRemaining);
-
-	// Convert bigint values to proper number format for display
-	const bearishStake = Number(details.totalConvictionBearish) / 1e18;
-	const bullishStake = Number(details.totalConvictionBullish) / 1e18;
-	const totalStakeValue = bearishStake + bullishStake;
-
-	// Use the asset pair directly from the contract data, with fallbacks
-	const formattedAssetPair = details.assetPair || 'ETH/USD';
-
+export function transformMarketDetails(details: MarketDetailsResult, assetPair: string = ''): Market {
 	// Extract asset symbol from asset pair, with description fallback
 	const assetSymbol = extractAssetSymbol(details.assetPair, details.description);
 
-	// FIXED: Handle price threshold conversion based on your fixtures
-	// Looking at your fixtures, price threshold is created with parseUnits(String(config.basePrice * 1.15), 8)
-	// This means it's stored with 8 decimals, not 18!
+	// Debug log the entire details object to see what we're working with
+	console.log('Market details in transformMarketDetails:', details);
+
 	let priceThreshold: number;
 
 	try {
-		const rawThreshold = Number(details.priceThreshold);
-		console.log(`Raw price threshold for ${assetSymbol}:`, rawThreshold, typeof details.priceThreshold);
+		// Log the raw price threshold with its type
+		console.log(`Raw price threshold (type: ${typeof details.priceThreshold}, value: ${details.priceThreshold})`);
 
-		// Your fixtures use parseUnits(..., 8) which means 8 decimal places
-		// So we need to divide by 10^8, not 10^18
-		if (rawThreshold > 0) {
-			priceThreshold = rawThreshold / 1e8; // 8 decimals as per your fixtures
-			console.log(`Converted price threshold (÷1e8):`, priceThreshold);
-		} else {
-			// Fallback to reasonable defaults if threshold is 0
-			switch (assetSymbol.toLowerCase()) {
-				case 'wbtc':
-				case 'btc':
-					priceThreshold = 100000; // ~$100k for BTC
-					break;
-				case 'eth':
-					priceThreshold = 3000; // ~$3k for ETH
-					break;
-				default:
-					priceThreshold = 1000;
-			}
-			console.log(`Using fallback price for ${assetSymbol}:`, priceThreshold);
-		}
+		// The price threshold is now stored as a direct USD value (e.g., 3450 for $3450)
+		priceThreshold = Number(details.priceThreshold);
+		
+		console.log(`Price threshold (USD): $${priceThreshold.toLocaleString()}`);
+		
 	} catch (error) {
 		console.error('Error converting priceThreshold:', error);
-		priceThreshold = assetSymbol.toLowerCase().includes('btc') ? 100000 : 3000;
+		// Fallback to a reasonable default based on asset type
+		switch (assetSymbol.toLowerCase()) {
+			case 'wbtc':
+			case 'btc':
+				priceThreshold = 100000; // $100k for BTC
+				break;
+			case 'eth':
+				priceThreshold = 3000; // $3k for ETH
+				break;
+			default:
+				priceThreshold = 1000; // $1k for others
+		}
 	}
 
-	const transformedMarket: Market = {
+	console.log(`Using price threshold: $${priceThreshold.toLocaleString()} for ${assetSymbol}`);
+
+	// Format the asset pair for display (e.g., "ETH/USDC")
+	const formattedAssetPair = assetPair || details.assetPair || 'ETH/USD';
+
+	// Calculate total stake value in ETH for display
+	const totalStakeValue = details.totalConvictionBearish + details.totalConvictionBullish;
+
+	// Calculate market status
+	const now = Math.floor(Date.now() / 1000);
+	const isExpired = Number(details.expirationTimestamp) <= now;
+	let status: MarketStatus = 'Open';
+	
+	if (details.resolved) {
+		status = 'Resolved';
+	} else if (isExpired) {
+		status = 'Expired';
+	}
+
+	// Create the market object with proper typing
+	const market: Market = {
 		id: details.marketId.toString(),
 		name: details.description || `${assetSymbol} Price Prediction`,
 		assetSymbol: assetSymbol,
@@ -213,23 +220,15 @@ export function transformMarketDetails(details: MarketDetailsResult): Market {
 		totalStake1: details.totalConvictionBullish,
 		expirationTime: Number(details.expirationTimestamp),
 		priceAggregator: details.priceOracle,
-		priceThreshold: priceThreshold, // Now properly converted
+		priceThreshold,
 		status,
-		expirationDisplay,
-		totalStake: totalStakeValue.toString()
+		expirationDisplay: formatDistanceToNow(new Date(Number(details.expirationTimestamp) * 1000), { addSuffix: true }),
+		totalStake: formatEther(totalStakeValue)
 	};
 
-	console.log(`Final transformed market for ${assetSymbol}:`, {
-		id: transformedMarket.id,
-		name: transformedMarket.name,
-		assetSymbol: transformedMarket.assetSymbol,
-		priceThreshold: transformedMarket.priceThreshold,
-		bearishStake,
-		bullishStake,
-		totalStakeValue
-	});
+	console.log(`Created market for ${market.assetPair} with threshold $${market.priceThreshold}`);
 
-	return transformedMarket;
+	return market;
 }
 
 /**

@@ -75,10 +75,12 @@ const createPredictionMarket = withErrorHandling(
         // Calculate expiration time (7 days from now)
         const expirationTime = BigInt(Math.floor(Date.now() / 1000) + 7 * 24 * 60 * 60);
 
-        // Calculate price threshold based on priceThresholdMultiplier (e.g., 1.15 = 15% movement)
-        // Convert from multiplier (e.g., 1.15) to percentage points (e.g., 15)
-        const priceThresholdPercentage = Math.floor((request.priceThresholdMultiplier - 1) * 100);
-        const priceThreshold = BigInt(priceThresholdPercentage);
+        // Calculate price threshold in USD by applying the multiplier to the base price
+        // For example, if basePrice is 3000 and multiplier is 1.15, threshold is 3450
+        const priceThresholdValue = Math.floor(request.basePrice * request.priceThresholdMultiplier);
+        const priceThreshold = BigInt(priceThresholdValue);
+        
+        logInfo('MarketCreation', `Setting price threshold to ${priceThresholdValue} (${request.basePrice} * ${request.priceThresholdMultiplier})`);
 
         // Ensure we have a valid account
         if (!adminClient.account) {

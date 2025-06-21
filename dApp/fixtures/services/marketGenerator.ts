@@ -37,6 +37,28 @@ export class MarketGenerator {
     private priceService = new PriceService();
 
     /**
+     * Generates a random price threshold multiplier that can be positive or negative
+     * @param minPct - Minimum absolute percentage (e.g., 5 for 5% or -5%)
+     * @param maxPct - Maximum absolute percentage (e.g., 25 for 25% or -25%)
+     * @returns A random multiplier that can be above or below 1.0
+     */
+    private getRandomMultiplier(minPct: number = 5, maxPct: number = 25): number {
+        // Randomly decide if the movement is positive or negative
+        const isPositive = Math.random() > 0.5;
+        const sign = isPositive ? 1 : -1;
+        
+        // Generate a random percentage within the range
+        const randomPct = Math.random() * (maxPct - minPct) + minPct;
+        const adjustedPct = sign * randomPct;
+        
+        // Calculate the multiplier (e.g., 3000 * 1.15 = 3450 or 3000 * 0.85 = 2550)
+        const multiplier = 1 + (adjustedPct / 100);
+        
+        // Round to 2 decimal places for cleaner numbers
+        return Math.round(multiplier * 100) / 100;
+    }
+
+    /**
      * Generates market requests based on configuration
      * @param config - Market generation configuration
      * @returns Array of market requests ready for processing
@@ -81,7 +103,7 @@ export class MarketGenerator {
                 quote: pair.quote,
                 basePrice: basePrice.price,
                 priceConfidence: basePrice.confidence,
-                priceThresholdMultiplier: pair.priceThresholdMultiplier || 1.15,
+                priceThresholdMultiplier: this.getRandomMultiplier(),
                 expirationDays: pair.expirationDays || 30,
                 category: pair.category
             });
