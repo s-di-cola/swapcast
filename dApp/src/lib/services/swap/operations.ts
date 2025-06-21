@@ -1,14 +1,10 @@
-/**
- * Operations for the swap service - Fixed for SwapCastHook compatibility
- * @module services/swap/operations
- */
-
 import {
   http,
   type Address,
   type Hash,
   keccak256,
   encodeAbiParameters,
+  encodePacked,
   createPublicClient,
   formatUnits,
   pad,
@@ -19,24 +15,27 @@ import { getPoolKey } from '$lib/services/market/operations';
 import { getStateView } from '$generated/types/StateView';
 import { getPoolManager } from '$generated/types/PoolManager';
 import { getPredictionManager } from '$generated/types/PredictionManager';
+import { getIUniversalRouter } from '$generated/types/IUniversalRouter';
 import { getCurrentNetworkConfig } from '$lib/utils/network';
 import { appKit } from '$lib/configs/wallet.config';
 import {
   PUBLIC_STATEVIEW_ADDRESS,
   PUBLIC_UNIV4_POOLMANAGER_ADDRESS,
-  PUBLIC_PREDICTIONMANAGER_ADDRESS
+  PUBLIC_PREDICTIONMANAGER_ADDRESS,
+  PUBLIC_UNIVERSAL_ROUTER_ADDRESS
 } from '$env/static/public';
 import type { PriceFetchResult, SwapQuoteResult } from './types';
 import type { PoolKey } from '$lib/services/market/types';
 
-// Constants
 const Q96 = 2n ** 96n;
 const NATIVE_ETH_ADDRESS = '0x0000000000000000000000000000000000000000';
 const decimalsCache = new Map<string, number>();
 
-/**
- * PredictionTypes namespace to match the Solidity contract structure
- */
+const V4_SWAP_COMMAND = 0x10;
+const SWAP_EXACT_IN_SINGLE = 0x06;
+const SETTLE_ALL = 0x0c;
+const TAKE_ALL = 0x0f;
+
 export namespace PredictionTypes {
   export enum Outcome {
     BELOW_TARGET = 0,
@@ -44,34 +43,34 @@ export namespace PredictionTypes {
   }
 }
 
-// Helper Functions
-
 /**
- * Get token decimals using ERC20 ABI call
+ * Retrieves the number of decimals for a given token address
+ * @param {Address} address - The token contract address
+ * @returns {Promise<number>} The number of decimals for the token (defaults to 18 for ETH or on error)
  */
 async function getTokenDecimals(address: Address): Promise<number> {
   if (address.toLowerCase() === NATIVE_ETH_ADDRESS.toLowerCase()) {
     return 18;
   }
-  
+
   const cacheKey = address.toLowerCase();
   if (decimalsCache.has(cacheKey)) {
     return decimalsCache.get(cacheKey)!;
   }
-  
+
   try {
     const { rpcUrl, chain } = getCurrentNetworkConfig();
     const publicClient = createPublicClient({
       chain,
       transport: http(rpcUrl)
     });
-    
+
     const decimals = await publicClient.readContract({
       address,
       abi: erc20Abi,
       functionName: 'decimals'
     });
-    
+
     decimalsCache.set(cacheKey, decimals);
     return decimals;
   } catch (error) {
@@ -81,31 +80,34 @@ async function getTokenDecimals(address: Address): Promise<number> {
 }
 
 /**
- * Calculates a pool ID from a pool key
+ * Calculates a unique pool ID based on pool key parameters
+ * @param {PoolKey} poolKey - The pool key containing token addresses, fee, and tick spacing
+ * @returns {`0x${string}`} The keccak256 hash of the encoded pool parameters
  */
 function calculatePoolId(poolKey: PoolKey): `0x${string}` {
   const encodedData = encodeAbiParameters(
-    [
-      { type: 'address' },
-      { type: 'address' },
-      { type: 'uint24' },
-      { type: 'int24' },
-      { type: 'address' }
-    ],
-    [
-      poolKey.currency0,
-      poolKey.currency1,
-      poolKey.fee,
-      poolKey.tickSpacing,
-      poolKey.hooks
-    ]
+      [
+        { type: 'address' },
+        { type: 'address' },
+        { type: 'uint24' },
+        { type: 'int24' },
+        { type: 'address' }
+      ],
+      [
+        poolKey.currency0,
+        poolKey.currency1,
+        poolKey.fee,
+        poolKey.tickSpacing,
+        poolKey.hooks
+      ]
   );
 
   return keccak256(encodedData);
 }
 
 /**
- * Creates a StateView contract instance
+ * Creates and returns a StateView contract instance
+ * @returns {ReturnType<typeof getStateView>} The StateView contract instance
  */
 function getStateViewContract() {
   const { rpcUrl, chain } = getCurrentNetworkConfig();
@@ -116,9 +118,6 @@ function getStateViewContract() {
   });
 }
 
-/**
- * Creates a PoolManager contract instance
- */
 function getPoolManagerContract() {
   const { rpcUrl, chain } = getCurrentNetworkConfig();
   return getPoolManager({
@@ -129,7 +128,8 @@ function getPoolManagerContract() {
 }
 
 /**
- * Creates a PredictionManager contract instance
+ * Creates and returns a PredictionManager contract instance
+ * @returns {ReturnType<typeof getPredictionManager>} The PredictionManager contract instance
  */
 function getPredictionManagerContract() {
   const { rpcUrl, chain } = getCurrentNetworkConfig();
@@ -141,41 +141,111 @@ function getPredictionManagerContract() {
 }
 
 /**
- * Converts sqrtPriceX96 to human-readable price - FIXED
+ * Converts a sqrtPriceX96 value to its corresponding price
+ * @param {bigint} sqrtPriceX96 - The square root of the price in Q64.96 format
+ * @returns {number} The calculated price as a floating point number
  */
 function sqrtPriceX96ToPrice(sqrtPriceX96: bigint): number {
   if (sqrtPriceX96 === 0n) return 0;
-  
-  // FIXED: Proper Uniswap v4 price calculation
-  // price = (sqrtPriceX96 / 2^96)^2
+
   const sqrtPriceFloat = Number(sqrtPriceX96) / Number(Q96);
   const price = sqrtPriceFloat * sqrtPriceFloat;
-  
+
   console.log('sqrtPriceX96ToPrice calculation:', {
     sqrtPriceX96: sqrtPriceX96.toString(),
     sqrtPriceFloat,
     finalPrice: price
   });
-  
+
   return price;
 }
 
-/**
- * Calculate protocol fee for prediction
- */
-async function calculateProtocolFee(convictionStake: bigint): Promise<bigint> {
+function convertToTokenDecimals(ethEquivalentAmount: bigint, tokenDecimals: number): bigint {
+  if (tokenDecimals === 18) {
+    return ethEquivalentAmount;
+  }
+
+  const scaleFactor = BigInt(10 ** (18 - tokenDecimals));
+  return ethEquivalentAmount / scaleFactor;
+}
+
+function createPredictionHookData(
+    userAddress: Address,
+    marketId: bigint,
+    outcome: number,
+    stakeAmount: bigint
+): `0x${string}` {
+  const maxUint128 = (2n ** 128n) - 1n;
+  if (stakeAmount > maxUint128) {
+    throw new Error(`Stake amount ${stakeAmount} exceeds uint128 maximum`);
+  }
+
+  const hookData = encodePacked(
+      ['address', 'uint256', 'uint8', 'uint128'],
+      [userAddress, marketId, outcome, stakeAmount]
+  );
+
+  console.log('HookData created:', hookData);
+  return hookData;
+}
+
+function calculateTotalETHNeeded(stakeAmount: bigint, feeBasisPoints: bigint): bigint {
+  const MAX_BASIS_POINTS = 10000n;
+  const fee = (stakeAmount * feeBasisPoints) / MAX_BASIS_POINTS;
+  const total = stakeAmount + fee;
+
+  console.log('ETH calculation:', {
+    stake: stakeAmount.toString(),
+    fee: fee.toString(),
+    total: total.toString()
+  });
+
+  return total;
+}
+
+async function getProtocolConfig(): Promise<{ protocolFeeBasisPoints: bigint; minStakeAmount: bigint }> {
   try {
     const predictionManager = getPredictionManagerContract();
-    const protocolFeeBps = await predictionManager.read.protocolFeeBasisPoints();
-    return (convictionStake * protocolFeeBps) / 10000n;
+    const [protocolFeeBasisPoints, minStakeAmount] = await Promise.all([
+      predictionManager.read.protocolFeeBasisPoints(),
+      predictionManager.read.minStakeAmount()
+    ]);
+    return { protocolFeeBasisPoints, minStakeAmount };
   } catch (error) {
-    console.warn('Failed to fetch protocol fee, using default 300 bps (3%):', error);
-    return (convictionStake * 300n) / 10000n;
+    console.warn('Failed to fetch protocol config, using defaults:', error);
+    return {
+      protocolFeeBasisPoints: 300n,
+      minStakeAmount: BigInt('1000000000000000')
+    };
   }
 }
 
+function getTokenFromCurrency(currency: any, poolKey: PoolKey) {
+  const isCurrency0 = currency.toLowerCase() === poolKey.currency0.toLowerCase();
+
+  if (currency.toLowerCase() === NATIVE_ETH_ADDRESS.toLowerCase()) {
+    return {
+      address: NATIVE_ETH_ADDRESS,
+      symbol: 'ETH',
+      decimals: 18,
+      isNative: true
+    };
+  }
+
+  return {
+    address: currency,
+    symbol: isCurrency0 ? 'TOKEN0' : 'TOKEN1',
+    decimals: 18,
+    isNative: false
+  };
+}
+
 /**
- * Validate ETH balance for transaction
+ * Validates that an address has sufficient ETH balance
+ * @param {Address} address - The address to check balance for
+ * @param {bigint} requiredAmount - The minimum required ETH balance in wei
+ * @throws {Error} If the address has insufficient ETH balance
+ * @returns {Promise<void>}
  */
 async function validateEthBalance(address: Address, requiredAmount: bigint): Promise<void> {
   const { rpcUrl, chain } = getCurrentNetworkConfig();
@@ -185,44 +255,18 @@ async function validateEthBalance(address: Address, requiredAmount: bigint): Pro
   });
 
   const balance = await publicClient.getBalance({ address });
-  
+
   if (balance < requiredAmount) {
     throw new Error(
-      `Insufficient ETH balance. Need ${formatUnits(requiredAmount, 18)} ETH, have ${formatUnits(balance, 18)} ETH`
+        `Insufficient ETH balance. Need ${formatUnits(requiredAmount, 18)} ETH, have ${formatUnits(balance, 18)} ETH`
     );
   }
 }
 
 /**
- * Encode prediction data for SwapCastHook
- */
-function encodePredictionHookData(
-  user: Address,
-  marketId: bigint,
-  outcome: PredictionTypes.Outcome,
-  convictionStake: bigint
-): `0x${string}` {
-  const userHex = user.slice(2);
-  const marketIdHex = pad(toHex(marketId), { size: 32 }).slice(2);
-  const outcomeHex = pad(toHex(outcome), { size: 1 }).slice(2);
-  const convictionStakeHex = pad(toHex(convictionStake), { size: 16 }).slice(2);
-
-  const hookData = `0x${userHex}${marketIdHex}${outcomeHex}${convictionStakeHex}` as `0x${string}`;
-
-  const expectedTotalLength = 2 + (69 * 2);
-  if (hookData.length !== expectedTotalLength) {
-    throw new Error(
-      `Hook data length mismatch: expected ${expectedTotalLength} chars (69 bytes), got ${hookData.length} chars`
-    );
-  }
-
-  return hookData;
-}
-
-// Main Export Functions
-
-/**
- * Fetches current prices from a Uniswap v4 pool for a given market - FIXED
+ * Fetches and calculates price information for a given market
+ * @param {string | bigint} marketId - The ID of the market to fetch prices for
+ * @returns {Promise<PriceFetchResult>} Object containing price data or error information
  */
 export async function fetchPoolPrices(marketId: string | bigint): Promise<PriceFetchResult> {
   try {
@@ -246,29 +290,22 @@ export async function fetchPoolPrices(marketId: string | bigint): Promise<PriceF
     });
     console.log('Raw sqrtPriceX96:', sqrtPriceX96.toString());
 
-    // FIXED: Get actual token decimals for proper price calculation
     const token0Decimals = await getTokenDecimals(poolKey.currency0);
     const token1Decimals = await getTokenDecimals(poolKey.currency1);
-    
+
     console.log('Token decimals:', { token0Decimals, token1Decimals });
 
-    // Calculate raw price (token1 per token0)
     const rawPrice = sqrtPriceX96ToPrice(sqrtPriceX96);
-    
-    // FIXED: Adjust for decimal differences
-    // If token0 has 18 decimals and token1 has 6 decimals:
-    // We need to multiply by 10^(18-6) = 10^12 to get the correct price
+
     const decimalAdjustment = Math.pow(10, token0Decimals - token1Decimals);
     const adjustedPrice = rawPrice * decimalAdjustment;
-    
+
     console.log('Price calculation breakdown:', {
       rawPrice,
       decimalAdjustment,
       adjustedPrice
     });
 
-    // token0Price = price of token1 in terms of token0
-    // token1Price = price of token0 in terms of token1 = 1/token0Price
     const token0Price = adjustedPrice;
     const token1Price = adjustedPrice > 0 ? 1 / adjustedPrice : 0;
 
@@ -298,12 +335,16 @@ export async function fetchPoolPrices(marketId: string | bigint): Promise<PriceF
 }
 
 /**
- * Calculate swap quote with FIXED price direction
+ * Gets a swap quote for trading between two tokens in a given market
+ * @param {string | bigint} marketId - The ID of the market to get a quote for
+ * @param {Address} tokenIn - The address of the input token
+ * @param {bigint} amountIn - The amount of input token in its smallest unit
+ * @returns {Promise<SwapQuoteResult>} Object containing the swap quote or error information
  */
 export async function getSwapQuote(
-  marketId: string | bigint,
-  tokenIn: Address,
-  amountIn: bigint
+    marketId: string | bigint,
+    tokenIn: Address,
+    amountIn: bigint
 ): Promise<SwapQuoteResult> {
   try {
     const priceResult = await fetchPoolPrices(marketId);
@@ -354,19 +395,11 @@ export async function getSwapQuote(
       tokenOutDecimals
     });
 
-    // FIXED: Use the correct price direction
-    // token0Price = price of token1 in terms of token0 (e.g., USDC per ETH = 2488)
-    // token1Price = price of token0 in terms of token1 (e.g., ETH per USDC = 0.0004)
-    
     let exchangeRate: number;
     if (isToken0) {
-      // Swapping token0 for token1: use token0Price 
-      // This gives us how much token1 we get per token0
       exchangeRate = token0Price;
       console.log(`Swapping token0 for token1, using token0Price: ${exchangeRate}`);
     } else {
-      // Swapping token1 for token0: use token1Price
-      // This gives us how much token0 we get per token1  
       exchangeRate = token1Price;
       console.log(`Swapping token1 for token0, using token1Price: ${exchangeRate}`);
     }
@@ -383,7 +416,6 @@ export async function getSwapQuote(
     console.log('Output amount (with decimals):', amountOut.toString());
     console.log('Output amount (human readable):', Number(amountOut) / (10 ** tokenOutDecimals));
 
-    // Sanity check for ETH/USDC pairs
     if (amountInFloat === 1 && isToken0 && tokenOut.toLowerCase().includes('usdc')) {
       const outputAmount = Number(amountOut) / (10 ** tokenOutDecimals);
       if (outputAmount < 1000) {
@@ -415,16 +447,25 @@ export async function getSwapQuote(
 }
 
 /**
- * Execute swap with prediction via direct PoolManager call
+ * Executes a token swap with an attached price prediction
+ * @param {PoolKey} poolKey - The pool key containing token addresses and fee information
+ * @param {boolean} zeroForOne - Whether to swap token0 for token1 (true) or token1 for token0 (false)
+ * @param {bigint} amountIn - The amount of input token to swap
+ * @param {bigint} amountOutMinimum - The minimum amount of output token to receive
+ * @param {bigint} marketId - The ID of the prediction market
+ * @param {PredictionTypes.Outcome} outcome - The predicted outcome (ABOVE_TARGET or BELOW_TARGET)
+ * @param {bigint} convictionStake - The amount of ETH to stake on the prediction
+ * @returns {Promise<Hash>} The transaction hash of the executed swap
+ * @throws {Error} If chain configuration is missing or no account is connected
  */
 export async function executeSwapWithPrediction(
-  poolKey: PoolKey,
-  zeroForOne: boolean,
-  amountIn: bigint,
-  amountOutMinimum: bigint,
-  marketId: bigint,
-  outcome: PredictionTypes.Outcome,
-  convictionStake: bigint
+    poolKey: PoolKey,
+    zeroForOne: boolean,
+    amountIn: bigint,
+    amountOutMinimum: bigint,
+    marketId: bigint,
+    outcome: PredictionTypes.Outcome,
+    convictionStake: bigint
 ): Promise<Hash> {
   const { chain, rpcUrl } = getCurrentNetworkConfig();
 
@@ -437,62 +478,137 @@ export async function executeSwapWithPrediction(
     throw new Error('No connected account found');
   }
 
-  const protocolFee = await calculateProtocolFee(convictionStake);
-  const totalValue = convictionStake + protocolFee;
+  const { protocolFeeBasisPoints } = await getProtocolConfig();
+  const totalETHNeeded = calculateTotalETHNeeded(convictionStake, protocolFeeBasisPoints);
 
-  await validateEthBalance(address as Address, totalValue);
+  await validateEthBalance(address as Address, totalETHNeeded);
 
-  const hookData = encodePredictionHookData(
-    address as Address,
-    marketId,
-    outcome,
-    convictionStake
-  );
+  const token0Info = getTokenFromCurrency(poolKey.currency0, poolKey);
+  const token1Info = getTokenFromCurrency(poolKey.currency1, poolKey);
 
-  const swapParams = {
-    zeroForOne,
-    amountSpecified: amountIn,
-    sqrtPriceLimitX96: 0n
-  };
+  console.log('Token info:', {
+    token0: `${token0Info.symbol} (${token0Info.decimals} decimals)`,
+    token1: `${token1Info.symbol} (${token1Info.decimals} decimals)`
+  });
 
-  const poolManager = getPoolManagerContract();
+  const inputToken = zeroForOne ? token0Info : token1Info;
+  const outputToken = zeroForOne ? token1Info : token0Info;
+
+  const inputAmount = convertToTokenDecimals(convictionStake, inputToken.decimals);
+
+  const hookData = createPredictionHookData(address as Address, marketId, outcome, convictionStake);
+
+  console.log('Prediction details:', {
+    outcome: outcome === PredictionTypes.Outcome.ABOVE_TARGET ? 'BULLISH' : 'BEARISH',
+    swap: `${formatUnits(inputAmount, inputToken.decimals)} ${inputToken.symbol} → ${outputToken.symbol}`,
+    convictionStake: convictionStake.toString(),
+    totalETH: totalETHNeeded.toString()
+  });
 
   try {
-    const hash = await (poolManager.write.swap as any)(
-      [poolKey, swapParams, hookData],
-      {
-        account: address as `0x${string}`,
-        chain,
-        value: totalValue,
-        gas: 1000000n
-      }
-    );
-
     const publicClient = createPublicClient({
       chain,
       transport: http(rpcUrl)
     });
 
+    const universalRouter = getIUniversalRouter({
+      address: PUBLIC_UNIVERSAL_ROUTER_ADDRESS as Address,
+      chain,
+      transport: http(rpcUrl)
+    });
+
+    const poolKeyStruct = {
+      currency0: poolKey.currency0,
+      currency1: poolKey.currency1,
+      fee: poolKey.fee,
+      tickSpacing: poolKey.tickSpacing,
+      hooks: poolKey.hooks
+    };
+
+    const commands = encodePacked(['uint8'], [V4_SWAP_COMMAND]);
+
+    const actions = encodePacked(
+        ['uint8', 'uint8', 'uint8'],
+        [SWAP_EXACT_IN_SINGLE, SETTLE_ALL, TAKE_ALL]
+    );
+
+    const swapParams = encodeAbiParameters(
+        [{
+          name: 'swapParams',
+          type: 'tuple',
+          components: [
+            {
+              name: 'poolKey',
+              type: 'tuple',
+              components: [
+                { name: 'currency0', type: 'address' },
+                { name: 'currency1', type: 'address' },
+                { name: 'fee', type: 'uint24' },
+                { name: 'tickSpacing', type: 'int24' },
+                { name: 'hooks', type: 'address' }
+              ]
+            },
+            { name: 'zeroForOne', type: 'bool' },
+            { name: 'amountIn', type: 'uint128' },
+            { name: 'amountOutMinimum', type: 'uint128' },
+            { name: 'hookData', type: 'bytes' }
+          ]
+        }],
+        [{
+          poolKey: poolKeyStruct,
+          zeroForOne: zeroForOne,
+          amountIn: inputAmount,
+          amountOutMinimum: BigInt(0),
+          hookData: hookData
+        }]
+    );
+
+    const settleParams = encodeAbiParameters(
+        [{ name: 'currency', type: 'address' }, { name: 'amount', type: 'uint256' }],
+        [inputToken.address, inputAmount]
+    );
+
+    const takeParams = encodeAbiParameters(
+        [{ name: 'currency', type: 'address' }, { name: 'amount', type: 'uint256' }],
+        [outputToken.address, BigInt(0)]
+    );
+
+    const inputs = [
+      encodeAbiParameters(
+          [
+            { name: 'actions', type: 'bytes' },
+            { name: 'params', type: 'bytes[]' }
+          ],
+          [actions, [swapParams, settleParams, takeParams]]
+      )
+    ];
+
+    const deadline = BigInt(Math.floor(Date.now() / 1000) + 60);
+
+    const hash = await universalRouter.write.execute([commands, inputs, deadline], {
+      account: address as `0x${string}`,
+      chain,
+      value: totalETHNeeded,
+      gas: 30000000n,
+    });
+
     const receipt = await publicClient.waitForTransactionReceipt({ hash });
 
     if (receipt.status !== 'success') {
-      throw new Error('Transaction reverted: Check that your SwapCastHook is properly configured and the market exists.');
+      throw new Error(`Transaction failed with status ${receipt.status}`);
     }
 
+    console.log('Transaction confirmed successfully:', hash);
     return hash;
+
   } catch (error: any) {
+    console.error('Swap execution failed:', error);
+
     if (error.message?.includes('user rejected')) {
       throw new Error('Transaction was rejected by the user.');
-    } else if (error.message?.includes('InvalidHookDataLength')) {
-      throw new Error('Transaction failed: Invalid hook data length. Expected exactly 69 bytes.');
-    } else if (error.message?.includes('NoConvictionStakeDeclaredInHookData')) {
-      throw new Error('Transaction failed: No conviction stake declared in hook data.');
-    } else if (error.message?.includes('MarketDoesNotExist')) {
-      throw new Error('Transaction failed: Market does not exist.');
-    } else if (error.message?.includes('MarketAlreadyResolved')) {
-      throw new Error('Transaction failed: Market has already been resolved.');
-    } else if (error.message?.includes('MarketExpired')) {
-      throw new Error('Transaction failed: Market has expired.');
+    } else if (error.message?.includes('revert')) {
+      console.warn('Revert reason:', JSON.stringify(error));
+      throw new Error(`Transaction reverted: ${error.message}`);
     } else {
       throw new Error(`Transaction failed: ${error.message || 'Unknown error'}`);
     }
