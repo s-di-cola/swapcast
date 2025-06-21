@@ -1,4 +1,4 @@
-import { type Address, encodeAbiParameters, encodePacked, type Hash } from 'viem';
+import { type Address, encodeAbiParameters, encodePacked, type Hash, formatUnits, erc20Abi } from 'viem';
 import { anvil } from 'viem/chains';
 import { getIUniversalRouter } from '../../src/generated/types/IUniversalRouter';
 import { getContract, getPublicClient, impersonateAccount, stopImpersonatingAccount } from '../utils/client';
@@ -71,6 +71,80 @@ function calculateTotalETHNeeded(stakeAmount: bigint, feeBasisPoints: bigint): b
 }
 
 /**
+ * Get token info from pool currency (handles both native ETH and ERC20)
+ */
+function getTokenFromCurrency(currency: any) {
+  if (!currency.isToken) {
+    // Native ETH
+    return {
+      address: NATIVE_ETH_ADDRESS,
+      symbol: 'ETH',
+      decimals: 18,
+      isNative: true
+    };
+  }
+  
+  // ERC20 token - Pool already has all the info!
+  const token = currency as Token;
+  return {
+    address: token.address as Address,
+    symbol: token.symbol,
+    decimals: token.decimals,
+    isNative: false
+  };
+}
+
+/**
+ * Convert amount from 18-decimal ETH equivalent to token's native decimals
+ */
+function convertToTokenDecimals(ethEquivalentAmount: bigint, tokenDecimals: number): bigint {
+  if (tokenDecimals === 18) {
+    return ethEquivalentAmount; // No conversion needed
+  }
+  
+  // Scale amount to token's native decimals
+  const scaleFactor = BigInt(10 ** (18 - tokenDecimals));
+  return ethEquivalentAmount / scaleFactor;
+}
+
+/**
+ * Validates that a whale has the required token for their prediction
+ * @param userAddress - The whale account to validate
+ * @param tokenInfo - Token information containing symbol, decimals, and address
+ * @param requiredAmount - Amount needed for the prediction in wei
+ * @returns Promise resolving to an object with:
+ *   - valid: boolean indicating if requirements are met
+ *   - error?: optional error message if validation fails
+ */
+async function validateTokenBalance(
+  userAddress: Address,
+  tokenInfo: ReturnType<typeof getTokenFromCurrency>,
+  requiredAmount: bigint
+): Promise<{ valid: boolean; balance: bigint; formatted: string }> {
+  let balance: bigint;
+  
+
+  if (tokenInfo.symbol === 'ETH') {
+    balance = await getPublicClient().getBalance({ address: userAddress });
+  } else {
+    const publicClient = await getPublicClient();
+    balance = await publicClient.readContract({
+      address: tokenInfo.address,
+      abi: erc20Abi,
+      functionName: 'balanceOf',
+      args: [userAddress]
+    });
+  }
+  
+  const formatted = formatUnits(balance, tokenInfo.decimals);
+  const valid = balance >= requiredAmount;
+  
+  logInfo('BalanceCheck', `${tokenInfo.symbol}: ${formatted} (need: ${formatUnits(requiredAmount, tokenInfo.decimals)})`);
+  
+  return { valid, balance, formatted };
+}
+
+/**
  * Records a prediction by executing a swap transaction through the Universal Router
  * @param userAddress - The address of the user making the prediction
  * @param pool - The Uniswap V4 pool to trade in
@@ -97,17 +171,27 @@ export const recordPredictionViaSwap = withErrorHandling(
 
     const { protocolFeeBasisPoints } = await getProtocolConfig();
     const totalETHNeeded = calculateTotalETHNeeded(stakeAmount, protocolFeeBasisPoints);
-    const token0 = pool.currency0.isToken ? pool.currency0 as Token : undefined;
-    const token1 = pool.currency1.isToken ? pool.currency1 as Token : undefined;
+
+    // Extract token info directly from Pool object
+    const token0 = getTokenFromCurrency(pool.currency0);
+    const token1 = getTokenFromCurrency(pool.currency1);
+
+    logInfo('PredictionSwap', `Token0: ${token0.symbol} (${token0.decimals} decimals)`);
+    logInfo('PredictionSwap', `Token1: ${token1.symbol} (${token1.decimals} decimals)`);
 
     // Determine swap direction based on outcome
     const zeroForOne = outcome === OUTCOME_BEARISH;
+    const inputToken = zeroForOne ? token0 : token1;
+    const outputToken = zeroForOne ? token1 : token0;
+
+    // Convert stake amount to input token's native decimals
+    const inputAmount = convertToTokenDecimals(stakeAmount, inputToken.decimals);
 
     // Create hookData for the SwapCastHook
     const hookData = createPredictionHookData(userAddress, marketId, outcome, stakeAmount);
 
     logInfo('PredictionSwap', `Recording ${outcome === OUTCOME_BULLISH ? 'BULLISH' : 'BEARISH'} prediction`);
-
+    logInfo('PredictionSwap', `Swap: ${formatUnits(inputAmount, inputToken.decimals)} ${inputToken.symbol} → ${outputToken.symbol}`);
 
     try {
       await impersonateAccount(userAddress);
@@ -118,14 +202,18 @@ export const recordPredictionViaSwap = withErrorHandling(
         throw new Error(`Insufficient balance. Need: ${totalETHNeeded}, Have: ${balance}`);
       }
 
-      // Handle token approvals if needed (for non-ETH tokens)
-      const inputToken = zeroForOne ? token0 : token1;
+      // Validate token balance
+      const balanceCheck = await validateTokenBalance(userAddress, inputToken, inputAmount);
+      if (!balanceCheck.valid) {
+        throw new Error(`Insufficient ${inputToken.symbol}: ${balanceCheck.formatted}`);
+      }
 
-      if (inputToken !== undefined && inputToken.address !== NATIVE_ETH_ADDRESS) {
+      // Handle token approvals if needed (for non-ETH tokens)
+      if (!inputToken.isNative) {
         await approveToken(
           userAddress,
-          inputToken.address as Address,
-          stakeAmount,
+          inputToken.address,
+          inputAmount,
           CONTRACT_ADDRESSES.UNIVERSAL_ROUTER as Address,
         );
       }
@@ -143,7 +231,6 @@ export const recordPredictionViaSwap = withErrorHandling(
       const params = new Array(3);
 
       // First parameter: ExactInputSingleParams for SWAP_EXACT_IN_SINGLE
-      // ⚡ CRITICAL: Remove sqrtPriceLimitX96 parameter that was breaking it!
       params[0] = encodeAbiParameters(
         [
           {
@@ -164,15 +251,15 @@ export const recordPredictionViaSwap = withErrorHandling(
         ],
         [
           {
-            currency0: token0!.address as Address,
-            currency1: token1!.address as Address,
-            fee: pool.fee,
-            tickSpacing: pool.tickSpacing,
-            hooks: pool.hooks as Address
+            currency0: pool.poolKey.currency0 as Address,
+            currency1: pool.poolKey.currency1 as Address,
+            fee: pool.poolKey.fee,
+            tickSpacing: pool.poolKey.tickSpacing,
+            hooks: pool.poolKey.hooks as Address
           },
           zeroForOne,
-          stakeAmount,
-          BigInt(0), // amountOutMinimum - accept any amount out
+          inputAmount,
+          BigInt(0),
           hookData
         ]
       );
@@ -184,8 +271,8 @@ export const recordPredictionViaSwap = withErrorHandling(
           { name: 'amount', type: 'uint256' }
         ],
         [
-          zeroForOne ? token0!.address as Address : token1!.address as Address, // Input currency
-          stakeAmount // Input amount
+          inputToken.address,
+          inputAmount
         ]
       );
 
@@ -196,7 +283,7 @@ export const recordPredictionViaSwap = withErrorHandling(
           { name: 'amount', type: 'uint256' }
         ],
         [
-          zeroForOne ? token1!.address as Address : token0!.address as Address, // Output currency
+          outputToken.address,
           BigInt(0) // Amount 0 means take all available
         ]
       );
@@ -216,19 +303,18 @@ export const recordPredictionViaSwap = withErrorHandling(
       const deadline = BigInt(Math.floor(Date.now() / 1000) + 60);
 
       logInfo('PredictionSwap', `Executing Universal Router with msg.value: ${totalETHNeeded}`);
-      logInfo('PredictionSwap', `Swap amount: ${stakeAmount}, Hook data length: ${hookData.length}`);
-
+      logInfo('PredictionSwap', `Swap amount: ${inputAmount}, Hook data length: ${hookData.length}`);
 
       await logPoolState(pool);
       await logPoolLiquidity(pool);
 
-      // Add this right before the universalRouter.write.execute call:
       logInfo('SwapDebug', `Final check before swap:`);
       logInfo('SwapDebug', `  User: ${userAddress}`);
       logInfo('SwapDebug', `  Outcome: ${outcome} (${outcome === OUTCOME_BEARISH ? 'BEARISH' : 'BULLISH'})`);
       logInfo('SwapDebug', `  ZeroForOne: ${zeroForOne}`);
-      logInfo('SwapDebug', `  Input token: ${zeroForOne ? token0!.address : token1!.address}`);
-      logInfo('SwapDebug', `  Output token: ${zeroForOne ? token1!.address : token0!.address}`);
+      logInfo('SwapDebug', `  Input token: ${inputToken.address} (${inputToken.symbol})`);
+      logInfo('SwapDebug', `  Output token: ${outputToken.address} (${outputToken.symbol})`);
+      logInfo('SwapDebug', `  Input amount: ${formatUnits(inputAmount, inputToken.decimals)} ${inputToken.symbol}`);
       logInfo('SwapDebug', `  HookData: ${hookData}`);
 
       // Step 6: Execute the swap - ⚡ ALWAYS send totalETHNeeded like the working version!
