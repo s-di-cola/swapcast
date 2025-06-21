@@ -22,7 +22,7 @@ import { getPredictionManager } from '$generated/types/PredictionManager';
 import { getCurrentNetworkConfig } from '$lib/utils/network';
 import { appKit } from '$lib/configs/wallet.config';
 import {
-  PUBLIC_UNIV4_STATEVIEW_ADDRESS,
+  PUBLIC_STATEVIEW_ADDRESS,
   PUBLIC_UNIV4_POOLMANAGER_ADDRESS,
   PUBLIC_PREDICTIONMANAGER_ADDRESS
 } from '$env/static/public';
@@ -110,7 +110,7 @@ function calculatePoolId(poolKey: PoolKey): `0x${string}` {
 function getStateViewContract() {
   const { rpcUrl, chain } = getCurrentNetworkConfig();
   return getStateView({
-    address: PUBLIC_UNIV4_STATEVIEW_ADDRESS as Address,
+    address: PUBLIC_STATEVIEW_ADDRESS as Address,
     chain,
     transport: http(rpcUrl)
   });

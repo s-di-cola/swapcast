@@ -9,7 +9,7 @@ declare module '$env/static/public' {
 	export const PUBLIC_UNIV4_POOLMANAGER_ADDRESS: `0x${string}`;
 	export const PUBLIC_COINGECKO_API_URL: string;
 	export const PUBLIC_RPC_URL: string;
-	export const PUBLIC_UNIV4_STATEVIEW_ADDRESS: `0x${string}`;
+	export const PUBLIC_STATEVIEW_ADDRESS: `0x${string}`;
 	export const PUBLIC_UNIVERSAL_ROUTER_ADDRESS: `0x${string}`;
 }
 
