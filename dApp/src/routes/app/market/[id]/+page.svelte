@@ -4,8 +4,8 @@
 	import { getMarketDetails, type Market } from '$lib/services/market';
 	import MarketStatus from '$lib/components/app/market/MarketStatus.svelte';
 	import OppositionSummary from '$lib/components/app/market/OppositionSummary.svelte';
-	import TransactionHistory from '$lib/components/app/market/TransactionHistory.svelte';
-	
+	import {TransactionHistory} from "$lib/components";
+
 	// Get the market ID from the URL
 	let marketId = $derived($page.params.id);
 
@@ -143,4 +143,4 @@
 			</div>
 		</div>
 	{/if}
-</div> 
+</div>
