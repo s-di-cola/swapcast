@@ -11,6 +11,7 @@ declare module '$env/static/public' {
 	export const PUBLIC_RPC_URL: string;
 	export const PUBLIC_STATEVIEW_ADDRESS: `0x${string}`;
 	export const PUBLIC_UNIVERSAL_ROUTER_ADDRESS: `0x${string}`;
+	export const PUBLIC_DEBUG: boolean;
 }
 
 declare module '$env/static/private' {
