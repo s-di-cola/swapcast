@@ -53,12 +53,6 @@ function handleNativeETHSorting(tokenA: Address, tokenB: Address): [Address, Add
 }
 
 /**
- * Performs lexicographical sorting for ERC20 tokens
- * @param tokenA - First token address
- * @param tokenB - Second token address
- * @returns Sorted token addresses
- */
-/**
  * Sorts ERC20 token addresses lexicographically
  * @param tokenA - First token address
  * @param tokenB - Second token address
