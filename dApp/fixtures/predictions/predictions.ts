@@ -5,10 +5,10 @@
  * @module predictions
  */
 
-import { parseEther } from 'viem';
-import { MarketCreationResult } from '../markets';
-import { logInfo, logSuccess, logWarning, withErrorHandling } from '../utils/error';
-import { selectWhaleForPrediction } from '../utils/swap';
+import {parseEther} from 'viem';
+import {MarketCreationResult} from '../markets';
+import {logInfo, logSuccess, logWarning, withErrorHandling} from '../utils/error';
+import {selectWhaleForPrediction} from '../utils/swap';
 import {
     getWhaleStats,
     initializeWhaleAccounts,
@@ -17,8 +17,8 @@ import {
     validateWhaleBalanceForSwap,
     type WhaleAccount
 } from '../utils/whales';
-import { getProtocolConfig } from './prediction-core';
-import { recordPredictionWithRetry } from './prediction-executor';
+import {getProtocolConfig} from './prediction-core';
+import {recordPredictionWithRetry} from './prediction-executor';
 
 /**
  * Generates predictions across multiple markets using available whale accounts
@@ -128,7 +128,7 @@ async function recordPredictionWithSpecificOutcome(
 
 /**
  * Main prediction generation function with enhanced error handling
- * 
+ *
  * @param markets - Array of markets to generate predictions for
  * @returns Promise<{totalSuccessful: number, totalFailed: number}>
  */

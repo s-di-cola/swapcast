@@ -1,14 +1,14 @@
-import { type Address, encodeAbiParameters, encodePacked, type Hash, formatUnits, erc20Abi } from 'viem';
-import { anvil } from 'viem/chains';
-import { getIUniversalRouter } from '../../src/generated/types/IUniversalRouter';
-import { getContract, getPublicClient, impersonateAccount, stopImpersonatingAccount } from '../utils/client';
-import { logInfo, logWarning, withErrorHandling } from '../utils/error';
-import { CONTRACT_ADDRESSES } from '../utils/wallets';
-import { approveToken, NATIVE_ETH_ADDRESS } from '../utils/tokens';
-import { logPoolLiquidity, logPoolState } from '../utils/liquidity';
-import { Pool } from "@uniswap/v4-sdk";
-import { Token } from "@uniswap/sdk-core";
-import { getProtocolConfig } from './prediction-core';
+import {type Address, encodeAbiParameters, encodePacked, erc20Abi, formatUnits, type Hash} from 'viem';
+import {anvil} from 'viem/chains';
+import {getIUniversalRouter} from '../../src/generated/types/IUniversalRouter';
+import {getContract, getPublicClient, impersonateAccount, stopImpersonatingAccount} from '../utils/client';
+import {logInfo, logWarning, withErrorHandling} from '../utils/error';
+import {CONTRACT_ADDRESSES} from '../utils/wallets';
+import {approveToken, NATIVE_ETH_ADDRESS} from '../utils/tokens';
+import {logPoolLiquidity, logPoolState} from '../utils/liquidity';
+import {Pool} from "@uniswap/v4-sdk";
+import {Token} from "@uniswap/sdk-core";
+import {getProtocolConfig} from './prediction-core';
 
 /** Bullish market outcome */
 export const OUTCOME_BULLISH = 1;
@@ -30,7 +30,7 @@ const TAKE_ALL = 0x0f;
 
 /**
  * Creates properly formatted hookData for the SwapCastHook
- * 
+ *
  * @param userAddress - The address of the user making the prediction
  * @param marketId - The ID of the prediction market
  * @param outcome - The predicted outcome (0 for bearish, 1 for bullish)
@@ -218,7 +218,7 @@ export const recordPredictionViaSwap = withErrorHandling(
         );
       }
 
-      // Step 1: Build PoolKey 
+      // Step 1: Build PoolKey
       const poolKeyStruct = {
         currency0: pool.poolKey.currency0 as Address,
         currency1: pool.poolKey.currency1 as Address,
@@ -230,7 +230,7 @@ export const recordPredictionViaSwap = withErrorHandling(
       // Step 2: Single command
       const commands = encodePacked(['uint8'], [V4_SWAP_COMMAND]);
 
-      // Step 3: Single action sequence  
+      // Step 3: Single action sequence
       const actions = encodePacked(
         ['uint8', 'uint8', 'uint8'],
         [SWAP_EXACT_IN_SINGLE, SETTLE_ALL, TAKE_ALL]

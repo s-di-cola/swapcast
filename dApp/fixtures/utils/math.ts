@@ -4,12 +4,11 @@
  * @module utils/math
  */
 
-import { encodeSqrtRatioX96 } from '@uniswap/v3-sdk';
-import chalk from 'chalk';
+import {encodeSqrtRatioX96} from '@uniswap/v3-sdk';
 import JSBI from 'jsbi';
-import { Address, parseUnits } from 'viem';
-import { TOKEN_CONFIGS } from '../config/tokens';
-import { PriceData } from '../services/price';
+import {Address, parseUnits} from 'viem';
+import {TOKEN_CONFIGS} from '../config/tokens';
+import {PriceData} from '../services/price';
 
 /**
  * Calculates the sqrtPriceX96 value from two USD-denominated token prices
@@ -27,7 +26,7 @@ export function calculateSqrtPriceX96FromUSDPrices(
 	const commonDecimals = 18;
 	const token0Amount = parseUnits('1', commonDecimals);
 	const token1Amount = parseUnits(priceRatio.toString(), commonDecimals);
-	
+
 	// Debug logging removed in production
 	if (process.env.NODE_ENV === 'development') {
 		console.log(`🔍 Debug: ${token0PriceUSD.symbol}/${token1PriceUSD.symbol}`);
@@ -35,7 +34,7 @@ export function calculateSqrtPriceX96FromUSDPrices(
 		console.log(`🔍 Normalized token0Amount: ${token0Amount}`);
 		console.log(`🔍 Normalized token1Amount: ${token1Amount}`);
 	}
-	
+
 	return encodeSqrtRatioX96(token1Amount.toString(), token0Amount.toString());
 }
 

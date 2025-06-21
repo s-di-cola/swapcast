@@ -4,11 +4,11 @@
  * @module utils/contracts
  */
 
-import { config } from 'dotenv';
+import {config} from 'dotenv';
 import path from 'path';
-import { PredictionManagerAbi } from '../../src/generated/types/PredictionManager';
-import { PoolManagerAbi } from '../../src/generated/types/PoolManager';
-import { SwapCastHookAbi } from '../../src/generated/types/SwapCastHook';
+import {PredictionManagerAbi} from '../../src/generated/types/PredictionManager';
+import {PoolManagerAbi} from '../../src/generated/types/PoolManager';
+import {SwapCastHookAbi} from '../../src/generated/types/SwapCastHook';
 // Initialize environment variables from .env.local
 config({ path: path.resolve(process.cwd(), '.env.local') });
 

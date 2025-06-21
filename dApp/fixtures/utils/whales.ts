@@ -1,11 +1,11 @@
-import { type Address, formatEther, parseEther, getAddress } from 'viem';
-import { getPublicClient } from './client';
-import { getTokenBalance, isNativeEth, dealLiquidity } from './tokens';
-import { logInfo, logSuccess, logWarning } from './error';
-import { TOKEN_CONFIGS } from '../config/tokens';
-import { OUTCOME_BEARISH, OUTCOME_BULLISH } from '../predictions/prediction-swap';
-import { validatePredictionRequirements } from './swap';
- 
+import {type Address, formatEther, getAddress, parseEther} from 'viem';
+import {getPublicClient} from './client';
+import {dealLiquidity, getTokenBalance, isNativeEth} from './tokens';
+import {logInfo, logSuccess, logWarning} from './error';
+import {TOKEN_CONFIGS} from '../config/tokens';
+import {OUTCOME_BEARISH, OUTCOME_BULLISH} from '../predictions/prediction-swap';
+import {validatePredictionRequirements} from './swap';
+
 export const WHALE_ACCOUNTS: Record<string, Address> = {
     BINANCE_7: '0xBE0eB53F46cd790Cd13851d5EFf43D12404d33E8',
     ROBINHOOD: '0x40B38765696e3d5d8d9d834D8AaD4bB6e418E489',
@@ -13,18 +13,18 @@ export const WHALE_ACCOUNTS: Record<string, Address> = {
     BITFINEX_19: '0xE92d1A43df510F82C66382592a047d288f85226f',
     BINANCE_28: '0x5a52E96BAcdaBb82fd05763E25335261B270Efcb',
     UNKNOWN_0A: '0x0a4c79cE84202b03e95B7a692E5D728d83C44c76',
-    KRAKEN_1: '0x2910543af39aba0cd09dbb2d50200b3e800a63d2',           
+    KRAKEN_1: '0x2910543af39aba0cd09dbb2d50200b3e800a63d2',
     JUMP_TRADING: '0xf977814e90da44bfa03b6295a0616a897441acec',
-    WHALE_2: '0x564286362092D8e7936f0549571a803B203aAceD',             
+    WHALE_2: '0x564286362092D8e7936f0549571a803B203aAceD',
     WHALE_3: '0x57757E3D981446D585Af0D9Ae4d7DF6D64647806',
-    WHALE_4: '0x6cc5f688a315f3dc28a7781717a9a798a59fda7b',             
+    WHALE_4: '0x6cc5f688a315f3dc28a7781717a9a798a59fda7b',
     COINBASE_1: '0x71660c4005ba85c37ccec55d0c4493e66fe775d3',
     COINBASE_2: '0x503828976d22510aad0201ac7ec88293211d23da',
 };
 
 /**
  * Enhanced whale account interface with balance tracking and prediction history
- * 
+ *
  * @interface WhaleAccount
  * @property {Address} address - The checksummed Ethereum address of the whale
  * @property {string} name - Human-readable name identifier for the whale
@@ -50,7 +50,7 @@ export interface WhaleAccount {
 
 /**
  * Ensures a whale has sufficient token balances by dealing tokens if necessary
- * 
+ *
  * @param {WhaleAccount} whale - The whale account to ensure has tokens
  * @param {string[]} requiredTokens - Array of token symbols required
  * @param {bigint} stakeAmount - The amount needed for staking (in wei for ETH, native decimals for tokens)
@@ -96,7 +96,7 @@ export const ensureWhaleHasTokens = async (
 
 /**
  * Utility function to ensure address has proper EIP-55 checksum
- * 
+ *
  * @param {string} address - Raw address string to validate and checksum
  * @returns {Address} Checksummed address
  * @throws {Error} If address format is invalid
@@ -112,14 +112,14 @@ function ensureChecksumAddress(address: string): Address {
 
 /**
  * Initialize REAL whale accounts with comprehensive balance checking and validation
- * 
+ *
  * This function:
  * 1. Iterates through all predefined whale addresses
  * 2. Validates ETH balances (minimum 10 ETH to qualify as "whale")
  * 3. Checks token balances for major DeFi tokens
  * 4. Creates WhaleAccount objects with full balance tracking
  * 5. Sorts whales by ETH balance (richest first)
- * 
+ *
  * @returns {Promise<WhaleAccount[]>} Array of initialized and validated whale accounts
  */
 export async function initializeWhaleAccounts(): Promise<WhaleAccount[]> {
@@ -249,13 +249,13 @@ export async function initializeWhaleAccounts(): Promise<WhaleAccount[]> {
 
 /**
  * Enhanced whale selection with harmonized balance checking and prediction tracking
- * 
+ *
  * This function implements a multi-tier selection strategy:
  * 1. Filters out whales that have already predicted on this market
  * 2. Checks ETH and token balance requirements
  * 3. Falls back to ETH-only whales if needed
  * 4. Allows whale reuse as last resort
- * 
+ *
  * @param {WhaleAccount[]} whaleAccounts - Array of available whale accounts
  * @param {string} marketId - The market ID to select a whale for
  * @param {string[]} requiredTokens - Array of token symbols required for this market
@@ -274,7 +274,7 @@ export function selectWhaleForMarket(
     logInfo('WhaleSelection', `Required amount: ${formatEther(requiredAmount)} ETH-equivalent`);
 
     // STEP 1: Filter out whales that have already predicted on this market
-    const availableWhales = whaleAccounts.filter(whale => 
+    const availableWhales = whaleAccounts.filter(whale =>
         !whale.predictedMarkets.has(marketId)
     );
 
@@ -350,7 +350,7 @@ export function selectWhaleForMarket(
 
 /**
  * Check if a whale can make a prediction on a specific market
- * 
+ *
  * @param {WhaleAccount} whale - The whale account to check
  * @param {string} marketId - The market ID to check
  * @returns {boolean} True if whale hasn't predicted on this market yet
@@ -361,10 +361,10 @@ export function canWhalePredict(whale: WhaleAccount, marketId: string): boolean 
 
 /**
  * Mark a whale as having made a prediction on a specific market
- * 
+ *
  * This prevents the whale from being selected again for the same market,
  * avoiding the AlreadyPredictedL error from the smart contract.
- * 
+ *
  * @param {WhaleAccount} whale - The whale account that made the prediction
  * @param {string} marketId - The market ID where the prediction was made
  */
@@ -375,7 +375,7 @@ export function markWhalePredicted(whale: WhaleAccount, marketId: string): void 
 
 /**
  * Normalize any token balance to 18 decimals for consistent comparison
- * 
+ *
  * @param {bigint} balance - The raw token balance in native decimals
  * @param {number} decimals - The number of decimals the token uses
  * @returns {bigint} Balance normalized to 18 decimals
@@ -394,7 +394,7 @@ function normalizeToEther(balance: bigint, decimals: number): bigint {
 
 /**
  * HARMONIZED: Validate whale balance with everything normalized to 18 decimals
- * 
+ *
  * @param {WhaleAccount} whale - The whale account to validate
  * @param {string} tokenSymbol - The token symbol to check (e.g., 'ETH', 'USDC')
  * @param {bigint} requiredAmount - Required amount in 18-decimal normalized units
@@ -453,7 +453,7 @@ export async function validateWhaleBalanceForSwap(
 
 /**
  * Get required tokens for a market based on its base and quote currencies
- * 
+ *
  * @param {Object} market - Market object with base and quote properties
  * @param {string} market.base - Base currency symbol
  * @param {string} market.quote - Quote currency symbol
@@ -465,10 +465,10 @@ export function getMarketTokens(market: { base: string; quote: string }): string
 
 /**
  * Reset whale usage tracking for all whales
- * 
+ *
  * This clears the usedInMarkets set for all whales and resets their validation status,
  * allowing them to be used in new market operations.
- * 
+ *
  * @param {WhaleAccount[]} whaleAccounts - Array of whale accounts to reset
  */
 export function resetWhaleUsage(whaleAccounts: WhaleAccount[]): void {
@@ -481,7 +481,7 @@ export function resetWhaleUsage(whaleAccounts: WhaleAccount[]): void {
 
 /**
  * Get comprehensive statistics about whale usage and distribution
- * 
+ *
  * @param {WhaleAccount[]} whaleAccounts - Array of whale accounts to analyze
  * @returns {Object} Statistics object with usage metrics
  */
@@ -545,7 +545,7 @@ export function getWhaleStats(whaleAccounts: WhaleAccount[]): {
 
 /**
  * Enhanced whale selection that considers prediction requirements
- * 
+ *
  * @param whales - Array of available whales
  * @param marketId - Market ID
  * @param market - Market information
@@ -560,37 +560,37 @@ export async function selectWhaleForPrediction(
     stakeAmount: bigint,
     validateBalance: (whale: any, token: string, amount: bigint) => Promise<{ valid: boolean }>
 ): Promise<any | null> {
-    
+
     // Filter whales that haven't predicted on this market
-    const availableWhales = whales.filter(whale => 
+    const availableWhales = whales.filter(whale =>
         !whale.predictedMarkets.has(marketId)
     );
-    
+
     if (availableWhales.length === 0) {
         logWarning('WhaleSelection', `No whales available for market ${marketId}`);
         return null;
     }
-    
+
     logInfo('WhaleSelection', `🎯 ${availableWhales.length} whales available for market ${marketId}`);
-    
+
     // Try both outcomes to find a suitable whale
     const outcomes = [OUTCOME_BEARISH, OUTCOME_BULLISH];
-    
+
     for (const outcome of outcomes) {
         logInfo('WhaleSelection', `🧪 Testing ${outcome === OUTCOME_BEARISH ? 'BEARISH' : 'BULLISH'} predictions...`);
-        
+
         for (const whale of availableWhales) {
             const validation = await validatePredictionRequirements(
-                whale, 
-                outcome as 0 | 1, 
-                market, 
-                stakeAmount, 
+                whale,
+                outcome as 0 | 1,
+                market,
+                stakeAmount,
                 validateBalance
             );
-            
+
             if (validation.valid) {
                 logInfo('WhaleSelection', `✅ Selected ${whale.name} for ${outcome === OUTCOME_BEARISH ? 'BEARISH' : 'BULLISH'} prediction`);
-                
+
                 // Mark whale as used and return with the outcome
                 whale.usedInMarkets.add(marketId);
                 return { whale, outcome };
@@ -599,7 +599,7 @@ export async function selectWhaleForPrediction(
             }
         }
     }
-    
+
     logWarning('WhaleSelection', `❌ No whales can make any predictions on market ${marketId}`);
     return null;
 }

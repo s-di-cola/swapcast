@@ -4,15 +4,8 @@
  * @module utils/client
  */
 
-import { 
-    type Address, 
-    type PublicClient, 
-    type WalletClient, 
-    createPublicClient, 
-    createWalletClient,
-    http 
-} from 'viem';
-import { anvil } from 'viem/chains';
+import {type Address, createPublicClient, createWalletClient, http, type PublicClient, type WalletClient} from 'viem';
+import {anvil} from 'viem/chains';
 
 /** @private */
 let cachedPublicClient: PublicClient | null = null;
@@ -111,10 +104,10 @@ export async function setStorageAt(
     slot: string | number,
     value: string
 ): Promise<void> {
-    const slotHex = typeof slot === 'number' 
-        ? `0x${slot.toString(16)}` 
+    const slotHex = typeof slot === 'number'
+        ? `0x${slot.toString(16)}`
         : slot;
-    
+
     await executeAnvilMethod('anvil_setStorageAt', [
         contractAddress,
         slotHex,

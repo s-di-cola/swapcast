@@ -3,11 +3,11 @@
  * @module predictions/prediction-core
  */
 
-import { type Address } from 'viem';
-import { getPredictionManager } from '../../src/generated/types/PredictionManager';
-import { getContract } from '../utils/client';
-import { withErrorHandling } from '../utils/error';
-import { CONTRACT_ADDRESSES } from '../utils/wallets';
+import {type Address} from 'viem';
+import {getPredictionManager} from '../../src/generated/types/PredictionManager';
+import {getContract} from '../utils/client';
+import {withErrorHandling} from '../utils/error';
+import {CONTRACT_ADDRESSES} from '../utils/wallets';
 
 /** Fee basis points used for fee calculations */
 const DEPLOYED_FEE_BASIS_POINTS = BigInt(200);

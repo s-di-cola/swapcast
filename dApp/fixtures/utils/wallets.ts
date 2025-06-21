@@ -4,19 +4,19 @@
  * @module utils/wallets
  */
 
+import {config} from 'dotenv';
+import {resolve} from 'path';
 import {
-  createWalletClient,
-  http,
-  createPublicClient,
-  type Address,
-  type PublicClient,
-  type WalletClient,
-  type PrivateKeyAccount,
+    type Address,
+    createPublicClient,
+    createWalletClient,
+    http,
+    type PrivateKeyAccount,
+    type PublicClient,
+    type WalletClient,
 } from 'viem';
-import { privateKeyToAccount } from 'viem/accounts';
-import { anvil } from 'viem/chains';
-import { config } from 'dotenv';
-import { resolve } from 'path';
+import {privateKeyToAccount} from 'viem/accounts';
+import {anvil} from 'viem/chains';
 
 config({ path: resolve(process.cwd(), '.env.local') });
 

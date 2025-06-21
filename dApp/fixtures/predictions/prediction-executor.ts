@@ -1,8 +1,8 @@
-import { MarketCreationResult } from '../markets';
-import { logSuccess, logWarning, withRetry } from '../utils/error';
-import { OUTCOME_BEARISH, OUTCOME_BULLISH, recordPredictionViaSwap } from './prediction-swap';
-import { ensureWhaleHasTokens, getMarketTokens, validateWhaleBalanceForSwap, WhaleAccount } from '../utils/whales';
-import { calculateFee, validateMarket } from './prediction-core';
+import {MarketCreationResult} from '../markets';
+import {logSuccess, logWarning, withRetry} from '../utils/error';
+import {OUTCOME_BEARISH, OUTCOME_BULLISH, recordPredictionViaSwap} from './prediction-swap';
+import {ensureWhaleHasTokens, getMarketTokens, validateWhaleBalanceForSwap, WhaleAccount} from '../utils/whales';
+import {calculateFee, validateMarket} from './prediction-core';
 
 /**
  * Records a single prediction for a whale account

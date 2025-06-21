@@ -4,20 +4,15 @@
  * @module utils/tokens
  */
 
-import { Token } from '@uniswap/sdk-core';
-import {
-  type Address,
-  erc20Abi,
-  formatUnits,
-  parseUnits
-} from 'viem';
-import { anvil } from "viem/chains";
-import { getPublicClient, getWalletClient } from './client';
-import { logInfo, logSuccess, logWarning, withErrorHandling } from './error';
-import { getTokenSymbolFromAddress } from './math';
-import { exec } from 'child_process';
-import { promisify } from 'util';
-import { CONTRACT_ADDRESSES } from './wallets';
+import {Token} from '@uniswap/sdk-core';
+import {type Address, erc20Abi, formatUnits, parseUnits} from 'viem';
+import {anvil} from "viem/chains";
+import {getPublicClient, getWalletClient} from './client';
+import {logInfo, logSuccess, logWarning, withErrorHandling} from './error';
+import {getTokenSymbolFromAddress} from './math';
+import {exec} from 'child_process';
+import {promisify} from 'util';
+import {CONTRACT_ADDRESSES} from './wallets';
 
 const execAsync = promisify(exec);
 

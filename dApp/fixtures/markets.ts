@@ -1,17 +1,17 @@
-import { type Address, type Hash, type WalletClient } from 'viem';
-import { anvil } from 'viem/chains';
-import { getPoolManager } from '../src/generated/types/PoolManager';
-import { getPredictionManager } from '../src/generated/types/PredictionManager';
-import { DEFAULT_MARKET_CONFIG, MarketGenerationConfig } from './config/markets';
-import { TOKEN_CONFIGS } from './config/tokens';
-import { MarketGenerator, MarketRequest } from './services/marketGenerator';
-import { getContract, getPublicClient } from './utils/client';
-import { logInfo, logSuccess, logWarning, withErrorHandling, withRetry } from './utils/error';
-import { sortTokenAddresses } from './utils/helpers';
-import { mintPool } from './utils/liquidity';
-import { TokenInfo } from './utils/tokens';
-import { CONTRACT_ADDRESSES } from './utils/wallets';
-import { Pool } from '@uniswap/v4-sdk';
+import {type Address, type Hash, type WalletClient} from 'viem';
+import {anvil} from 'viem/chains';
+import {getPoolManager} from '../src/generated/types/PoolManager';
+import {getPredictionManager} from '../src/generated/types/PredictionManager';
+import {DEFAULT_MARKET_CONFIG, MarketGenerationConfig} from './config/markets';
+import {TOKEN_CONFIGS} from './config/tokens';
+import {MarketGenerator, MarketRequest} from './services/marketGenerator';
+import {getContract, getPublicClient} from './utils/client';
+import {logInfo, logSuccess, logWarning, withErrorHandling, withRetry} from './utils/error';
+import {sortTokenAddresses} from './utils/helpers';
+import {mintPool} from './utils/liquidity';
+import {TokenInfo} from './utils/tokens';
+import {CONTRACT_ADDRESSES} from './utils/wallets';
+import {Pool} from '@uniswap/v4-sdk';
 
 export interface MarketCreationResult {
     id: string;

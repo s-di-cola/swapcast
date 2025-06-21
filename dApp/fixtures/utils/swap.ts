@@ -4,8 +4,8 @@
  * @module utils/swap
  */
 
-import { logInfo, logWarning } from '../utils/error';
-import { OUTCOME_BEARISH, OUTCOME_BULLISH } from '../predictions/prediction-swap';
+import {logInfo, logWarning} from '../utils/error';
+import {OUTCOME_BEARISH, OUTCOME_BULLISH} from '../predictions/prediction-swap';
 
 /**
  * Determines the correct swap direction and required token for a prediction
@@ -25,11 +25,11 @@ export function getSwapRequirements(
     swapDescription: string;
 } {
     const isBearish = outcome === OUTCOME_BEARISH;
-    
+
     // For ETH/USDC markets:
     // - BEARISH prediction: Sell ETH for USDC (zeroForOne = true)
     // - BULLISH prediction: Sell USDC for ETH (zeroForOne = false)
-    
+
     if (market.token0.symbol === 'ETH' && market.token1.symbol === 'USDC') {
         if (isBearish) {
             return {
@@ -45,7 +45,7 @@ export function getSwapRequirements(
             };
         }
     }
-    
+
     // For other pairs, use the general logic
     if (isBearish) {
         return {
@@ -80,12 +80,12 @@ export async function validatePredictionRequirements(
     stakeAmount: bigint,
     validateBalance: (whale: any, token: string, amount: bigint) => Promise<{ valid: boolean }>
 ): Promise<{ valid: boolean; error?: string }> {
-    
+
     const { requiredTokenSymbol, swapDescription } = getSwapRequirements(outcome, market);
-    
+
     logInfo('SwapValidation', `🔍 ${whale.name} wants to make ${swapDescription}`);
     logInfo('SwapValidation', `📋 Required token: ${requiredTokenSymbol}`);
-    
+
     // Always check ETH for fees
     const ethCheck = await validateBalance(whale, 'ETH', stakeAmount);
     if (!ethCheck.valid) {
@@ -94,7 +94,7 @@ export async function validatePredictionRequirements(
             error: `Insufficient ETH for fees`
         };
     }
-    
+
     // Check the specific token needed for this swap direction
     if (requiredTokenSymbol !== 'ETH') {
         const tokenCheck = await validateBalance(whale, requiredTokenSymbol, stakeAmount);
@@ -105,7 +105,7 @@ export async function validatePredictionRequirements(
             };
         }
     }
-    
+
     logInfo('SwapValidation', `✅ ${whale.name} has sufficient ${requiredTokenSymbol} for prediction`);
     return { valid: true };
 }
@@ -126,37 +126,37 @@ export async function selectWhaleForPrediction(
     stakeAmount: bigint,
     validateBalance: (whale: any, token: string, amount: bigint) => Promise<{ valid: boolean }>
 ): Promise<any | null> {
-    
+
     // Filter whales that haven't predicted on this market
-    const availableWhales = whales.filter(whale => 
+    const availableWhales = whales.filter(whale =>
         !whale.predictedMarkets.has(marketId)
     );
-    
+
     if (availableWhales.length === 0) {
         logWarning('WhaleSelection', `No whales available for market ${marketId}`);
         return null;
     }
-    
+
     logInfo('WhaleSelection', `🎯 ${availableWhales.length} whales available for market ${marketId}`);
-    
+
     // Try both outcomes to find a suitable whale
     const outcomes = [OUTCOME_BEARISH, OUTCOME_BULLISH];
-    
+
     for (const outcome of outcomes) {
         logInfo('WhaleSelection', `🧪 Testing ${outcome === OUTCOME_BEARISH ? 'BEARISH' : 'BULLISH'} predictions...`);
-        
+
         for (const whale of availableWhales) {
             const validation = await validatePredictionRequirements(
-                whale, 
-                outcome as 0 | 1, 
-                market, 
-                stakeAmount, 
+                whale,
+                outcome as 0 | 1,
+                market,
+                stakeAmount,
                 validateBalance
             );
-            
+
             if (validation.valid) {
                 logInfo('WhaleSelection', `✅ Selected ${whale.name} for ${outcome === OUTCOME_BEARISH ? 'BEARISH' : 'BULLISH'} prediction`);
-                
+
                 // Mark whale as used and return with the outcome
                 whale.usedInMarkets.add(marketId);
                 return { whale, outcome };
@@ -165,7 +165,7 @@ export async function selectWhaleForPrediction(
             }
         }
     }
-    
+
     logWarning('WhaleSelection', `❌ No whales can make any predictions on market ${marketId}`);
     return null;
 }

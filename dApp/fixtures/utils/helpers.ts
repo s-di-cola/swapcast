@@ -4,8 +4,8 @@
  * @module utils/helpers
  */
 
-import { type Address } from 'viem';
-import { CONTRACT_ADDRESSES } from './wallets';
+import {type Address} from 'viem';
+import {CONTRACT_ADDRESSES} from './wallets';
 
 /**
  * Maps Uniswap fee tier to tick spacing
@@ -22,12 +22,12 @@ export function getTickSpacing(fee: number): number {
 		3000: 60,
 		10000: 200
 	};
-	
+
 	const spacing = feeToSpacing[fee];
 	if (spacing === undefined) {
 		throw new Error(`Unsupported fee tier: ${fee}`);
 	}
-	
+
 	return spacing;
 }
 
@@ -40,15 +40,15 @@ export function getTickSpacing(fee: number): number {
  */
 function handleNativeETHSorting(tokenA: Address, tokenB: Address): [Address, Address] | null {
 	const NATIVE_ETH = '0x0000000000000000000000000000000000000000';
-	
+
 	if (tokenA === NATIVE_ETH) {
 		return [tokenA, tokenB];
 	}
-	
+
 	if (tokenB === NATIVE_ETH) {
 		return [tokenB, tokenA];
 	}
-	
+
 	return null;
 }
 
@@ -62,11 +62,11 @@ function handleNativeETHSorting(tokenA: Address, tokenB: Address): [Address, Add
 function sortERC20Tokens(tokenA: Address, tokenB: Address): [Address, Address] {
 	const addressA = tokenA.toLowerCase();
 	const addressB = tokenB.toLowerCase();
-	
+
 	if (addressA === addressB) {
 		throw new Error(`Cannot create pool with identical tokens: ${tokenA}`);
 	}
-	
+
 	return addressA < addressB ? [tokenA, tokenB] : [tokenB, tokenA];
 }
 
@@ -85,7 +85,7 @@ export function sortTokenAddresses(tokenA: Address, tokenB: Address): [Address, 
 	if (nativeETHResult) {
 		return nativeETHResult;
 	}
-	
+
 	return sortERC20Tokens(tokenA, tokenB);
 }
 
