@@ -4,24 +4,23 @@
  * @module utils/liquidity
  */
 
-import {TickMath} from "@uniswap/v3-sdk";
-import {Pool, PoolKey, Position, V4PositionPlanner} from "@uniswap/v4-sdk";
-import {Address, decodeAbiParameters, erc20Abi, Hash, http, parseUnits} from 'viem';
-import {anvil} from 'viem/chains';
-import {getPoolManager} from '../../src/generated/types/PoolManager';
-import {PriceService} from '../services/price';
-import {getPublicClient, getWalletClient} from './client';
-import {logInfo, logSuccess, logWarning} from './error';
-import {calculateSqrtPriceX96FromUSDPrices,} from './math';
-import {approveToken, dealLiquidity, getTokenFromAddress, NATIVE_ETH_ADDRESS} from './tokens';
-import {ANVIL_ACCOUNTS, CONTRACT_ADDRESSES} from './wallets';
-import {getIPositionManager} from '../../src/generated/types/IPositionManager';
-import {getStateView} from '../../src/generated/types/StateView';
-import {MARKET_PAIR_CONFIGS} from "../config/markets";
-import {TOKEN_CONFIGS} from "../config/tokens";
+import { TickMath } from "@uniswap/v3-sdk";
+import { Pool, Position, V4PositionPlanner } from "@uniswap/v4-sdk";
+import { Address, parseUnits } from 'viem';
+import { anvil } from 'viem/chains';
+import { getIPositionManager } from '../../src/generated/types/IPositionManager';
+import { getPoolManager } from '../../src/generated/types/PoolManager';
+import { getStateView } from '../../src/generated/types/StateView';
+import { PriceService } from '../services/price';
+import { getPublicClient } from './client';
+import { logInfo, logSuccess, logWarning } from './error';
+import { calculateSqrtPriceX96FromUSDPrices, } from './math';
+import { approveToken, dealLiquidity, getTokenFromAddress, NATIVE_ETH_ADDRESS } from './tokens';
+import { ANVIL_ACCOUNTS, CONTRACT_ADDRESSES } from './wallets';
+import { sortTokenAddresses } from './helpers';
 
 /**
- * Initializes a Uniswap V4 pool with the specified price
+ * Initializes an Uniswap V4 pool with the specified price
  * @param token0Address - Address of the first token in the pair
  * @param token1Address - Address of the second token in the pair
  * @returns Promise resolving to an initialized Pool instance
@@ -34,9 +33,11 @@ const initializePool = async (
     try {
         const priceService = new PriceService();
 
+        const [firstAddress, secondAddress] = sortTokenAddresses(token0Address, token1Address);
+
         // Get token info
-        const token0 = await getTokenFromAddress(token0Address);
-        const token1 = await getTokenFromAddress(token1Address);
+        const token0 = await getTokenFromAddress(firstAddress);
+        const token1 = await getTokenFromAddress(secondAddress);
 
         // Get current prices
         const token0Price = await priceService.getPrice(token0.symbol!);
@@ -50,7 +51,16 @@ const initializePool = async (
 
         logInfo('PoolInitialization', `Initializing pool ${token0.symbol}/${token1.symbol} with sqrtPriceX96: ${sqrtPriceX96}`);
 
-        const pool = new Pool(token0, token1, 3000, 60, CONTRACT_ADDRESSES.SWAPCAST_HOOK!, sqrtPriceX96.toString(), 0, tick);
+        const pool = new Pool(
+            token0,
+            token1,
+            3000,
+            60,
+            CONTRACT_ADDRESSES.SWAPCAST_HOOK!,
+            sqrtPriceX96.toString(),
+            0,
+            tick
+        );
 
         const poolManager = getPoolManager({
             address: CONTRACT_ADDRESSES.POOL_MANAGER as Address,
@@ -59,25 +69,25 @@ const initializePool = async (
 
         const tx = await poolManager.write.initialize(
             [{
-                currency0: pool.poolKey.currency0 as `0x${string}`,
-                currency1: pool.poolKey.currency1 as `0x${string}`,
+                currency0: token0.address as Address,
+                currency1: token1.address as Address,
                 fee: pool.poolKey.fee,
                 tickSpacing: pool.poolKey.tickSpacing,
-                hooks: pool.poolKey.hooks as `0x${string}`
-            }, BigInt(pool.sqrtRatioX96.toString())], // Convert JSBI to bigint
+                hooks: pool.poolKey.hooks as Address
+            }, BigInt(pool.sqrtRatioX96.toString())],
             {
-                account: ANVIL_ACCOUNTS[0].address as `0x${string}`,
+                account: ANVIL_ACCOUNTS[0].address as Address,
                 chain: anvil
             }
         );
 
-        const receipt = await getPublicClient().waitForTransactionReceipt({hash: tx});
+        const receipt = await getPublicClient().waitForTransactionReceipt({ hash: tx });
 
         if (receipt.status !== 'success') {
             throw new Error(`Pool initialization failed with status: ${receipt.status}`);
         }
 
-        logSuccess('PoolInitialization', `Pool initialized successfully: ${JSON.stringify(pool)}`);
+        logSuccess('PoolInitialization', `Pool initialized successfully for ${token0.symbol}/${token1.symbol} with poolId: ${pool.poolId}` );
         return pool;
     } catch (error) {
         logWarning('PoolInitialization', `Pool initialization failed: ${error}`);
@@ -118,7 +128,7 @@ function getPositionParams(pool: Pool): {
 }
 
 /**
- * Adds liquidity to a Uniswap V4 pool
+ * Adds liquidity to an Uniswap V4 pool
  * @param pool - Target pool for liquidity provision
  * @returns Promise that resolves when liquidity is added
  * @throws {Error} If liquidity addition fails
@@ -166,7 +176,7 @@ const addLiquidity = async (pool: Pool): Promise<void> => {
         }
 
         const unlockData = planner.finalize() as `0x${string}`;
-        const latestBlock = await getPublicClient().getBlock({blockTag: 'latest'});
+        const latestBlock = await getPublicClient().getBlock({ blockTag: 'latest' });
         const currentTimestamp = Number(latestBlock.timestamp);
         const deadline = BigInt(currentTimestamp + 300); // 5 minutes from block time
 
@@ -185,7 +195,7 @@ const addLiquidity = async (pool: Pool): Promise<void> => {
             gas: 1000000n
         });
 
-        const receipt = await getPublicClient().waitForTransactionReceipt({hash});
+        const receipt = await getPublicClient().waitForTransactionReceipt({ hash });
         if (receipt.status !== 'success') {
             throw new Error(`Liquidity addition failed with status: ${receipt.status}`);
         }
@@ -203,7 +213,7 @@ const addLiquidity = async (pool: Pool): Promise<void> => {
  * Logs detailed liquidity information for a pool
  * @param pool - The pool to analyze
  */
-async function logPoolLiquidity(pool: Pool) {
+async function logPoolLiquidity(pool: Pool): Promise<void> {
     logInfo('LogPoolLiquidity', `Checking liquidity for pool ${pool.poolKey.currency0}/${pool.poolKey.currency1}`);
     const stateview = getStateView({
         address: CONTRACT_ADDRESSES.STATE_VIEW as Address,
@@ -224,7 +234,7 @@ async function logPoolLiquidity(pool: Pool) {
  * Logs current state information for a pool
  * @param pool - The pool to inspect
  */
-async function logPoolState(pool: Pool) {
+async function logPoolState(pool: Pool): Promise<void> {
     logInfo('LogPoolState', `Checking state for pool ${pool.poolKey.currency0}/${pool.poolKey.currency1}`);
     const stateview = getStateView({
         address: CONTRACT_ADDRESSES.STATE_VIEW as Address,
@@ -259,61 +269,12 @@ const mintPool = async (
     }
 };
 
-/**
- * Adds liquidity for all enabled market pairs
- * @param user - Address that will provide the liquidity
- * @param amount - Amount of each token to add (in base units)
- * @returns Promise that resolves when all liquidity is added
- */
-async function addLiquidityForMarkets(user: Address, amount: number = 1000): Promise<void> {
-
-    // Filter for enabled markets
-    const enabledMarkets = MARKET_PAIR_CONFIGS.filter(market => market.enabled);
-
-    logInfo('MarketLiquidity', `Adding liquidity for ${enabledMarkets.length} enabled markets`);
-
-    for (const market of enabledMarkets) {
-        try {
-            const baseToken = TOKEN_CONFIGS[market.base];
-            const quoteToken = TOKEN_CONFIGS[market.quote];
-
-            if (!baseToken || !quoteToken) {
-                logWarning('MarketLiquidity', `Skipping market ${market.base}/${market.quote}: Token config not found`);
-                continue;
-            }
-            // Convert amount to the smallest unit (wei)
-            const amount0 = BigInt(amount) * (10n ** BigInt(baseToken.decimals));
-            const amount1 = BigInt(amount) * (10n ** BigInt(quoteToken.decimals));
-
-            // Deal tokens to the admin address
-            logInfo('MarketLiquidity', `Dealing ${amount} ${baseToken.symbol} and ${amount} ${quoteToken.symbol} to ${user}`);
-
-            await dealLiquidity(
-                user,
-                baseToken.address as Address,
-                quoteToken.address as Address,
-                amount0,
-                amount1
-            );
-        } catch (error) {
-            const errorMessage = error instanceof Error ? error.message : String(error);
-            logWarning('MarketLiquidity', `Failed to add liquidity for ${market.base}/${market.quote}: ${errorMessage}`);
-        }
-    }
-
-    logSuccess('MarketLiquidity', 'Completed adding liquidity for all enabled markets');
-}
 
 /**
  * @exports
  * @description Public API for liquidity management
  */
 export {
-    mintPool,
-    addLiquidityForMarkets,
-    logPoolState,
-    logPoolLiquidity,
-    addLiquidity,
-    initializePool,
-    getPositionParams,
+    logPoolLiquidity, logPoolState, mintPool
 };
+

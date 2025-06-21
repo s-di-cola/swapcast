@@ -83,7 +83,7 @@ function getTokenFromCurrency(currency: any) {
       isNative: true
     };
   }
-  
+
   // ERC20 token - Pool already has all the info!
   const token = currency as Token;
   return {
@@ -101,7 +101,7 @@ function convertToTokenDecimals(ethEquivalentAmount: bigint, tokenDecimals: numb
   if (tokenDecimals === 18) {
     return ethEquivalentAmount; // No conversion needed
   }
-  
+
   // Scale amount to token's native decimals
   const scaleFactor = BigInt(10 ** (18 - tokenDecimals));
   return ethEquivalentAmount / scaleFactor;
@@ -122,7 +122,7 @@ async function validateTokenBalance(
   requiredAmount: bigint
 ): Promise<{ valid: boolean; balance: bigint; formatted: string }> {
   let balance: bigint;
-  
+
 
   if (tokenInfo.symbol === 'ETH') {
     balance = await getPublicClient().getBalance({ address: userAddress });
@@ -135,12 +135,12 @@ async function validateTokenBalance(
       args: [userAddress]
     });
   }
-  
+
   const formatted = formatUnits(balance, tokenInfo.decimals);
   const valid = balance >= requiredAmount;
-  
+
   logInfo('BalanceCheck', `${tokenInfo.symbol}: ${formatted} (need: ${formatUnits(requiredAmount, tokenInfo.decimals)})`);
-  
+
   return { valid, balance, formatted };
 }
 
@@ -218,110 +218,84 @@ export const recordPredictionViaSwap = withErrorHandling(
         );
       }
 
-      // Step 1: Encode the Universal Router command (V4_SWAP)
+      // Step 1: Build PoolKey 
+      const poolKeyStruct = {
+        currency0: pool.poolKey.currency0 as Address,
+        currency1: pool.poolKey.currency1 as Address,
+        fee: pool.poolKey.fee,
+        tickSpacing: pool.poolKey.tickSpacing,
+        hooks: pool.poolKey.hooks as Address
+      };
+
+      // Step 2: Single command
       const commands = encodePacked(['uint8'], [V4_SWAP_COMMAND]);
 
-      // Step 2: Encode V4Router actions according to documentation
+      // Step 3: Single action sequence  
       const actions = encodePacked(
         ['uint8', 'uint8', 'uint8'],
         [SWAP_EXACT_IN_SINGLE, SETTLE_ALL, TAKE_ALL]
       );
 
-      // Step 3: Prepare parameters for each action
-      const params = new Array(3);
-
-      // First parameter: ExactInputSingleParams for SWAP_EXACT_IN_SINGLE
-      params[0] = encodeAbiParameters(
-        [
-          {
-            name: 'poolKey',
-            type: 'tuple',
-            components: [
-              { name: 'currency0', type: 'address' },
-              { name: 'currency1', type: 'address' },
-              { name: 'fee', type: 'uint24' },
-              { name: 'tickSpacing', type: 'int24' },
-              { name: 'hooks', type: 'address' }
-            ]
-          },
-          { name: 'zeroForOne', type: 'bool' },
-          { name: 'amountIn', type: 'uint128' },
-          { name: 'amountOutMinimum', type: 'uint128' },
-          { name: 'hookData', type: 'bytes' } // ✅ NO sqrtPriceLimitX96!
-        ],
-        [
-          {
-            currency0: pool.poolKey.currency0 as Address,
-            currency1: pool.poolKey.currency1 as Address,
-            fee: pool.poolKey.fee,
-            tickSpacing: pool.poolKey.tickSpacing,
-            hooks: pool.poolKey.hooks as Address
-          },
-          zeroForOne,
-          inputAmount,
-          BigInt(0),
-          hookData
-        ]
+      // Step 4: Build parameters - but encode the ENTIRE ExactInputSingleParams as ONE struct
+      const swapParams = encodeAbiParameters(
+        [{
+          name: 'swapParams',
+          type: 'tuple',
+          components: [
+            {
+              name: 'poolKey',
+              type: 'tuple',
+              components: [
+                { name: 'currency0', type: 'address' },
+                { name: 'currency1', type: 'address' },
+                { name: 'fee', type: 'uint24' },
+                { name: 'tickSpacing', type: 'int24' },
+                { name: 'hooks', type: 'address' }
+              ]
+            },
+            { name: 'zeroForOne', type: 'bool' },
+            { name: 'amountIn', type: 'uint128' },
+            { name: 'amountOutMinimum', type: 'uint128' },
+            { name: 'hookData', type: 'bytes' }
+          ]
+        }],
+        [{
+          poolKey: poolKeyStruct,
+          zeroForOne: zeroForOne,
+          amountIn: inputAmount,
+          amountOutMinimum: BigInt(0),
+          hookData: hookData
+        }]
       );
 
-      // Second parameter: SETTLE_ALL - specify input currency and amount
-      params[1] = encodeAbiParameters(
-        [
-          { name: 'currency', type: 'address' },
-          { name: 'amount', type: 'uint256' }
-        ],
-        [
-          inputToken.address,
-          inputAmount
-        ]
+      const settleParams = encodeAbiParameters(
+        [{ name: 'currency', type: 'address' }, { name: 'amount', type: 'uint256' }],
+        [inputToken.address, inputAmount]
       );
 
-      // Third parameter: TAKE_ALL - specify output currency (amount is 0 for take all)
-      params[2] = encodeAbiParameters(
-        [
-          { name: 'currency', type: 'address' },
-          { name: 'amount', type: 'uint256' }
-        ],
-        [
-          outputToken.address,
-          BigInt(0) // Amount 0 means take all available
-        ]
+      const takeParams = encodeAbiParameters(
+        [{ name: 'currency', type: 'address' }, { name: 'amount', type: 'uint256' }],
+        [outputToken.address, BigInt(0)]
       );
 
-      // Step 4: Combine actions and params into inputs
+      // Step 5: Combine everything
       const inputs = [
         encodeAbiParameters(
           [
             { name: 'actions', type: 'bytes' },
             { name: 'params', type: 'bytes[]' }
           ],
-          [actions, params]
+          [actions, [swapParams, settleParams, takeParams]]
         )
       ];
-
-      // Step 5: Set deadline
       const deadline = BigInt(Math.floor(Date.now() / 1000) + 60);
 
-      logInfo('PredictionSwap', `Executing Universal Router with msg.value: ${totalETHNeeded}`);
-      logInfo('PredictionSwap', `Swap amount: ${inputAmount}, Hook data length: ${hookData.length}`);
 
-      await logPoolState(pool);
-      await logPoolLiquidity(pool);
-
-      logInfo('SwapDebug', `Final check before swap:`);
-      logInfo('SwapDebug', `  User: ${userAddress}`);
-      logInfo('SwapDebug', `  Outcome: ${outcome} (${outcome === OUTCOME_BEARISH ? 'BEARISH' : 'BULLISH'})`);
-      logInfo('SwapDebug', `  ZeroForOne: ${zeroForOne}`);
-      logInfo('SwapDebug', `  Input token: ${inputToken.address} (${inputToken.symbol})`);
-      logInfo('SwapDebug', `  Output token: ${outputToken.address} (${outputToken.symbol})`);
-      logInfo('SwapDebug', `  Input amount: ${formatUnits(inputAmount, inputToken.decimals)} ${inputToken.symbol}`);
-      logInfo('SwapDebug', `  HookData: ${hookData}`);
-
-      // Step 6: Execute the swap - ⚡ ALWAYS send totalETHNeeded like the working version!
+      // Step 6: Execute with the same parameters
       const hash = await universalRouter.write.execute([commands, inputs, deadline], {
         account: userAddress,
         chain: anvil,
-        value: totalETHNeeded, // ✅ Always send totalETHNeeded
+        value: totalETHNeeded,
         gas: 30000000n,
       });
 
