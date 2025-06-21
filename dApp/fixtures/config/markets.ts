@@ -45,9 +45,6 @@ export const MARKET_PAIR_CONFIGS: MarketPairConfig[] = [
     { base: 'ETH', quote: 'USDC', enabled: true, priority: 100, category: 'major' },
     { base: 'ETH', quote: 'DAI', enabled: true, priority: 90, category: 'major' },
 
-    // Stablecoin pair
-    { base: 'USDC', quote: 'DAI', enabled: true, priority: 85, category: 'major' },
-
     // DeFi tokens (ETH-based pairs)
     { base: 'LINK', quote: 'ETH', enabled: true, priority: 50, category: 'defi' },
     { base: 'UNI', quote: 'ETH', enabled: true, priority: 40, category: 'defi' },
