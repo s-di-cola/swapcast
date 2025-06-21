@@ -134,8 +134,7 @@ async function recordPredictionWithSpecificOutcome(
  */
 export const generatePredictionsForMarkets = withErrorHandling(
     async (markets: MarketCreationResult[]) => {
-        logInfo('System', `🚀 Starting FIXED prediction generation for ${markets.length} markets`);
-        logInfo('System', `🔧 Fixed: Swap direction logic and token requirements`);
+        logInfo('System', `🚀 Starting prediction generation for ${markets.length} markets`);
 
         const whales = await initializeWhaleAccounts();
 
@@ -185,9 +184,8 @@ export const generatePredictionsForMarkets = withErrorHandling(
             ? (totalSuccessful / (totalSuccessful + totalFailed) * 100).toFixed(1)
             : '0';
 
-        logSuccess('System', `\n🎉 FIXED PREDICTION GENERATION COMPLETED!`);
+        logSuccess('System', `\n🎉 PREDICTION GENERATION COMPLETED!`);
         logSuccess('System', `📊 Results: ${totalSuccessful} successful, ${totalFailed} failed (${overallSuccessRate}% success rate)`);
-        logSuccess('System', `🔧 Swap direction logic fixed - should eliminate TRANSFER_FROM_FAILED errors!`);
 
         logInfo('WhaleStats', `\n🐋 Whale Statistics:`);
         logInfo('WhaleStats', `   📊 Active whales: ${whaleStats.predictionStats.whalesWithPredictions}/${whaleStats.totalWhales}`);

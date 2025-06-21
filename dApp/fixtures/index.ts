@@ -198,16 +198,6 @@ function printFinalSummary(
 		console.log(chalk.gray(`   ${index + 1}. ${market.name} (${confidence} confidence, ${category})`));
 	});
 
-	// Enhanced Whale System Benefits
-	console.log(chalk.cyan('\n🐋 ENHANCED WHALE SYSTEM BENEFITS:'));
-	console.log(chalk.green('   ✅ Top 25 Ethereum whale accounts from Etherscan'));
-	console.log(chalk.green('   ✅ Real-time balance validation before swaps'));
-	console.log(chalk.green('   ✅ Automatic token dealing for insufficient balances'));
-	console.log(chalk.green('   ✅ Prevents TRANSFER_FROM_FAILED errors'));
-	console.log(chalk.green('   ✅ Comprehensive retry logic and error handling'));
-	console.log(chalk.green('   ✅ Intelligent whale rotation system'));
-	console.log(chalk.green('   ✅ Realistic high-value trading patterns'));
-
 	// Error Prevention Stats
 	if (totalFailed > 0) {
 		console.log(chalk.cyan('\n🛡️ ERROR PREVENTION:'));
@@ -254,16 +244,13 @@ function printFinalSummary(
 	}
 
 	console.log(chalk.blue('\n' + '='.repeat(80)));
-	console.log(chalk.green.bold('🎯 ENHANCED WHALE FIXTURE GENERATION COMPLETE!'));
+	console.log(chalk.green.bold('🎯 FIXTURE GENERATION COMPLETE!'));
 	console.log(chalk.blue('='.repeat(80) + '\n'));
 }
 
 async function main() {
-	console.log(chalk.blue.bold('\n🚀 SWAPCAST ENHANCED WHALE FIXTURE GENERATOR V4'));
+	console.log(chalk.blue.bold('\n🚀 SWAPCAST GENERATOR'));
 	console.log(chalk.blue('=' .repeat(70)));
-	console.log(chalk.cyan('🐋 Using TOP 25 Ethereum whale accounts from Etherscan'));
-	console.log(chalk.cyan('🛡️ Enhanced balance validation prevents TRANSFER_FROM errors'));
-	console.log(chalk.cyan('🎯 Automatic token dealing ensures sufficient balances'));
 
 	try {
 		// 1. Pre-flight checks
@@ -292,8 +279,6 @@ async function main() {
 		console.log(chalk.gray(`   Categories: ${config.enabledCategories?.join(', ')}`));
 		console.log(chalk.gray(`   Price Source: ${config.priceSource}`));
 		console.log(chalk.gray(`   Require High Confidence: ${config.requireHighConfidence}`));
-		console.log(chalk.cyan(`   🐋 Prediction System: Enhanced Whale-Based with Balance Validation`));
-		console.log(chalk.cyan(`   🛡️ Error Prevention: TRANSFER_FROM protection enabled`));
 
 		// 5. Generate markets
 		console.log(chalk.yellow('\n🏪 MARKET GENERATION'));
