@@ -6,6 +6,7 @@
 
 import { TOKEN_CONFIGS } from '../config/tokens';
 import chalk from 'chalk';
+import { LRUCache } from 'lru-cache';
 
 /**
  * Represents price data for a token
@@ -28,14 +29,26 @@ export interface PriceData {
  * Implements rate limiting and fallback mechanisms
  */
 export class PriceService {
-    /** @private */
-    private cache = new Map<string, PriceData>();
+    /** @private LRU Cache instance */
+    private cache: LRUCache<string, PriceData>;
     
-    /** @private Cache TTL in milliseconds */
+    /** @private Cache TTL in milliseconds (1 minute) */
     private readonly CACHE_TTL = 60 * 1000;
+    
+    /** @private Max number of items to store in cache */
+    private readonly MAX_CACHE_ITEMS = 100;
     
     /** @private Delay between API requests in milliseconds */
     private readonly RATE_LIMIT_DELAY = 200;
+    
+    constructor() {
+        this.cache = new LRUCache({
+            max: this.MAX_CACHE_ITEMS,
+            ttl: this.CACHE_TTL,
+            updateAgeOnGet: false,
+            updateAgeOnHas: false
+        });
+    }
     
     /**
      * Fetches the current price for a token
@@ -146,11 +159,8 @@ export class PriceService {
      * @private
      */
     private getCachedPrice(symbol: string): PriceData | null {
-        const cached = this.cache.get(symbol);
-        if (!cached) return null;
-        
-        const isValid = (Date.now() - cached.timestamp) < this.CACHE_TTL;
-        return isValid ? cached : null;
+        // LRUCache handles TTL internally
+        return this.cache.get(symbol) || null;
     }
     
     /**
@@ -187,14 +197,70 @@ export class PriceService {
         return new Promise(resolve => setTimeout(resolve, ms));
     }
     
+    /**
+     * Clears the entire cache
+     */
     clearCache(): void {
         this.cache.clear();
     }
     
+    /**
+     * Gets cache statistics
+     * @returns Object with cache stats
+     */
+    /**
+     * Gets cache statistics
+     * @returns Object with cache stats
+     */
+    /**
+     * Gets cache statistics
+     * @returns Object with cache stats
+     */
     getCacheStats() {
+        interface CacheEntry {
+            key: string;
+            value: PriceData;
+            remainingTTL: number;
+        }
+        
+        const entries: CacheEntry[] = [];
+        for (const [key, value] of this.cache.entries()) {
+            entries.push({
+                key,
+                value,
+                remainingTTL: this.cache.getRemainingTTL(key)
+            });
+        }
+        
         return {
             size: this.cache.size,
-            entries: Array.from(this.cache.keys())
+            max: this.cache.max,
+            ttl: this.cache.ttl,
+            entries
         };
+    }
+    
+    /**
+     * Preloads prices for multiple symbols
+     * @param symbols - Array of token symbols to preload
+     */
+    async preloadPrices(symbols: string[]): Promise<void> {
+        const uniqueSymbols = [...new Set(symbols)];
+        const toFetch = uniqueSymbols.filter(symbol => !this.cache.has(symbol));
+        
+        if (toFetch.length === 0) return;
+        
+        console.log(chalk.blue(`🔄 Preloading prices for ${toFetch.length} tokens...`));
+        
+        // Fetch in batches to avoid rate limiting
+        const BATCH_SIZE = 5;
+        for (let i = 0; i < toFetch.length; i += BATCH_SIZE) {
+            const batch = toFetch.slice(i, i + BATCH_SIZE);
+            await Promise.all(batch.map(symbol => this.getPrice(symbol)));
+            
+            if (i + BATCH_SIZE < toFetch.length) {
+                await this.delay(this.RATE_LIMIT_DELAY * 2);
+            }
+        }
     }
 }
