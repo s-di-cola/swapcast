@@ -5,6 +5,7 @@
 	"type": "module",
 	"scripts": {
 		"dev": "vite dev",
+		"dev:debug": "vite dev --debug",
 		"dev:with-fixtures": "npm run env:start && npm run generate:fixtures && vite dev",
 		"dev:inspect": "node --inspect dev",
 		"dev:with-contracts": "forge build && npm run generate:types && npm run dev:with-fixtures",
