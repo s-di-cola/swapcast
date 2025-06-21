@@ -45,22 +45,54 @@
     let showHelpModal = $state(false);
     let isSubmitting = $state(false);
     let isSubmitEnabled = $derived(() => isFormValid(validationErrors()) && !isSubmitting);
-    let marketData = $state<Market | MarketDetailsResult | null>(null);
+    // Market data state
+    interface BaseMarketData {
+        assetPair?: string;
+        [key: string]: unknown;
+    }
+
+    interface MarketWithStakes extends BaseMarketData {
+        totalStake0: bigint | number;
+        totalStake1: bigint | number;
+    }
+
+    interface MarketWithConviction extends BaseMarketData {
+        totalConvictionBullish: bigint | number;
+        totalConvictionBearish: bigint | number;
+    }
+
+    type AnyMarketData = Market | MarketWithStakes | MarketWithConviction | null;
+
+    let marketData = $state<AnyMarketData>(null);
     let isLoadingMarket = $state(false);
     let marketError = $state<string | null>(null);
 
+    // Wallet connection state
     let connectedAddress = $state<string | null>(null);
     let isConnected = $state(false);
 
+    // Token balances
     let payTokenBalance = $state(0);
     let receiveTokenBalance = $state(0);
     let isLoadingBalances = $state(false);
 
-    let poolPrices = $state<any>(null);
+    // Pool and price state
+    interface PoolPrices {
+        token0Price?: number;
+        token1Price?: number;
+        fee?: number;
+        sqrtPriceX96?: bigint;
+        tick?: number;
+        protocolFee?: number;
+        lpFee?: number;
+    }
+
+    let poolPrices = $state<PoolPrices | null>(null);
     let isLoadingPrices = $state(false);
     let hasShownLiquidityWarning = $state(false);
     let priceError = $state<string | null>(null);
 
+    // Market parameters
     let ethPrice = $state(2500);
     let networkFee = $state(0.002);
     let totalBullWeight = $state(0);
@@ -140,6 +172,59 @@
     /**
      * Fetch market data when marketId changes - IMPROVED ERROR HANDLING
      */
+    // Log important state changes
+    function logState() {
+        const marketDataToLog = (() => {
+            if (!marketData) return null;
+            const base = {
+                assetPair: marketData.assetPair,
+                raw: marketData
+            };
+            return 'priceThreshold' in marketData 
+                ? { ...base, priceThreshold: marketData.priceThreshold }
+                : base;
+        })();
+
+        console.log('🔍 Market data updated:', {
+            marketId,
+            marketData: marketDataToLog,
+            poolPrices: poolPrices ? {
+                token0Price: poolPrices.token0Price,
+                token1Price: poolPrices.token1Price,
+                fee: poolPrices.fee,
+                sqrtPriceX96: poolPrices.sqrtPriceX96?.toString(),
+                tick: poolPrices.tick,
+                protocolFee: poolPrices.protocolFee,
+                lpFee: poolPrices.lpFee
+            } : null,
+            tokens: {
+                pay: payToken?.symbol,
+                receive: receiveToken?.symbol,
+                payBalance: payTokenBalance,
+                receiveBalance: receiveTokenBalance
+            },
+            amounts: {
+                pay: payAmount,
+                receive: receiveAmount,
+                exchangeRate: exchangeRate(),
+                displayExchangeRate: displayExchangeRate()
+            },
+            prediction: {
+                side: predictionSide,
+                targetPrice: predictedTargetPrice,
+                stakeAmount: predictionStakeAmount()
+            },
+            validation: validationErrors(),
+            isFormValid: formValid,
+            primaryError: primaryError()
+        });
+    }
+
+    // Log state when important dependencies change
+    $effect(() => {
+        logState();
+    });
+
     $effect(() => {
         if (!marketId) {
             marketData = null;
@@ -159,71 +244,63 @@
                     throw new Error('No market data returned');
                 }
 
+                // Reset values first
+                totalBullWeight = 0;
+                totalBearWeight = 0;
                 marketData = result;
 
-                // Handle both Market and MarketDetailsResult types with better error checking
-                if (marketData) {
-                    // Reset values first
+                try {
+                    // Handle both Market and MarketDetailsResult types with type assertions
+                    const market = result as any; // Temporary type assertion to handle both types
+                    
+                    if ('totalStake1' in market && 'totalStake0' in market) {
+                        // Handle Market type
+                        totalBullWeight = Number(market.totalStake1 || 0n) / 1e18;
+                        totalBearWeight = Number(market.totalStake0 || 0n) / 1e18;
+                        console.log('🔍 Using Market type - Bull:', totalBullWeight, 'Bear:', totalBearWeight);
+                    } else if ('totalConvictionBullish' in market && 'totalConvictionBearish' in market) {
+                        // Handle MarketDetailsResult type
+                        totalBullWeight = Number(market.totalConvictionBullish || 0n);
+                        totalBearWeight = Number(market.totalConvictionBearish || 0n);
+                        console.log('🔍 Using MarketDetailsResult type - Bull:', totalBullWeight, 'Bear:', totalBearWeight);
+                    } else {
+                        console.warn('⚠️ Market data does not contain expected stake fields:', Object.keys(market));
+                    }
+                } catch (error) {
+                    console.error('❌ Error processing market data:', error);
                     totalBullWeight = 0;
                     totalBearWeight = 0;
+                }
 
-                    // Check for Market type first (has totalStake1/totalStake0)
-                    if ('totalStake1' in marketData && 'totalStake0' in marketData) {
-                        try {
-                            totalBullWeight = Number(marketData.totalStake1 || 0n) / 1e18;
-                            totalBearWeight = Number(marketData.totalStake0 || 0n) / 1e18;
-                            console.log('🔍 Using Market type - Bull:', totalBullWeight, 'Bear:', totalBearWeight);
-                        } catch (error) {
-                            console.error('❌ Error converting Market stakes:', error);
-                            totalBullWeight = 0;
-                            totalBearWeight = 0;
-                        }
-                    }
-                    // Check for MarketDetailsResult type (has totalConvictionBullish/totalConvictionBearish)
-                    else if ('totalConvictionBullish' in marketData && 'totalConvictionBearish' in marketData) {
-                        try {
-                            totalBullWeight = Number(marketData.totalConvictionBullish || 0n) / 1e18;
-                            totalBearWeight = Number(marketData.totalConvictionBearish || 0n) / 1e18;
-                            console.log('🔍 Using MarketDetailsResult type - Bull:', totalBullWeight, 'Bear:', totalBearWeight);
-                        } catch (error) {
-                            console.error('❌ Error converting MarketDetailsResult stakes:', error);
-                            totalBullWeight = 0;
-                            totalBearWeight = 0;
-                        }
-                    } else {
-                        console.warn('⚠️ Market data does not contain expected stake fields:', Object.keys(marketData));
-                    }
-
-                    // FIXED: Handle asset pair properly - no more hardcoding!
-                    console.log('🔍 Processing asset pair:', marketData?.assetPair);
+                // Handle token pair setup with proper null checks
+                const assetPair = (marketData as any)?.assetPair;
+                console.log('🔍 Processing asset pair:', assetPair);
+                
+                if (assetPair && typeof assetPair === 'string' && assetPair.includes('/')) {
+                    const [baseSymbol, quoteSymbol] = assetPair.split('/');
                     
-                    if (marketData?.assetPair && marketData.assetPair.includes('/')) {
-                        // Proper trading pair like "BTC/USDT" or "ETH/USDC"
-                        const [baseSymbol, quoteSymbol] = marketData.assetPair.split('/');
-                        
-                        if (baseSymbol && quoteSymbol) {
-                            payToken = {
-                                symbol: baseSymbol.trim(),
-                                name: baseSymbol.trim(),
-                                balance: payTokenBalance
-                            };
-                            receiveToken = {
-                                symbol: quoteSymbol.trim(),
-                                name: quoteSymbol.trim(),
-                                balance: receiveTokenBalance
-                            };
-                            console.log('🔍 Set tokens from market pair:', { 
-                                payToken: payToken.symbol, 
-                                receiveToken: receiveToken.symbol 
-                            });
-                        }
-                    } else {
-                        console.error('❌ Invalid asset pair format:', marketData?.assetPair);
-                        console.error('Expected format like "BTC/USDT", got:', marketData?.assetPair);
-                        // Fallback to default
-                        payToken = {symbol: 'ETH', name: 'Ethereum', balance: payTokenBalance};
-                        receiveToken = {symbol: 'USDT', name: 'Tether', balance: receiveTokenBalance};
+                    if (baseSymbol && quoteSymbol) {
+                        payToken = {
+                            symbol: baseSymbol.trim(),
+                            name: baseSymbol.trim(),
+                            balance: payTokenBalance
+                        };
+                        receiveToken = {
+                            symbol: quoteSymbol.trim(),
+                            name: quoteSymbol.trim(),
+                            balance: receiveTokenBalance
+                        };
+                        console.log('🔍 Set tokens from market pair:', { 
+                            payToken: payToken.symbol, 
+                            receiveToken: receiveToken.symbol 
+                        });
                     }
+                } else {
+                    console.error('❌ Invalid asset pair format:', assetPair);
+                    console.error('Expected format like "BTC/USDT", got:', assetPair);
+                    // Fallback to default
+                    payToken = {symbol: 'ETH', name: 'Ethereum', balance: payTokenBalance};
+                    receiveToken = {symbol: 'USDT', name: 'Tether', balance: receiveTokenBalance};
                 }
             } catch (error) {
                 console.error('❌ Failed to fetch market data:', error);
@@ -301,13 +378,13 @@
         return calculatePredictionStakeAmount(payAmount);
     });
 
-    let marketName = $derived(() => {
+    let marketName = $derived((): string => {
         if (!marketData) return 'Unknown Market';
         
         // Handle both Market and MarketDetailsResult types
-        if ('name' in marketData) {
+        if (marketData && 'name' in marketData && typeof marketData.name === 'string') {
             return marketData.name;
-        } else if ('description' in marketData) {
+        } else if (marketData && 'description' in marketData && typeof marketData.description === 'string') {
             return marketData.description;
         }
         
@@ -468,9 +545,9 @@
                 let marketIdBigInt: bigint;
                 if (marketId) {
                     marketIdBigInt = BigInt(marketId);
-                } else if ('id' in marketData) {
-                    marketIdBigInt = BigInt(marketData.id);
-                } else if ('marketId' in marketData) {
+                } else if (marketData && 'id' in marketData && marketData.id != null) {
+                    marketIdBigInt = BigInt(String(marketData.id));
+                } else if (marketData && 'marketId' in marketData && typeof marketData.marketId === 'bigint') {
                     marketIdBigInt = marketData.marketId;
                 } else {
                     throw new Error('Could not determine market ID');
@@ -691,134 +768,6 @@
                     />
                 </div>
 
-                <!-- Market Debug Panel -->
-                <div class="rounded-lg border border-red-200 bg-red-50 p-4">
-                    <h4 class="text-sm font-medium text-red-900 mb-2">🔍 MARKET DEBUG</h4>
-                    <div class="space-y-1 text-xs font-mono">
-                        <div><strong>Market ID:</strong> {marketId || 'null'}</div>
-                        <div><strong>Market Data:</strong> {marketData ? 'EXISTS' : 'NULL'}</div>
-                        <div><strong>Is Loading:</strong> {isLoadingMarket}</div>
-                        <div><strong>Error:</strong> {marketError || 'None'}</div>
-                        
-                        {#if marketData}
-                            <div class="border-t border-red-300 pt-2 mt-2">
-                                <div><strong>Raw Market Object:</strong></div>
-                                <pre class="text-xs bg-red-100 p-2 rounded mt-1 overflow-auto max-h-40">{JSON.stringify(marketData, (key, value) => 
-                                    typeof value === 'bigint' ? value.toString() : value, 2)}</pre>
-                            </div>
-                            
-                            <div class="border-t border-red-300 pt-2 mt-2">
-                                <div><strong>Processed Values:</strong></div>
-                                <div>• Asset Pair: {marketData?.assetPair || 'undefined'}</div>
-                                <div>• Bull Weight: {totalBullWeight}</div>
-                                <div>• Bear Weight: {totalBearWeight}</div>
-                                <div>• Pay Token: {payToken?.symbol || 'undefined'}</div>
-                                <div>• Receive Token: {receiveToken?.symbol || 'undefined'}</div>
-                            </div>
-                        {/if}
-                    </div>
-                </div>
-
-                {#if poolPrices}
-                    <div class="rounded-lg border border-blue-200 bg-blue-50 p-4">
-                        <h4 class="text-sm font-medium text-blue-900 mb-2">Pool Information</h4>
-                        <div class="space-y-1 text-sm">
-                            <div class="flex justify-between">
-                                <span class="text-blue-700">Exchange Rate:</span>
-                                <span class="font-medium text-blue-900">
-                                    1 {payToken?.symbol} = {displayExchangeRate()} {receiveToken?.symbol}
-                                </span>
-                            </div>
-                            <div class="flex justify-between">
-                                <span class="text-blue-700">Pool Fee:</span>
-                                <span class="font-medium text-blue-900">0.3%</span>
-                            </div>
-                            <div class="flex justify-between">
-                                <span class="text-blue-700">Slippage:</span>
-                                <span class="font-medium text-blue-900">0.5%</span>
-                            </div>
-                        </div>
-                    </div>
-                {/if}
-
-                <!-- Enhanced Debug Information -->
-                {#if poolPrices}
-                    <div class="rounded-lg border border-yellow-200 bg-yellow-50 p-4">
-                        <h4 class="text-sm font-medium text-yellow-900 mb-2">🧪 Complete Debug Info</h4>
-                        <div class="space-y-2 text-xs font-mono">
-                            <div class="border-b border-yellow-300 pb-2">
-                                <div><strong>Market:</strong> {marketName()} (ID: {marketId || 'N/A'})</div>
-                                <div><strong>Asset Pair:</strong> {marketData?.assetPair || 'Loading...'}</div>
-                            </div>
-                            
-                            <div class="border-b border-yellow-300 pb-2">
-                                <div><strong>Pay Token:</strong> {payToken?.symbol} (Balance: {payTokenBalance.toFixed(6)})</div>
-                                <div><strong>Receive Token:</strong> {receiveToken?.symbol} (Balance: {receiveTokenBalance.toFixed(6)})</div>
-                                <div><strong>Pay Amount:</strong> {payAmount}</div>
-                                <div><strong>Receive Amount:</strong> {receiveAmount}</div>
-                            </div>
-
-                            <div class="border-b border-yellow-300 pb-2">
-                                <div class="text-yellow-700"><strong>--- Raw Pool Data ---</strong></div>
-                                <div><strong>sqrtPriceX96:</strong> {poolPrices.sqrtPriceX96?.toString() || 'N/A'}</div>
-                                <div><strong>tick:</strong> {poolPrices.tick?.toString() || 'N/A'}</div>
-                                <div><strong>protocolFee:</strong> {poolPrices.protocolFee || 'N/A'}</div>
-                                <div><strong>lpFee:</strong> {poolPrices.lpFee || 'N/A'}</div>
-                            </div>
-
-                            <div class="border-b border-yellow-300 pb-2">
-                                <div class="text-yellow-700"><strong>--- Pool Prices ---</strong></div>
-                                {#if marketData?.assetPair}
-                                    {@const [baseSymbol, quoteSymbol] = marketData.assetPair.split('/')}
-                                    <div><strong>Raw token0Price:</strong> {poolPrices.token0Price}</div>
-                                    <div><strong>Raw token1Price:</strong> {poolPrices.token1Price}</div>
-                                    <div><strong>Interpretation:</strong></div>
-                                    <div class="ml-2">• token0Price = {quoteSymbol} per {baseSymbol}</div>
-                                    <div class="ml-2">• token1Price = {baseSymbol} per {quoteSymbol}</div>
-                                {/if}
-                            </div>
-
-                            <div class="border-b border-yellow-300 pb-2">
-                                <div class="text-yellow-700"><strong>--- Exchange Rate Logic ---</strong></div>
-                                <div><strong>Calculated exchange rate:</strong> {exchangeRate()}</div>
-                                <div><strong>Display exchange rate:</strong> {displayExchangeRate()}</div>
-                                <div><strong>Expected for 1 {payToken?.symbol}:</strong> {payAmount > 0 ? (payAmount * exchangeRate()).toFixed(6) : '0'} {receiveToken?.symbol}</div>
-                                <div><strong>Actual receive amount:</strong> {receiveAmount.toFixed(6)} {receiveToken?.symbol}</div>
-                            </div>
-
-                            <div class="border-b border-yellow-300 pb-2">
-                                <div class="text-yellow-700"><strong>--- Sanity Checks ---</strong></div>
-                                {#if payToken?.symbol === 'ETH' && receiveToken?.symbol === 'USDC'}
-                                    <div><strong>ETH→USDC Check:</strong></div>
-                                    <div class="ml-2">• Should be ~2,400-2,600 USDC per ETH</div>
-                                    <div class="ml-2">• Current rate: {exchangeRate().toFixed(2)} USDC per ETH</div>
-                                    <div class="ml-2 {exchangeRate() > 1000 && exchangeRate() < 5000 ? 'text-green-600' : 'text-red-600'}">
-                                        • Status: {exchangeRate() > 1000 && exchangeRate() < 5000 ? '✅ Reasonable' : '❌ WRONG!'}
-                                    </div>
-                                {:else if payToken?.symbol === 'USDC' && receiveToken?.symbol === 'ETH'}
-                                    <div><strong>USDC→ETH Check:</strong></div>
-                                    <div class="ml-2">• Should be ~0.0004 ETH per USDC</div>
-                                    <div class="ml-2">• Current rate: {exchangeRate().toFixed(8)} ETH per USDC</div>
-                                    <div class="ml-2 {exchangeRate() > 0.0002 && exchangeRate() < 0.0006 ? 'text-green-600' : 'text-red-600'}">
-                                        • Status: {exchangeRate() > 0.0002 && exchangeRate() < 0.0006 ? '✅ Reasonable' : '❌ WRONG!'}
-                                    </div>
-                                {/if}
-                            </div>
-
-                            <div>
-                                <div class="text-yellow-700"><strong>--- Validation Errors ---</strong></div>
-                                {#if validationErrors().length > 0}
-                                    {#each validationErrors() as error}
-                                        <div class="text-red-600">• {error}</div>
-                                    {/each}
-                                {:else}
-                                    <div class="text-green-600">• No validation errors</div>
-                                {/if}
-                            </div>
-                        </div>
-                    </div>
-                {/if}
-
                 <PredictionSection
                         {predictionSide}
                         predictionStakeAmount={predictionStakeAmount()}
@@ -893,10 +842,10 @@
         {predictedTargetPrice}
         predictionStakeAmount={predictionStakeAmount()}
         {networkFee}
-        marketName={marketName()}
-        {totalBullWeight}
-        {totalBearWeight}
-        {protocolFeeRate}
+        marketName={marketName() ?? 'Unknown Market'}
+        totalBullWeight={totalBullWeight}
+        totalBearWeight={totalBearWeight}
+        protocolFeeRate={protocolFeeRate}
         onConfirm={executeSwapAndPredict}
         onClose={() => (showConfirmationModal = false)}
         {isSubmitting}
