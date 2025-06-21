@@ -87,11 +87,11 @@
 		<!-- Price information -->
 		<div class="mb-5 flex justify-between">
 			<div>
-				<p class="text-xs text-gray-500">Current Price</p>
+				<p class="text-xs text-gray-500">{market.assetSymbol} Current Price</p>
 				<p class="text-lg font-semibold text-gray-800">${formatNumber(currentPrice)}</p>
 			</div>
 			<div class="text-right">
-				<p class="text-xs text-gray-500">Threshold</p>
+				<p class="text-xs text-gray-500">Target Price</p>
 				<p class="text-lg font-semibold text-gray-800">${formatNumber(market.priceThreshold)}</p>
 			</div>
 		</div>
