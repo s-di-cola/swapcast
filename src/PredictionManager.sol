@@ -113,8 +113,9 @@ contract PredictionManager is
     event OracleResolverAddressSet(address indexed oldAddress, address indexed newAddress);
     event RewardDistributorAddressSet(address indexed oldAddress, address indexed newAddress);
     event StakeRecorded(
-        uint256 indexed marketId, address indexed user, PredictionTypes.Outcome outcome, uint256 amount
+        uint256 indexed marketId, address indexed user, PredictionTypes.Outcome outcome, uint256 amount, uint256 tokenId
     );
+
     event RewardClaimed(address indexed user, uint256 indexed tokenId, uint256 rewardAmount);
     event MarketExpired(uint256 indexed marketId, uint256 expirationTimestamp); // For Chainlink Automation
     event MarketResolutionFailed(uint256 indexed marketId, string reason);
@@ -520,7 +521,7 @@ contract PredictionManager is
 
         // Call library function to handle core prediction logic
         // This will revert with appropriate errors if conditions aren't met
-        (uint256 stakeAmountNet, uint256 protocolFee) = market.recordPrediction(
+        (uint256 stakeAmountNet, uint256 protocolFee, uint256 tokenId) = market.recordPrediction(
             _user, _outcome, _convictionStakeDeclared, swapCastNFT, treasuryAddress, feeBasis, minStake
         );
 
@@ -528,7 +529,7 @@ contract PredictionManager is
         if (protocolFee > 0) {
             emit FeePaid(_marketId, _user, protocolFee);
         }
-        emit StakeRecorded(_marketId, _user, _outcome, stakeAmountNet);
+        emit StakeRecorded(_marketId, _user, _outcome, stakeAmountNet, tokenId);
     }
 
     // --- Market Resolution (IPredictionManagerForResolver Implementation) ---

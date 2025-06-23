@@ -12,6 +12,7 @@ type Market @entity {
   finalPrice: BigInt
   totalStakedOutcome0: BigInt!
   totalStakedOutcome1: BigInt!
+  totalProtocolFees: BigInt!
   predictions: [Prediction!]! @derivedFrom(field: "market")
   resolution: MarketResolution @derivedFrom(field: "market")
 }
@@ -35,6 +36,7 @@ type User @entity {
   totalStaked: BigInt!
   totalWon: BigInt!
   totalClaimed: BigInt!
+  totalFeesPaid: BigInt!
 }
 
 type MarketResolution @entity {
@@ -48,6 +50,7 @@ type MarketResolution @entity {
 type GlobalStat @entity {
   id: ID!
   totalMarkets: BigInt!
+  totalProtocolFees: BigInt!
   totalPredictions: BigInt!
   totalStaked: BigInt!
   totalUsers: BigInt!
