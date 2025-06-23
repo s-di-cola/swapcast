@@ -1,10 +1,9 @@
 <script lang="ts">
-  import { onMount } from 'svelte';
-  import { formatEther } from 'viem';
-  import { toastStore } from '$lib/stores/toastStore';
   import { appKit } from '$lib/configs/wallet.config';
-  import { fetchUserPredictions, fetchUserPredictionStats, claimReward, batchClaimRewards } from '$lib/services/prediction';
-  import type { UserPrediction, PredictionStats } from '$lib/services/prediction/types';
+  import { batchClaimRewards, claimReward, fetchUserPredictions, fetchUserPredictionStats } from '$lib/services/prediction';
+  import type { PredictionStats, UserPrediction } from '$lib/services/prediction/types';
+  import { toastStore } from '$lib/stores/toastStore';
+  import { onMount } from 'svelte';
 
   // State using runes
   let isLoading = $state(true);
@@ -21,9 +20,11 @@
   let currentPage = $state(1);
   const itemsPerPage = 10;
 
-  // Derived state
-  const isConnected = $derived(!!appKit.getAccount()?.address);
-  const userAddress = $derived(appKit.getAccount()?.address || '');
+  // Non-reactive state for connection
+  let isConnected = $state(false);
+  let userAddress = $state('');
+  
+  // Derived state (non-reactive to appKit)
   const totalPages = $derived(Math.ceil(positions.length / itemsPerPage));
   const paginatedPositions = $derived(() => {
     const start = (currentPage - 1) * itemsPerPage;
@@ -35,9 +36,69 @@
   const winRate = $derived(stats.totalPredictions > 0 ? Math.round((stats.totalWon / stats.totalPredictions) * 100) : 0);
   const claimableAmount = $derived(parseFloat(stats.claimableAmount));
 
+  // Retry mechanism for chunk loading errors
+  let retryCount = 0;
+  const maxRetries = 3;
+
+  // Function to check connection status
+  function updateConnectionStatus() {
+    const account = appKit?.getAccount();
+    isConnected = !!account?.address;
+    userAddress = account?.address || '';
+  }
+
   onMount(async () => {
-    await loadData();
+    // Initial connection check
+    updateConnectionStatus();
+    
+    // Set up wallet event listeners
+    if (appKit) {
+      appKit.subscribeAccount((account) => {
+        const wasConnected = isConnected;
+        updateConnectionStatus();
+        
+        // Only reload data if connection status changed or address changed
+        if (isConnected && (!wasConnected || userAddress !== account?.address)) {
+          loadDataWithRetry();
+        }
+      });
+    }
+    
+    // Load initial data if connected
+    if (isConnected) {
+      await loadDataWithRetry();
+    }
   });
+
+  async function loadDataWithRetry() {
+    try {
+      await loadData();
+    } catch (err) {
+      if (isChunkLoadError(err) && retryCount < maxRetries) {
+        retryCount++;
+        console.log(`Chunk load failed, retrying... (${retryCount}/${maxRetries})`);
+        // Wait a bit before retrying
+        await new Promise(resolve => setTimeout(resolve, 1000 * retryCount));
+        
+        // Clear any cached modules that might be causing issues
+        if ('webpackChunkName' in window) {
+          delete (window as any).webpackChunkName;
+        }
+        
+        await loadDataWithRetry();
+      } else {
+        throw err;
+      }
+    }
+  }
+
+  function isChunkLoadError(err: any): boolean {
+    const errorMessage = err?.message?.toLowerCase() || '';
+    return errorMessage.includes('loading chunk') || 
+           errorMessage.includes('loading css chunk') ||
+           errorMessage.includes('chunk load failed') ||
+           errorMessage.includes('loading module');
+  }
 
   async function loadData() {
     if (!isConnected || !userAddress) {
@@ -50,32 +111,56 @@
       isLoading = true;
       error = null;
 
-      const [predictions, predictionStats] = await Promise.all([
-        fetchUserPredictions(userAddress),
-        fetchUserPredictionStats(userAddress)
-      ]);
+      // Add timeout and retry logic for API calls
+      const timeout = new Promise((_, reject) => 
+        setTimeout(() => reject(new Error('Request timeout')), 30000)
+      );
 
-      positions = predictions;
-      stats = predictionStats;
+      const [predictions, predictionStats] = await Promise.race([
+        Promise.all([
+          fetchUserPredictions(userAddress),
+          fetchUserPredictionStats(userAddress)
+        ]),
+        timeout
+      ]) as [UserPrediction[], PredictionStats];
+
+      positions = predictions || [];
+      stats = predictionStats || {
+        totalPredictions: 0,
+        totalWon: 0,
+        totalClaimed: '0',
+        claimableAmount: '0'
+      };
       
       console.log('Loaded data:', { positions, stats });
     } catch (err) {
       console.error('Failed to load data:', err);
-      error = err instanceof Error ? err.message : 'Failed to load data';
-      toastStore.error(error);
+      
+      if (isChunkLoadError(err)) {
+        error = 'Failed to load required resources. Please refresh the page.';
+        toastStore.error('Page resources failed to load. Please refresh and try again.');
+      } else {
+        error = err instanceof Error ? err.message : 'Failed to load data';
+        toastStore.error(error);
+      }
     } finally {
       isLoading = false;
     }
   }
 
   function formatDate(timestamp: number): string {
-    return new Date(timestamp * 1000).toLocaleDateString('en-US', {
-      year: 'numeric',
-      month: 'short',
-      day: 'numeric',
-      hour: '2-digit',
-      minute: '2-digit'
-    });
+    try {
+      return new Date(timestamp * 1000).toLocaleDateString('en-US', {
+        year: 'numeric',
+        month: 'short',
+        day: 'numeric',
+        hour: '2-digit',
+        minute: '2-digit'
+      });
+    } catch (err) {
+      console.error('Date formatting error:', err);
+      return 'Invalid Date';
+    }
   }
 
   function getOutcomeLabel(outcome: string): string {
@@ -121,7 +206,7 @@
         tokenId,
         onSuccess: () => {
           toastStore.success('Reward claimed successfully!');
-          loadData(); // Refresh data
+          loadDataWithRetry(); // Use retry version
         },
         onError: (error) => {
           console.error('Failed to claim reward:', error);
@@ -130,7 +215,11 @@
       });
     } catch (err) {
       console.error('Failed to claim reward:', err);
-      toastStore.error('Failed to claim reward');
+      if (isChunkLoadError(err)) {
+        toastStore.error('Failed to load claim interface. Please refresh and try again.');
+      } else {
+        toastStore.error('Failed to claim reward');
+      }
     }
   }
 
@@ -147,16 +236,25 @@
 
     try {
       await batchClaimRewards(claimableTokenIds);
-      await loadData(); // Refresh data
+      await loadDataWithRetry(); // Use retry version
     } catch (err) {
       console.error('Failed to claim rewards:', err);
-      toastStore.error('Failed to claim some rewards');
+      if (isChunkLoadError(err)) {
+        toastStore.error('Failed to load claim interface. Please refresh and try again.');
+      } else {
+        toastStore.error('Failed to claim some rewards');
+      }
     }
   }
 
   function formatAmount(amount: string | number): string {
-    const num = typeof amount === 'string' ? parseFloat(amount) : amount;
-    return num.toFixed(4);
+    try {
+      const num = typeof amount === 'string' ? parseFloat(amount) : amount;
+      return isNaN(num) ? '0.0000' : num.toFixed(4);
+    } catch (err) {
+      console.error('Amount formatting error:', err);
+      return '0.0000';
+    }
   }
 
   function nextPage() {
@@ -178,20 +276,53 @@
   }
 
   function getMarketDisplayName(prediction: UserPrediction): string {
-    const desc = prediction.marketDescription;
-    if (desc && desc.includes('/')) {
-      return desc.split(' ')[0] || desc;
+    try {
+      const desc = prediction.marketDescription;
+      if (desc && desc.includes('/')) {
+        return desc.split(' ')[0] || desc;
+      }
+      return desc || `Market #${prediction.marketId}`;
+    } catch (err) {
+      console.error('Market name formatting error:', err);
+      return `Market #${prediction.marketId}`;
     }
-    return desc || `Market #${prediction.marketId}`;
   }
 
   function getMarketInitial(prediction: UserPrediction): string {
-    const name = getMarketDisplayName(prediction);
-    return name.charAt(0).toUpperCase();
+    try {
+      const name = getMarketDisplayName(prediction);
+      return name.charAt(0).toUpperCase();
+    } catch (err) {
+      console.error('Market initial formatting error:', err);
+      return 'M';
+    }
   }
 
   function estimateUSDValue(ethAmount: string, ethPrice: number = 2000): string {
-    return (parseFloat(ethAmount) * ethPrice).toFixed(2);
+    try {
+      const amount = parseFloat(ethAmount);
+      return isNaN(amount) ? '0.00' : (amount * ethPrice).toFixed(2);
+    } catch (err) {
+      console.error('USD value estimation error:', err);
+      return '0.00';
+    }
+  }
+
+  // Add error boundary for chunk loading
+  function handleChunkError() {
+    window.location.reload();
+  }
+
+  // Listen for chunk loading errors globally
+  if (typeof window !== 'undefined') {
+    window.addEventListener('error', (event) => {
+      if (event.error && isChunkLoadError(event.error)) {
+        console.error('Chunk loading error detected:', event.error);
+        // Optionally show a user-friendly message
+        toastStore.error('Some resources failed to load. Refreshing page...');
+        setTimeout(() => window.location.reload(), 2000);
+      }
+    });
   }
 </script>
 
@@ -230,12 +361,22 @@
         </div>
         <div class="ml-3">
           <p class="text-sm text-red-700">{error}</p>
-          <button 
-            onclick={loadData}
-            class="mt-2 text-sm text-red-800 underline hover:text-red-900"
-          >
-            Try again
-          </button>
+          <div class="mt-2 flex gap-2">
+            <button 
+              onclick={loadDataWithRetry}
+              class="text-sm text-red-800 underline hover:text-red-900"
+            >
+              Try again
+            </button>
+            {#if error.includes('resources') || error.includes('chunk')}
+              <button 
+                onclick={handleChunkError}
+                class="text-sm text-red-800 underline hover:text-red-900"
+              >
+                Refresh page
+              </button>
+            {/if}
+          </div>
         </div>
       </div>
     </div>
