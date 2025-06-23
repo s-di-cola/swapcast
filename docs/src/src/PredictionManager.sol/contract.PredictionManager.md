@@ -1,5 +1,5 @@
 # PredictionManager
-[Git Source](https://github.com/s-di-cola/swapcast/blob/f5b71c1b3fd023d0e7f9386f746dbfe13cb7125d/src/PredictionManager.sol)
+[Git Source](https://github.com/s-di-cola/swapcast/blob/78d83b3891b75427036d031bae98f2a70765843d/src/PredictionManager.sol)
 
 **Inherits:**
 Ownable, [IPredictionManager](/src/interfaces/IPredictionManager.sol/interface.IPredictionManager.md), [IPredictionManagerForResolver](/src/interfaces/IPredictionManagerForResolver.sol/interface.IPredictionManagerForResolver.md), [IPredictionManagerForDistributor](/src/interfaces/IPredictionManagerForDistributor.sol/interface.IPredictionManagerForDistributor.md), ILogAutomation, AutomationCompatibleInterface, IERC721Receiver
@@ -571,7 +571,9 @@ event RewardDistributorAddressSet(address indexed oldAddress, address indexed ne
 ### StakeRecorded
 
 ```solidity
-event StakeRecorded(uint256 indexed marketId, address indexed user, PredictionTypes.Outcome outcome, uint256 amount);
+event StakeRecorded(
+    uint256 indexed marketId, address indexed user, PredictionTypes.Outcome outcome, uint256 amount, uint256 tokenId
+);
 ```
 
 ### RewardClaimed
