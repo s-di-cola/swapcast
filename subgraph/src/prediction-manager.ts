@@ -151,19 +151,72 @@ export function handleMarketResolved(event: MarketResolved): void {
   let marketId = event.params.marketId.toString();
   let market = Market.load(marketId);
   
-  if (market != null) {
-    market.isResolved = true;
-    market.winningOutcome = event.params.winningOutcome;
-    market.finalPrice = event.params.price;
-    market.save();
+  if (market == null) {
+    log.warning("Market not found when resolving: {}", [marketId]);
+    return;
+  }
+
+  // Update market resolution status
+  market.isResolved = true;
+  market.winningOutcome = event.params.winningOutcome;
+  market.finalPrice = event.params.price;
+  market.save();
+  
+  // Create market resolution entity
+  let resolution = new MarketResolution(marketId);
+  resolution.market = marketId;
+  resolution.winningOutcome = event.params.winningOutcome;
+  resolution.finalPrice = event.params.price;
+  resolution.resolutionTimestamp = event.block.timestamp;
+  resolution.save();
+
+  // Calculate total staked on winning and losing outcomes
+  let totalStakedWinning = event.params.winningOutcome === 0 
+    ? market.totalStakedOutcome0 
+    : market.totalStakedOutcome1;
+  
+  let totalStakedLosing = event.params.winningOutcome === 0
+    ? market.totalStakedOutcome1
+    : market.totalStakedOutcome0;
+
+  // Skip reward calculation if no one staked on the winning outcome
+  if (totalStakedWinning.isZero()) {
+    log.warning("No winning stakers for market: {}", [marketId]);
+    return;
+  }
+
+  // Load all predictions for this market
+  // The @derivedFrom field creates a PredictionLoader that we can use
+  let predictions = market.predictions.load();
+  
+  if (!predictions || predictions.length === 0) {
+    log.warning("No predictions found for market: {}", [marketId]);
+    return;
+  }
+
+  // Process each prediction to calculate rewards
+  for (let i = 0; i < predictions.length; i++) {
+    let prediction = predictions[i];
     
-    // Create market resolution entity
-    let resolution = new MarketResolution(marketId);
-    resolution.market = marketId;
-    resolution.winningOutcome = event.params.winningOutcome;
-    resolution.finalPrice = event.params.price;
-    resolution.resolutionTimestamp = event.block.timestamp;
-    resolution.save();
+    if (!prediction) {
+      log.warning("Prediction at index {} not found for market {}", [i.toString(), marketId]);
+      continue;
+    }
+    
+    // Only process predictions that match the winning outcome
+    if (prediction.outcome === event.params.winningOutcome) {
+      // Reward = (prediction amount / total staked on winning outcome) * total staked on losing outcome
+      // Plus the original stake amount
+      let reward = prediction.amount
+        .times(totalStakedLosing)
+        .div(totalStakedWinning)
+        .plus(prediction.amount);
+      
+      prediction.reward = reward;
+      prediction.save();
+      
+      log.info("Set reward for prediction {}: {}", [prediction.id, reward.toString()]);
+    }
   }
 }
 

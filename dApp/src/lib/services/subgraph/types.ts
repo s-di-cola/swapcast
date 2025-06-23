@@ -76,6 +76,7 @@ export interface SubgraphPrediction {
  */
 export interface SubgraphUserPrediction {
 	id: string;
+	tokenId: string;
 	marketId: string;
 	marketDescription: string;
 	outcome: number;

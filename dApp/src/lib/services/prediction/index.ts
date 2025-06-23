@@ -1,11 +1,11 @@
 /**
  * Prediction Service
- * 
+ *
  * Provides functionality for interacting with prediction markets:
  * - Fetch user predictions and statistics
  * - Claim rewards (single or batch)
  * - Get claimable rewards
- * 
+ *
  * @module services/prediction
  */
 
@@ -15,7 +15,6 @@ export {
   claimReward,
   fetchUserPredictionStats,
   fetchClaimableRewards,
-  batchClaimRewards
 } from './operations';
 
 // Types

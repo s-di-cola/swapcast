@@ -12,6 +12,7 @@ declare module '$env/static/public' {
 	export const PUBLIC_STATEVIEW_ADDRESS: `0x${string}`;
 	export const PUBLIC_UNIVERSAL_ROUTER_ADDRESS: `0x${string}`;
 	export const PUBLIC_DEBUG: boolean;
+	export const PUBLIC_REWARDDISTRIBUTOR_ADDRESS: `0x${string}`;
 }
 
 declare module '$env/static/private' {

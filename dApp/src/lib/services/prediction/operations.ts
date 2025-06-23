@@ -1,14 +1,14 @@
-import { PUBLIC_PREDICTIONMANAGER_ADDRESS } from '$env/static/public';
+import { PUBLIC_PREDICTIONMANAGER_ADDRESS, PUBLIC_REWARDDISTRIBUTOR_ADDRESS } from '$env/static/public';
 import { getPredictionManager } from '$generated/types/PredictionManager';
+import { getRewardDistributor } from '$generated/types/RewardDistributor';
 import { appKit } from '$lib/configs/wallet.config';
 import { formatEther } from '$lib/helpers/formatters';
 import {
   getUserPredictions as getSubgraphPredictions
 } from '$lib/services/subgraph/operations';
-import { toastStore } from '$lib/stores/toastStore';
 import { getCurrentNetworkConfig } from '$lib/utils/network';
-import { type Address, getAddress, http } from 'viem';
-import type { ClaimableReward, ClaimRewardParams, PredictionStats, UserPrediction } from './types';
+import { type Address, createPublicClient, getAddress, http } from 'viem';
+import type { ClaimableReward, PredictionStats, UserPrediction } from './types';
 import {
   calculateClaimableRewards,
   groupClaimableRewards,
@@ -22,7 +22,7 @@ import {
  */
 function getPredictionManagerContract(): ReturnType<typeof getPredictionManager> {
   try {
-    const { chain, rpcUrl } = getCurrentNetworkConfig();    
+    const { chain, rpcUrl } = getCurrentNetworkConfig();
     return getPredictionManager({
       address: getAddress(PUBLIC_PREDICTIONMANAGER_ADDRESS),
       chain,
@@ -30,6 +30,25 @@ function getPredictionManagerContract(): ReturnType<typeof getPredictionManager>
     });
   } catch (error) {
     console.error('Error creating PredictionManager contract:', error);
+    throw error;
+  }
+}
+
+/**
+ * Internal function to get the RewardDistributor contract instance
+ * @returns {ReturnType<typeof getRewardDistributor>} The contract instance
+ * @private
+ */
+function getRewardDistributorContract(): ReturnType<typeof getRewardDistributor> {
+  try {
+    const { chain, rpcUrl } = getCurrentNetworkConfig();
+    return getRewardDistributor({
+      address: getAddress(PUBLIC_REWARDDISTRIBUTOR_ADDRESS),
+      chain,
+      transport: http(rpcUrl)
+    });
+  } catch (error) {
+    console.error('Error creating RewardDistributor contract:', error);
     throw error;
   }
 }
@@ -58,25 +77,57 @@ function formatValueToEther(value: bigint | string | number | null | undefined):
  * @throws {Error} If there's an error fetching predictions
  */
 export async function fetchUserPredictions(
-  userAddress: string,
-  limit: number = 1000
+    userAddress: string,
+    limit: number = 1000
 ): Promise<UserPrediction[]> {
   try {
+    console.log('🔍 Fetching predictions for:', userAddress);
     const predictions = await getSubgraphPredictions(userAddress, { limit });
 
-    return predictions.map(prediction => {
+    console.log('🔍 Raw subgraph response:', {
+      count: predictions.length,
+      firstPrediction: predictions[0],
+      sampleFields: predictions[0] ? Object.keys(predictions[0]) : []
+    });
+
+    return predictions.map((prediction, index) => {
+      // Debug each prediction's tokenId
+      console.log(`🔍 Processing prediction ${index}:`, {
+        id: prediction.id,
+        tokenId: prediction.tokenId,
+        tokenIdType: typeof prediction.tokenId,
+        tokenIdExists: 'tokenId' in prediction,
+        allFields: Object.keys(prediction)
+      });
+
       const amount = formatValueToEther(prediction.amount);
       const reward = prediction.reward ? formatValueToEther(prediction.reward) : null;
       const marketIsResolved = Boolean(prediction.marketIsResolved);
-      
-      // Ensure marketWinningOutcome is either 'above', 'below', or undefined
+
+      // Ensure marketWinningOutcome is either 'above', 'below', or undefined (never 'pending')
       let marketWinningOutcome: 'above' | 'below' | undefined;
-      if (prediction.marketWinningOutcome !== undefined) {
+      if (prediction.marketWinningOutcome !== undefined && prediction.marketWinningOutcome !== null) {
         const outcome = mapOutcome(prediction.marketWinningOutcome);
         marketWinningOutcome = (outcome === 'above' || outcome === 'below') ? outcome : undefined;
+      } else {
+        marketWinningOutcome = undefined;
       }
 
-      return {
+      // Handle tokenId extraction with detailed logging
+      let resolvedTokenId: string | undefined;
+
+      if (prediction.tokenId !== undefined && prediction.tokenId !== null) {
+        resolvedTokenId = prediction.tokenId.toString();
+        console.log(`✅ Found tokenId for prediction ${index}:`, resolvedTokenId);
+      } else {
+        console.warn(`❌ No tokenId found for prediction ${index}:`, {
+          id: prediction.id,
+          availableFields: Object.keys(prediction)
+        });
+        resolvedTokenId = undefined;
+      }
+
+      const result = {
         id: prediction.id,
         marketId: prediction.marketId || 'unknown',
         marketDescription: prediction.marketDescription || 'Unknown Market',
@@ -89,54 +140,90 @@ export async function fetchUserPredictions(
         isWinning: marketIsResolved ? Boolean(prediction.isWinning) : false,
         marketIsResolved,
         marketWinningOutcome,
-        tokenId: prediction.id.split('-')[1] || prediction.id
+        tokenId: resolvedTokenId
       };
+
+      console.log(`🔍 Final processed prediction ${index}:`, {
+        id: result.id,
+        tokenId: result.tokenId,
+        claimed: result.claimed,
+        isWinning: result.isWinning,
+        marketIsResolved: result.marketIsResolved
+      });
+
+      return result;
     });
   } catch (error) {
     console.error('Failed to fetch user predictions:', error);
-    toastStore.error('Failed to load prediction history');
-    return [];
+    throw new Error('Failed to load prediction history');
   }
 }
 
 /**
- * Claims rewards for a specific prediction
+ * Result of a claim operation
  */
+export interface ClaimResult {
+  success: boolean;
+  hash?: string;
+  error?: string;
+}
+
 /**
  * Claims a reward for a specific prediction
- * @param {Object} params - The claim parameters
- * @param {string} params.tokenId - The token ID of the prediction to claim
- * @param {() => void} [params.onSuccess] - Callback executed on successful claim
- * @param {(error: Error) => void} [params.onError] - Callback executed if claim fails
- * @returns {Promise<string>} The transaction hash of the claim transaction
- * @throws {Error} If tokenId is not provided or claim fails
+ * @param {string} tokenId - The token ID of the prediction to claim
+ * @returns {Promise<ClaimResult>} The result of the claim operation
  */
-export async function claimReward({
-  tokenId,
-  onSuccess,
-  onError
-}: ClaimRewardParams): Promise<string> {
+export async function claimReward(tokenId: string): Promise<ClaimResult> {
   if (!tokenId) {
-    const error = new Error('Token ID is required');
-    onError?.(error);
-    throw error;
+    return {
+      success: false,
+      error: 'Token ID is required'
+    };
   }
+
+  // Validate tokenId is numeric
+  if (!/^\d+$/.test(tokenId)) {
+    console.error('❌ Invalid tokenId format:', tokenId);
+    return {
+      success: false,
+      error: 'Token ID must be a number'
+    };
+  }
+
   try {
-    const predictionManager = getPredictionManagerContract();
+    const rewardDistributor = getRewardDistributorContract();
+    const account = appKit.getAccount()?.address;
+    const { chain, rpcUrl } = getCurrentNetworkConfig();
+
+    if (!account) {
+      return {
+        success: false,
+        error: 'No wallet connected'
+      };
+    }
+
+    console.log('Claiming reward for token:', tokenId);
+    console.log('Contract address:', PUBLIC_REWARDDISTRIBUTOR_ADDRESS);
+    console.log('Account:', account);
+
+    // Convert to BigInt
+    const tokenIdBigInt = BigInt(tokenId);
+    console.log('TokenId as BigInt:', tokenIdBigInt);
 
     // Call the contract to claim the reward
-    const hash = await predictionManager.write.claimReward([BigInt(tokenId)], {
-      account: appKit.getAccount()?.address as Address,
-      chain: getCurrentNetworkConfig().chain
+    const hash = await rewardDistributor.write.claimReward([tokenIdBigInt], {
+      account: account as Address,
+      chain
     });
 
-    // Show success message
-    toastStore.success('Reward claimed successfully!');
+    console.log('Claim transaction hash:', hash);
 
-    // Call success callback if provided
-    onSuccess?.();
-
-    return hash;
+    const tx = await createPublicClient({ chain, transport: http(rpcUrl) }).waitForTransactionReceipt({ hash });
+    console.log('Transaction receipt:', tx);
+    return {
+      success: tx.status === 'success',
+      hash
+    };
   } catch (error: any) {
     console.error('Failed to claim reward:', error);
 
@@ -148,22 +235,17 @@ export async function claimReward({
       errorMessage = 'This prediction did not win';
     } else if (error.message?.includes('Market not resolved')) {
       errorMessage = 'Market is not yet resolved';
+    } else if (error.message?.includes('No wallet connected')) {
+      errorMessage = 'Please connect your wallet';
     }
 
-    toastStore.error(errorMessage);
-
-    // Call error callback if provided
-    onError?.(error);
-
-    throw error;
+    return {
+      success: false,
+      error: errorMessage
+    };
   }
 }
 
-/**
- * Fetches user's prediction statistics
- * @param userAddress - User's wallet address
- * @returns User's prediction statistics including totals and claimable amounts
- */
 /**
  * Fetches statistics about a user's predictions
  * @param {string} userAddress - The user's wallet address
@@ -179,17 +261,17 @@ export async function fetchUserPredictionStats(userAddress: string): Promise<Pre
     const totalPredictions = predictions.length;
     const totalWon = predictions.filter(p => p.isWinning).length;
     const claimablePredictions = predictions.filter((p): p is UserPrediction & { reward: string } =>
-      p.isWinning && !p.claimed && p.reward !== null
+        p.isWinning && !p.claimed && p.reward !== null
     );
     const claimableAmount = claimablePredictions.length > 0
-      ? calculateClaimableRewards(claimablePredictions)
-      : '0';
+        ? calculateClaimableRewards(claimablePredictions)
+        : '0';
 
     // Calculate total claimed (all rewards from claimed predictions)
     const totalClaimed = predictions
-      .filter(p => p.claimed && p.reward)
-      .reduce((sum, p) => sum + parseFloat(p.reward || '0'), 0)
-      .toFixed(6);
+        .filter(p => p.claimed && p.reward)
+        .reduce((sum, p) => sum + parseFloat(p.reward || '0'), 0)
+        .toFixed(6);
 
     return {
       totalPredictions,
@@ -199,13 +281,7 @@ export async function fetchUserPredictionStats(userAddress: string): Promise<Pre
     };
   } catch (error) {
     console.error('Failed to fetch prediction stats:', error);
-    toastStore.error('Failed to load prediction statistics');
-    return {
-      totalPredictions: 0,
-      totalWon: 0,
-      totalClaimed: '0',
-      claimableAmount: '0'
-    };
+    throw new Error('Failed to load prediction statistics');
   }
 }
 
@@ -224,52 +300,6 @@ export async function fetchClaimableRewards(userAddress: string): Promise<Claima
     return groupClaimableRewards(claimablePredictions);
   } catch (error) {
     console.error('Failed to fetch claimable rewards:', error);
-    toastStore.error('Failed to load claimable rewards');
-    return [];
-  }
-}
-
-/**
- * Claims multiple rewards in a single transaction
- * @param {string[]} tokenIds - Array of token IDs to claim
- * @returns {Promise<void>}
- * @throws {Error} If no token IDs are provided or if the claim fails
- */
-export async function batchClaimRewards(tokenIds: string[]): Promise<void> {
-  if (!tokenIds.length) {
-    toastStore.warning('No rewards to claim');
-    return;
-  }
-
-  try {
-    const predictionManager = getPredictionManagerContract();
-    const validTokenIds = tokenIds.filter(id => id && id.trim() !== '');
-
-    if (validTokenIds.length === 0) {
-      throw new Error('No valid token IDs provided');
-    }
-
-    // In a real implementation, you would batch the claims
-    // For now, we'll just claim them one by one
-    for (const tokenId of validTokenIds) {
-      try {
-        await predictionManager.write.claimReward([BigInt(tokenId)],{
-          account: appKit.getAccount()?.address as Address,
-          chain: getCurrentNetworkConfig().chain,
-        });
-        toastStore.success(`Claimed reward for token ${tokenId}`);
-      } catch (error) {
-        console.error(`Failed to claim reward for token ${tokenId}:`, error);
-        // Continue with next token even if one fails
-      }
-    }
-
-    if (validTokenIds.length > 1) {
-      toastStore.success(`Successfully processed ${validTokenIds.length} claims`);
-    }
-  } catch (error) {
-    console.error('Failed to batch claim rewards:', error);
-    toastStore.error('Failed to process some claims');
-    throw error;
+    throw new Error('Failed to load claimable rewards');
   }
 }

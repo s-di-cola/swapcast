@@ -72,6 +72,7 @@ export const GET_USER_PREDICTIONS = gql`
 			skip: $skip
 		) {
 			id
+			tokenId
 			market {
 				id
 				description

@@ -1,7 +1,6 @@
-import { formatEther } from 'viem';
-import type { UserPrediction, ClaimableReward } from './types';
-import { getCurrentNetworkConfig } from '$lib/utils/network';
-import type { SubgraphPrediction } from '$lib/services/subgraph/types';
+import {formatEther} from 'viem';
+import type {ClaimableReward, UserPrediction} from './types';
+import type {SubgraphPrediction} from '$lib/services/subgraph/types';
 
 /**
  * Maps a numeric outcome to a human-readable format
@@ -38,13 +37,34 @@ export function transformPrediction(
   const isWinning = marketData.winningOutcome !== undefined &&
       prediction.outcome === marketData.winningOutcome;
 
-  // Extract tokenId from the prediction ID if not directly available
-  const tokenId = 'tokenId' in prediction ? String(prediction.tokenId) : prediction.id.split('-')[1];
+  // Fixed tokenId extraction with proper handling
+  let tokenId: string | undefined;
+
+  if ('tokenId' in prediction && prediction.tokenId !== undefined && prediction.tokenId !== null) {
+    tokenId = String(prediction.tokenId);
+    console.log('✅ Found direct tokenId:', tokenId);
+  } else {
+    console.warn('❌ No tokenId found in prediction:', {
+      id: prediction.id,
+      availableFields: Object.keys(prediction)
+    });
+    tokenId = undefined;
+  }
+
   const marketId = prediction.market?.id || '';
   const amount = 'amount' in prediction ? String(prediction.amount) : '0';
   const timestamp = 'timestamp' in prediction ? Number(prediction.timestamp) : 0;
   const claimed = 'claimed' in prediction ? Boolean(prediction.claimed) : false;
   const reward = 'reward' in prediction && prediction.reward ? String(prediction.reward) : null;
+
+  // Handle marketWinningOutcome properly - it should never be 'pending'
+  let marketWinningOutcome: 'above' | 'below' | undefined;
+  if (marketData.winningOutcome !== undefined && marketData.winningOutcome !== null) {
+    const mappedOutcome = mapOutcome(marketData.winningOutcome);
+    marketWinningOutcome = (mappedOutcome === 'above' || mappedOutcome === 'below') ? mappedOutcome : undefined;
+  } else {
+    marketWinningOutcome = undefined;
+  }
 
   return {
     id: prediction.id,
@@ -57,6 +77,8 @@ export function transformPrediction(
     claimed,
     reward: reward ? formatEther(BigInt(reward)) : null,
     isWinning,
+    marketIsResolved: marketData.isResolved || false,
+    marketWinningOutcome,
     tokenId
   };
 }
@@ -110,13 +132,13 @@ export function groupClaimableRewards(predictions: UserPrediction[]): ClaimableR
   const claimable: Record<string, ClaimableReward> = {};
 
   predictions.forEach(prediction => {
-    if (!prediction.isWinning || prediction.claimed || !prediction.reward) return;
+    if (!prediction.isWinning || prediction.claimed || !prediction.reward || !prediction.tokenId) return;
 
     const key = `${prediction.marketId}-${prediction.outcome}`;
 
     if (!claimable[key]) {
       claimable[key] = {
-        tokenId: prediction.tokenId || '',
+        tokenId: prediction.tokenId,
         amount: '0',
         marketId: prediction.marketId,
         outcome: prediction.outcome as 'above' | 'below'
