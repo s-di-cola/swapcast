@@ -21,13 +21,17 @@ import {
  * @private
  */
 function getPredictionManagerContract(): ReturnType<typeof getPredictionManager> {
-  const { chain } = getCurrentNetworkConfig();
-
-  return getPredictionManager({
-    address: getAddress(PUBLIC_PREDICTIONMANAGER_ADDRESS),
-    chain,
-    transport: http()
-  });
+  try {
+    const { chain, rpcUrl } = getCurrentNetworkConfig();    
+    return getPredictionManager({
+      address: getAddress(PUBLIC_PREDICTIONMANAGER_ADDRESS),
+      chain,
+      transport: http(rpcUrl)
+    });
+  } catch (error) {
+    console.error('Error creating PredictionManager contract:', error);
+    throw error;
+  }
 }
 
 /**
