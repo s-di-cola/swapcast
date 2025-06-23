@@ -168,7 +168,7 @@ library MarketLogic {
         address treasuryAddress,
         uint256 protocolFeeBasisPoints,
         uint256 minStakeAmount
-    ) internal returns (uint256 stakeAmountNet, uint256 protocolFee) {
+    ) internal returns (uint256 stakeAmountNet, uint256 protocolFee, uint256 tokenId) {
         // Cache storage variables to reduce SLOADs
         uint256 expirationTime = market.expirationTime;
         bool isResolved = market.resolved;
@@ -213,9 +213,9 @@ library MarketLogic {
         }
 
         // Mint NFT to represent the prediction
-        swapCastNFT.mint(user, marketId, outcome, stakeAmountNet);
+        tokenId = swapCastNFT.mint(user, marketId, outcome, stakeAmountNet);
 
-        return (stakeAmountNet, protocolFee);
+        return (stakeAmountNet, protocolFee, tokenId);
     }
 
     /**
