@@ -180,19 +180,21 @@
   }
 
   function getStatusColor(prediction: UserPrediction): string {
-    if (prediction.outcome === 'pending') return 'bg-yellow-100 text-yellow-800';
+    if (!prediction.marketIsResolved) return 'bg-yellow-100 text-yellow-800';
     if (prediction.isWinning) return 'bg-green-100 text-green-800';
     return 'bg-red-100 text-red-800';
   }
 
   function getStatusText(prediction: UserPrediction): string {
-    if (prediction.outcome === 'pending') return 'Pending';
-    if (prediction.isWinning) return 'Won';
-    return 'Lost';
+    if (!prediction.marketIsResolved) return 'Pending';
+    if (prediction.marketWinningOutcome) {
+      return prediction.isWinning ? 'Won' : 'Lost';
+    }
+    return 'Pending';
   }
 
   function isMarketResolved(prediction: UserPrediction): boolean {
-    return prediction.outcome !== 'pending';
+    return prediction.marketIsResolved;
   }
 
   async function handleClaimReward(tokenId: string) {
@@ -388,7 +390,7 @@
         <p class="text-2xl font-bold text-gray-900">{totalMarkets}</p>
       </div>
       <div class="rounded-xl border border-gray-200 bg-white p-6 shadow-sm">
-        <h3 class="text-sm font-medium text-gray-500">Prediction Power</h3>
+        <h3 class="text-sm font-medium text-gray-500">Win Rate</h3>
         <p class="text-2xl font-bold text-gray-900">{winRate}%</p>
       </div>
       <div class="rounded-xl border border-gray-200 bg-white p-6 shadow-sm">

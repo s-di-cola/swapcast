@@ -63,6 +63,14 @@ export async function fetchUserPredictions(
     return predictions.map(prediction => {
       const amount = formatValueToEther(prediction.amount);
       const reward = prediction.reward ? formatValueToEther(prediction.reward) : null;
+      const marketIsResolved = Boolean(prediction.marketIsResolved);
+      
+      // Ensure marketWinningOutcome is either 'above', 'below', or undefined
+      let marketWinningOutcome: 'above' | 'below' | undefined;
+      if (prediction.marketWinningOutcome !== undefined) {
+        const outcome = mapOutcome(prediction.marketWinningOutcome);
+        marketWinningOutcome = (outcome === 'above' || outcome === 'below') ? outcome : undefined;
+      }
 
       return {
         id: prediction.id,
@@ -74,9 +82,10 @@ export async function fetchUserPredictions(
         timestamp: Number(prediction.timestamp || 0),
         claimed: Boolean(prediction.claimed),
         reward,
-        isWinning: Boolean(prediction.isWinning),
+        isWinning: marketIsResolved ? Boolean(prediction.isWinning) : false,
+        marketIsResolved,
+        marketWinningOutcome,
         tokenId: prediction.id.split('-')[1] || prediction.id
-
       };
     });
   } catch (error) {

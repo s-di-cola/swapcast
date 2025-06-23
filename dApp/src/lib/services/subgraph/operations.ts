@@ -126,18 +126,26 @@ export async function getUserPredictions(
 			return [];
 		}
 
-		// Transform to user prediction format with winning status
-		return result.predictions.map((prediction) => ({
-			id: prediction.id,
-			marketId: prediction.market.id,
-			marketDescription: prediction.market.description,
-			outcome: prediction.outcome,
-			amount: prediction.amount,
-			timestamp: prediction.timestamp,
-			claimed: prediction.claimed,
-			reward: prediction.reward,
-			isWinning: isPredictionWinning(prediction.outcome, (prediction.market as any).winningOutcome)
-		}));
+		// Transform to user prediction format with winning status and market resolution info
+		return result.predictions.map((prediction) => {
+			const market = prediction.market as SubgraphMarket;
+			const winningOutcome = market.winningOutcome;
+			const isResolved = market.isResolved;
+
+			return {
+				id: prediction.id,
+				marketId: market.id,
+				marketDescription: market.description,
+				outcome: prediction.outcome,
+				amount: prediction.amount,
+				timestamp: prediction.timestamp,
+				claimed: prediction.claimed,
+				reward: prediction.reward,
+				isWinning: isResolved ? isPredictionWinning(prediction.outcome, winningOutcome) : undefined,
+				marketIsResolved: isResolved,
+				marketWinningOutcome: winningOutcome
+			};
+		});
 	} catch (error) {
 		console.error(`Error fetching predictions for user ${userAddress}:`, error);
 		return [];

@@ -84,6 +84,8 @@ export interface SubgraphUserPrediction {
 	claimed: boolean;
 	reward: string | null;
 	isWinning?: boolean;
+	marketIsResolved: boolean;
+	marketWinningOutcome?: number;
 }
 
 /**

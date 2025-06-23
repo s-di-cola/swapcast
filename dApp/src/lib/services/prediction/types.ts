@@ -23,8 +23,12 @@ export interface UserPrediction {
   claimed: boolean;
   /** Formatted reward amount (in ETH) if any */
   reward: string | null;
-  /** Whether this prediction is a winner */
+  /** Whether this prediction is a winner (only set if market is resolved) */
   isWinning: boolean;
+  /** Whether the market for this prediction has been resolved */
+  marketIsResolved: boolean;
+  /** The winning outcome of the market (only set if market is resolved) */
+  marketWinningOutcome?: 'above' | 'below';
   /** Optional token ID if this is an NFT */
   tokenId?: string;
 }
