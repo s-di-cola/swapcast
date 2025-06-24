@@ -53,6 +53,7 @@ contract PredictionManager is
     mapping(uint256 => Market) internal markets;
     mapping(uint256 => uint256) public marketMinStakes; // Market-specific minimum stakes
     mapping(uint256 => PoolKey) public marketIdToPoolKey;
+    mapping(uint256 => uint256) public tokenIdToMarketId; // Maps NFT tokenId to marketId
 
     uint256[] private _marketIdsList;
     uint256 private _nextMarketId = 1; // Start market IDs from 1
@@ -470,6 +471,7 @@ contract PredictionManager is
      *      2. Calculating and transferring protocol fees
      *      3. Minting an NFT representing the prediction position
      *      4. Updating market state with the new prediction
+     *      5. Storing the tokenId to marketId mapping
      *
      *      The function uses the MarketLogic library for core prediction logic.
      *
@@ -524,6 +526,9 @@ contract PredictionManager is
         (uint256 stakeAmountNet, uint256 protocolFee, uint256 tokenId) = market.recordPrediction(
             _user, _outcome, _convictionStakeDeclared, swapCastNFT, treasuryAddress, feeBasis, minStake
         );
+
+        // Store the tokenId to marketId mapping
+        tokenIdToMarketId[tokenId] = _marketId;
 
         // Emit events
         if (protocolFee > 0) {
@@ -580,7 +585,8 @@ contract PredictionManager is
      *      1. Retrieves the prediction details from the NFT
      *      2. Validates that the market exists
      *      3. Calls the MarketLogic library to handle the reward claim logic
-     *      4. Emits a RewardClaimed event with the reward amount
+     *      4. Cleans up the tokenId mapping after successful claim
+     *      5. Emits a RewardClaimed event with the reward amount
      *
      * @param _tokenId The ID of the SwapCastNFT representing the winning position.
      * @custom:reverts NotRewardDistributor If called by an address other than the authorized reward distributor.
@@ -604,6 +610,9 @@ contract PredictionManager is
         // (e.g., market not resolved, not winning NFT, no stake for outcome, etc.)
         uint256 rewardAmount =
             market.claimReward(_tokenId, predictionOutcome, userConvictionStake, nftOwner, swapCastNFT);
+
+        // Clean up the tokenId mapping since the NFT is burned after claiming
+        delete tokenIdToMarketId[_tokenId];
 
         // Emit event with claim details
         emit RewardClaimed(nftOwner, _tokenId, rewardAmount);
@@ -696,6 +705,54 @@ contract PredictionManager is
         }
 
         return result;
+    }
+
+    /**
+     * @notice Gets the market ID associated with a given NFT token ID.
+     * @param _tokenId The ID of the SwapCastNFT token.
+     * @return The market ID associated with the token, or 0 if not found.
+     */
+    function getMarketIdByTokenId(uint256 _tokenId) external view returns (uint256) {
+        return tokenIdToMarketId[_tokenId];
+    }
+
+    /**
+     * @notice Gets comprehensive prediction details for a given NFT token ID.
+     * @dev This function combines data from both the NFT contract and the market mapping
+     *      to provide complete prediction information in a single call.
+     * @param _tokenId The ID of the SwapCastNFT token.
+     * @return marketId The market ID associated with the prediction.
+     * @return outcome The predicted outcome (Bullish or Bearish).
+     * @return convictionStake The amount staked on this prediction.
+     * @return owner The current owner of the NFT.
+     * @return isResolved Whether the associated market has been resolved.
+     * @return winningOutcome The winning outcome if the market is resolved (undefined if not resolved).
+     */
+    function getPredictionDetailsByTokenId(uint256 _tokenId)
+        external
+        view
+        returns (
+            uint256 marketId,
+            PredictionTypes.Outcome outcome,
+            uint256 convictionStake,
+            address owner,
+            bool isResolved,
+            PredictionTypes.Outcome winningOutcome
+        )
+    {
+        // Get basic prediction details from NFT
+        (marketId, outcome, convictionStake, owner) = swapCastNFT.getPredictionDetails(_tokenId);
+
+        // Validate the tokenId mapping matches the NFT data
+        uint256 mappedMarketId = tokenIdToMarketId[_tokenId];
+        require(mappedMarketId == marketId, "TokenId mapping mismatch");
+
+        // Get market resolution status
+        Market storage market = markets[marketId];
+        isResolved = market.resolved;
+        winningOutcome = market.winningOutcome;
+
+        return (marketId, outcome, convictionStake, owner, isResolved, winningOutcome);
     }
 
     // --- Log Automation Logic (ILogAutomation) ---

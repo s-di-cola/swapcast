@@ -1,12 +1,32 @@
-type Market @entity {
+type GlobalStat @entity {
   id: ID!
+  totalMarkets: BigInt!
+  totalPredictions: BigInt!
+  totalStaked: BigInt!
+  totalUsers: BigInt!
+  totalClaimed: BigInt!
+  totalProtocolFees: BigInt!
+}
+
+type User @entity {
+  id: ID! # User address
+  address: Bytes!
+  totalStaked: BigInt!
+  totalWon: BigInt!
+  totalClaimed: BigInt!
+  totalFeesPaid: BigInt!
+  predictions: [Prediction!]! @derivedFrom(field: "user")
+}
+
+type Market @entity {
+  id: ID! # Market ID as string
   marketId: BigInt!
+  name: String!
+  assetSymbol: String!
   creationTimestamp: BigInt!
   expirationTimestamp: BigInt!
-  description: String!
-  priceThreshold: BigInt
-  baseToken: String
-  quoteToken: String
+  priceAggregator: Bytes!
+  priceThreshold: BigInt!
   isResolved: Boolean!
   winningOutcome: Int
   finalPrice: BigInt
@@ -18,41 +38,21 @@ type Market @entity {
 }
 
 type Prediction @entity {
-  id: ID!
+  id: ID! # TokenId as string (since tokenId is unique)
   market: Market!
   user: User!
   outcome: Int!
   amount: BigInt!
+  tokenId: BigInt!
   timestamp: BigInt!
-  tokenId: BigInt
   claimed: Boolean!
   reward: BigInt
 }
 
-type User @entity {
-  id: ID!
-  address: String!
-  predictions: [Prediction!]! @derivedFrom(field: "user")
-  totalStaked: BigInt!
-  totalWon: BigInt!
-  totalClaimed: BigInt!
-  totalFeesPaid: BigInt!
-}
-
 type MarketResolution @entity {
-  id: ID!
+  id: ID! # Market ID
   market: Market!
   winningOutcome: Int!
   finalPrice: BigInt!
   resolutionTimestamp: BigInt!
-}
-
-type GlobalStat @entity {
-  id: ID!
-  totalMarkets: BigInt!
-  totalProtocolFees: BigInt!
-  totalPredictions: BigInt!
-  totalStaked: BigInt!
-  totalUsers: BigInt!
-  totalClaimed: BigInt!
 }

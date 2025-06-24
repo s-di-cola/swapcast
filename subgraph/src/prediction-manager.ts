@@ -17,7 +17,7 @@ import { GlobalStat, Market, MarketResolution, Prediction, User } from "../gener
  */
 function getGlobalStats(): GlobalStat {
   let stats = GlobalStat.load("global");
-  
+
   if (stats == null) {
     stats = new GlobalStat("global");
     stats.totalMarkets = BigInt.fromI32(0);
@@ -25,9 +25,10 @@ function getGlobalStats(): GlobalStat {
     stats.totalStaked = BigInt.fromI32(0);
     stats.totalUsers = BigInt.fromI32(0);
     stats.totalClaimed = BigInt.fromI32(0);
+    stats.totalProtocolFees = BigInt.fromI32(0);
     stats.save();
   }
-  
+
   return stats;
 }
 
@@ -38,46 +39,49 @@ function getGlobalStats(): GlobalStat {
  */
 function getOrCreateUser(address: string): User {
   let user = User.load(address);
-  
+
   if (user == null) {
     user = new User(address);
     user.address = address;
     user.totalStaked = BigInt.fromI32(0);
     user.totalWon = BigInt.fromI32(0);
     user.totalClaimed = BigInt.fromI32(0);
+    user.totalFeesPaid = BigInt.fromI32(0);
     user.save();
-    
+
     // Update global stats
     let stats = getGlobalStats();
     stats.totalUsers = stats.totalUsers.plus(BigInt.fromI32(1));
     stats.save();
   }
-  
+
   return user;
 }
 
 export function handleMarketCreated(event: MarketCreated): void {
   let marketId = event.params.marketId.toString();
   let market = new Market(marketId);
-  
+
   market.marketId = event.params.marketId;
+  market.name = event.params.name;
+  market.assetSymbol = event.params.assetSymbol;
   market.creationTimestamp = event.block.timestamp;
-  
-  // Set default values that will be used if we can't get market details
-  market.description = "Market #" + event.params.marketId.toString();
-  market.expirationTimestamp = BigInt.fromI32(0);
+  market.expirationTimestamp = event.params.expirationTime;
+  market.priceAggregator = event.params.priceAggregator;
+  market.priceThreshold = event.params.priceThreshold;
   market.isResolved = false;
   market.totalStakedOutcome0 = BigInt.fromI32(0);
   market.totalStakedOutcome1 = BigInt.fromI32(0);
-  
+  market.totalProtocolFees = BigInt.fromI32(0);
+
   market.save();
-  
+
   // Update global stats
   let stats = getGlobalStats();
   stats.totalMarkets = stats.totalMarkets.plus(BigInt.fromI32(1));
   stats.save();
-  
-  log.info("Market created: ID {}", [marketId]);
+
+  log.info("Market created: ID {}, Name: {}", [marketId, event.params.name]);
 }
 
 /**
@@ -90,40 +94,45 @@ export function handlePredictionRecorded(event: StakeRecorded): void {
   const outcome = event.params.outcome;
   const amount = event.params.amount;
   const tokenId = event.params.tokenId;
-  
-  // Load or create the market
+
+  // Load the market - it MUST exist
   let market = Market.load(marketId);
-  
+
   if (!market) {
-    log.warning(
-      'Prediction recorded for market not yet indexed. MarketID: {}, User: {}, TX: {}',
-      [marketId, userAddress, event.transaction.hash.toHexString()]
+    log.error(
+        'CRITICAL: Prediction recorded for non-existent market! MarketID: {}, User: {}, TX: {}, Block: {}',
+        [marketId, userAddress, event.transaction.hash.toHexString(), event.block.number.toString()]
     );
-    
-    // Create a new market with default values
-    market = new Market(marketId);
-    market.marketId = event.params.marketId;
-    market.creationTimestamp = event.block.timestamp;
-    market.description = `Market #${marketId}`;
-    market.expirationTimestamp = BigInt.fromI32(0);
-    market.isResolved = false;
-    market.totalStakedOutcome0 = BigInt.fromI32(0);
-    market.totalStakedOutcome1 = BigInt.fromI32(0);
-    market.totalProtocolFees = BigInt.fromI32(0);
-    market.save();
-    
-    // Update global stats
-    const stats = getGlobalStats();
-    stats.totalMarkets = stats.totalMarkets.plus(BigInt.fromI32(1));
-    stats.save();
-    
-    log.info('Created new market with ID: {}', [marketId]);
+
+    // This should not happen in a properly functioning system
+    // The contract should prevent predictions on non-existent markets
+    // Don't create a fake market - this would hide the real issue
+    return;
   }
-  
-  // Create the prediction with reference to the market
-  const predictionId = `${marketId}-${userAddress}-${outcome}-${tokenId}`;
+
+  // Validate market is in a valid state for predictions
+  if (market.isResolved) {
+    log.warning('Prediction attempted on resolved market: {}, TX: {}', [
+      marketId,
+      event.transaction.hash.toHexString()
+    ]);
+    return;
+  }
+
+  // Check if market has expired (though contract should prevent this)
+  if (market.expirationTimestamp.gt(BigInt.fromI32(0)) &&
+      event.block.timestamp.ge(market.expirationTimestamp)) {
+    log.warning('Prediction attempted on expired market: {}, TX: {}', [
+      marketId,
+      event.transaction.hash.toHexString()
+    ]);
+    return;
+  }
+
+  // Create prediction with tokenId as the primary key (since tokenId is unique)
+  const predictionId = tokenId.toString();
   const prediction = new Prediction(predictionId);
-  
+
   prediction.market = marketId;
   prediction.user = userAddress;
   prediction.outcome = outcome;
@@ -131,9 +140,9 @@ export function handlePredictionRecorded(event: StakeRecorded): void {
   prediction.tokenId = tokenId;
   prediction.timestamp = event.block.timestamp;
   prediction.claimed = false;
-  
+
   prediction.save();
-  
+
   // Update market stats
   if (event.params.outcome == 0) {
     market.totalStakedOutcome0 = market.totalStakedOutcome0.plus(event.params.amount);
@@ -141,17 +150,24 @@ export function handlePredictionRecorded(event: StakeRecorded): void {
     market.totalStakedOutcome1 = market.totalStakedOutcome1.plus(event.params.amount);
   }
   market.save();
-  
+
   // Update user stats
   let user = getOrCreateUser(event.params.user.toHexString());
   user.totalStaked = user.totalStaked.plus(event.params.amount);
   user.save();
-  
+
   // Update global stats
   let stats = getGlobalStats();
   stats.totalPredictions = stats.totalPredictions.plus(BigInt.fromI32(1));
   stats.totalStaked = stats.totalStaked.plus(event.params.amount);
   stats.save();
+
+  log.info('Prediction recorded - Market: {}, User: {}, TokenId: {}, Amount: {}', [
+    marketId,
+    userAddress,
+    tokenId.toString(),
+    amount.toString()
+  ]);
 }
 
 /**
@@ -162,7 +178,7 @@ export function handleMarketResolved(event: MarketResolved): void {
   const marketId = event.params.marketId.toString();
   const winningOutcome = event.params.winningOutcome;
   const finalPrice = event.params.price;
-  
+
   // Validate the market exists
   const market = Market.load(marketId);
   if (!market) {
@@ -175,7 +191,7 @@ export function handleMarketResolved(event: MarketResolved): void {
   market.winningOutcome = winningOutcome;
   market.finalPrice = finalPrice;
   market.save();
-  
+
   // Create market resolution entity
   const resolution = new MarketResolution(marketId);
   resolution.market = marketId;
@@ -185,13 +201,13 @@ export function handleMarketResolved(event: MarketResolved): void {
   resolution.save();
 
   // Calculate total staked on winning and losing outcomes
-  const totalStakedWinning = winningOutcome === 0 
-    ? market.totalStakedOutcome0 
-    : market.totalStakedOutcome1;
-  
+  const totalStakedWinning = winningOutcome === 0
+      ? market.totalStakedOutcome0
+      : market.totalStakedOutcome1;
+
   const totalStakedLosing = winningOutcome === 0
-    ? market.totalStakedOutcome1
-    : market.totalStakedOutcome0;
+      ? market.totalStakedOutcome1
+      : market.totalStakedOutcome0;
 
   // Skip reward calculation if no one staked on the winning outcome
   if (totalStakedWinning.isZero()) {
@@ -200,9 +216,8 @@ export function handleMarketResolved(event: MarketResolved): void {
   }
 
   // Load all predictions for this market
-  // The @derivedFrom field creates a PredictionLoader that we can use
   let predictions = market.predictions.load();
-  
+
   if (!predictions || predictions.length === 0) {
     log.warning("No predictions found for market: {}", [marketId]);
     return;
@@ -211,63 +226,69 @@ export function handleMarketResolved(event: MarketResolved): void {
   // Process each prediction to calculate rewards
   for (let i = 0; i < predictions.length; i++) {
     let prediction = predictions[i];
-    
+
     if (!prediction) {
       log.warning("Prediction at index {} not found for market {}", [i.toString(), marketId]);
       continue;
     }
-    
+
     // Only process predictions that match the winning outcome
     if (prediction.outcome === event.params.winningOutcome) {
       // Reward = (prediction amount / total staked on winning outcome) * total staked on losing outcome
       // Plus the original stake amount
       let reward = prediction.amount
-        .times(totalStakedLosing)
-        .div(totalStakedWinning)
-        .plus(prediction.amount);
-      
+          .times(totalStakedLosing)
+          .div(totalStakedWinning)
+          .plus(prediction.amount);
+
       prediction.reward = reward;
       prediction.save();
-      
+
       log.info("Set reward for prediction {}: {}", [prediction.id, reward.toString()]);
     }
   }
+
+  log.info('Market resolved - ID: {}, Winning outcome: {}, Final price: {}', [
+    marketId,
+    winningOutcome.toString(),
+    finalPrice.toString()
+  ]);
 }
 
 export function handleRewardClaimed(event: RewardClaimed): void {
   const userAddress = event.params.user.toHexString();
   const tokenId = event.params.tokenId;
   const rewardAmount = event.params.rewardAmount;
-  
-  // Load the prediction by tokenId
-  const predictionId = tokenId.toString();
-  const prediction = Prediction.load(predictionId);
-  
+
+  // Find prediction directly by tokenId (which is now the prediction ID)
+  const prediction = Prediction.load(tokenId.toString());
+
   if (!prediction) {
-    log.warning('Prediction not found for tokenId: {}', [predictionId]);
+    log.error('Prediction not found for tokenId: {}', [tokenId.toString()]);
     return;
   }
-  
+
   // Update prediction status
   prediction.claimed = true;
   prediction.reward = rewardAmount;
   prediction.save();
-  
+
   // Update user stats
   const user = getOrCreateUser(userAddress);
   user.totalClaimed = user.totalClaimed.plus(rewardAmount);
   user.totalWon = user.totalWon.plus(rewardAmount);
   user.save();
-  
+
   // Update global stats
   const stats = getGlobalStats();
   stats.totalClaimed = stats.totalClaimed.plus(rewardAmount);
   stats.save();
-  
-  log.info('Reward claimed - user: {}, tokenId: {}, amount: {}', [
+
+  log.info('Reward claimed - User: {}, TokenId: {}, Amount: {}, PredictionId: {}', [
     userAddress,
-    predictionId,
-    rewardAmount.toString()
+    tokenId.toString(),
+    rewardAmount.toString(),
+    prediction.id
   ]);
 }
 
@@ -278,15 +299,15 @@ export function handleRewardClaimed(event: RewardClaimed): void {
 export function handleMarketExpired(event: MarketExpired): void {
   const marketId = event.params.marketId.toString();
   const market = Market.load(marketId);
-  
+
   if (!market) {
     log.warning('Market not found when processing expiration: {}', [marketId]);
     return;
   }
-  
+
   market.expirationTimestamp = event.params.expirationTimestamp;
   market.save();
-  
+
   log.info('Market expired: {}', [marketId]);
 }
 
@@ -298,28 +319,28 @@ export function handleFeePaid(event: FeePaid): void {
   const marketId = event.params.marketId.toString();
   const userAddress = event.params.user.toHexString();
   const protocolFee = event.params.protocolFee;
-  
+
   // Update market fee statistics
   const market = Market.load(marketId);
   if (market) {
     market.totalProtocolFees = market.totalProtocolFees.plus(protocolFee);
     market.save();
-    log.info('Updated protocol fees for market: {}, amount: {}', [marketId, protocolFee.toString()]);
+    log.debug('Updated protocol fees for market: {}, amount: {}', [marketId, protocolFee.toString()]);
   } else {
     log.warning('Market not found when processing fee payment: {}', [marketId]);
   }
-  
+
   // Update user's total fees paid
   const user = getOrCreateUser(userAddress);
   user.totalFeesPaid = user.totalFeesPaid.plus(protocolFee);
   user.save();
-  
+
   // Update global stats
   const stats = getGlobalStats();
   stats.totalProtocolFees = stats.totalProtocolFees.plus(protocolFee);
   stats.save();
-  
-  log.debug('Processed fee payment - user: {}, market: {}, amount: {}', [
+
+  log.debug('Processed fee payment - User: {}, Market: {}, Amount: {}', [
     userAddress,
     marketId,
     protocolFee.toString()
@@ -331,16 +352,15 @@ export function handleFeePaid(event: FeePaid): void {
  * @param event - The FeeConfigurationChanged event
  */
 export function handleFeeConfigurationChanged(event: FeeConfigurationChanged): void {
-  // This is a protocol-level event, so we don't need to update any specific entity
-  // But we track it for analytics and logging purposes
+  const newTreasuryAddress = event.params.newTreasuryAddress.toHexString();
   const newFeeBasisPoints = event.params.newFeeBasisPoints;
-  
-  log.info('Fee configuration updated - new fee: {} bips', [
+
+  log.info('Fee configuration updated - Treasury: {}, Fee: {} bips', [
+    newTreasuryAddress,
     newFeeBasisPoints.toString()
   ]);
-  
-  // In a future version, we might want to track historical fee changes
-  // by creating a new entity type for FeeConfigurationHistory
+
+  // Consider creating a FeeConfiguration entity to track historical changes
 }
 
 /**
@@ -348,7 +368,7 @@ export function handleFeeConfigurationChanged(event: FeeConfigurationChanged): v
  * @param event - The MinStakeAmountChanged event
  */
 export function handleMinStakeAmountChanged(event: MinStakeAmountChanged): void {
-  // This is a protocol-level event, no specific entity to update
   log.info('Minimum stake amount changed to: {}', [event.params.newMinStakeAmount.toString()]);
-  // But we could track it for analytics if needed
+
+  // Consider creating a ProtocolConfiguration entity to track these changes
 }

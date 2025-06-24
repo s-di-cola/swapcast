@@ -11,7 +11,6 @@ import {OracleResolver} from "src/OracleResolver.sol";
 import {RewardDistributor} from "src/RewardDistributor.sol";
 import {PredictionManager} from "src/PredictionManager.sol";
 import {SwapCastHook} from "src/SwapCastHook.sol";
-import {PoolStateReader} from "src/PoolStateReader.sol"; // Use our custom PoolStateReader
 import {IPoolManager} from "v4-core/interfaces/IPoolManager.sol";
 import {PredictionTypes} from "src/types/PredictionTypes.sol";
 import {MarketLogic} from "src/MarketLogic.sol";
@@ -47,7 +46,6 @@ contract DeploySwapCast is Script, StdCheats {
     OracleResolver public oracleResolver;
     RewardDistributor public rewardDistributor;
     SwapCastHook public swapCastHook;
-    PoolStateReader public poolStateReader; // Our custom pool state reader
 
     function run() external {
         // Get the private key from the environment variable
@@ -67,12 +65,6 @@ contract DeploySwapCast is Script, StdCheats {
         treasury = new Treasury(deployerAddress);
         console2.log("Treasury deployed at:", address(treasury));
 
-        // 3. Deploy our custom PoolStateReader pointing to the PoolManager
-        // Note: In a forked environment, we need a direct pool state reader that works with the PoolManager
-        address poolManagerAddress = 0x000000000004444c5dc75cB358380D2e3dE08A90; // Mainnet PoolManager address
-        poolStateReader = new PoolStateReader(IPoolManager(poolManagerAddress));
-        console2.log("PoolStateReader deployed at:", address(poolStateReader));
-        console2.log("PoolStateReader points to PoolManager at:", poolManagerAddress);
 
         // 3. Deploy PredictionManager first with zero addresses for OracleResolver and RewardDistributor
         predictionManager = new PredictionManager(
@@ -140,22 +132,9 @@ contract DeploySwapCast is Script, StdCheats {
 
         console2.log("SwapCastHook deployed at:", address(swapCastHook));
 
-        // 9. Deploy PoolStateReader for reliable pool state reading in forked environment
-        console2.log("Deploying PoolStateReader that points to our local PoolManager...");
-        poolStateReader = new PoolStateReader(IPoolManager(poolManagerAddress));
-        console2.log("PoolStateReader deployed at:", address(poolStateReader));
-
         // The hook is now deployed at the correct address with the proper permissions
         console2.log("SwapCastHook successfully deployed at address:", address(swapCastHook));
         console2.log("Hook is ready to be used with Uniswap v4 pools");
-
-        // Log information about how to use the hook with a pool
-        console2.log("\nTo create a pool with this hook, use the following information:");
-        console2.log("1. PoolManager address: ", poolManagerAddress);
-        console2.log("2. SwapCastHook address: ", address(swapCastHook));
-        console2.log("3. Example token pair: WETH/USDC");
-        console2.log("   - WETH: 0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2");
-        console2.log("   - USDC: 0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48");
 
         // Define the pool key for reference (not initializing yet)
         PoolKey memory poolKey = PoolKey({
@@ -190,7 +169,6 @@ contract DeploySwapCast is Script, StdCheats {
         console2.log("OracleResolver:  ", address(oracleResolver));
         console2.log("RewardDistributor:", address(rewardDistributor));
         console2.log("SwapCastHook:    ", address(swapCastHook));
-        console2.log("PoolStateReader: ", address(poolStateReader));
         console2.log("--------------------------------");
     }
 }

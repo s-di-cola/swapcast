@@ -6,9 +6,9 @@ dataSources:
     name: PredictionManager
     network: mainnet-fork
     source:
-      address: '0xB049183063EA129b321022e7F664e91849BD41Ae'
+      address: '0x28E2E3a25de36e4Cd542D0c87aC1FC42dC5db8C4'
       abi: PredictionManager
-      startBlock: 22753068
+      startBlock: 22768150
     mapping:
       kind: ethereum/events
       apiVersion: 0.0.7
@@ -18,20 +18,27 @@ dataSources:
         - Prediction
         - User
         - MarketResolution
+        - GlobalStat
       abis:
         - name: PredictionManager
-          file: ../out/PredictionManager.sol/PredictionManager.json
+          file: >-
+            ../dApp/src/generated/abis/PredictionManager.sol/PredictionManager.json
         - name: OracleResolver
-          file: ../out/OracleResolver.sol/OracleResolver.json
+          file: ../dApp/src/generated/abis/OracleResolver.sol/OracleResolver.json
       eventHandlers:
-        - event: MarketCreated(indexed uint256)
+        # Market creation should be processed first
+        - event: MarketCreated(indexed uint256,string,string,uint256,address,uint256)
           handler: handleMarketCreated
-        - event: StakeRecorded(indexed uint256,indexed address,uint8,uint256)
+        # Then predictions
+        - event: StakeRecorded(indexed uint256,indexed address,uint8,uint256,uint256)
           handler: handlePredictionRecorded
+        # Then market resolution
         - event: MarketResolved(indexed uint256,uint8,int256,uint256)
           handler: handleMarketResolved
+        # Finally reward claims
         - event: RewardClaimed(indexed address,indexed uint256,uint256)
           handler: handleRewardClaimed
+        # Other events
         - event: MarketExpired(indexed uint256,uint256)
           handler: handleMarketExpired
         - event: FeePaid(indexed uint256,indexed address,uint256)
