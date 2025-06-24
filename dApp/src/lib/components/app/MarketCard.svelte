@@ -30,7 +30,7 @@
 <!-- Remove the clickable wrapper and events -->
 <div class="market-card-wrapper">
 	<div
-			class="relative overflow-hidden rounded-xl border border-gray-100 bg-white p-5 shadow-lg transition-all duration-300 hover:border-indigo-200 hover:shadow-xl"
+			class="relative overflow-hidden rounded-xl border border-gray-100 p-5 shadow-lg transition-all duration-300 {market.status === 'Resolved' ? 'bg-gray-50 opacity-75' : 'bg-white hover:border-indigo-200 hover:shadow-xl'}"
 	>
 		<!-- Market header with pair name and status -->
 		<div class="mb-3 flex items-center justify-between">
@@ -77,7 +77,7 @@
 					</span>
 				{/if}
 				<span
-						class="inline-flex items-center rounded-full bg-green-100 px-2 py-0.5 text-xs font-medium text-green-800"
+						class="inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium {market.status === 'Resolved' ? 'bg-red-100 text-red-800' : 'bg-green-100 text-green-800'}"
 				>
 					{market.status}
 				</span>
@@ -233,8 +233,11 @@
 
 			<!-- Select/Change Market button -->
 			<button
-					class="flex w-full items-center justify-center rounded-lg bg-indigo-600 px-3 py-2 text-sm font-medium text-white transition-colors hover:bg-indigo-700 sm:flex-1 sm:px-4 sm:text-base"
-					onclick={() => onSelect(market.id)}
+					class="flex w-full items-center justify-center rounded-lg px-3 py-2 text-sm font-medium transition-colors sm:flex-1 sm:px-4 sm:text-base {market.status === 'Resolved' 
+					? 'cursor-not-allowed bg-gray-300 text-gray-500' 
+					: 'bg-indigo-600 text-white hover:bg-indigo-700'}"
+				onclick={() => market.status !== 'Resolved' && onSelect(market.id)}
+				disabled={market.status === 'Resolved'}
 			>
 				<svg
 						class="h-4 w-4 flex-shrink-0 sm:mr-1"
