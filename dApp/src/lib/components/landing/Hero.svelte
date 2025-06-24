@@ -2,7 +2,7 @@
 	import WalletConnection from '../common/WalletConnection.svelte';
 
 	const HERO_CONTENT = {
-		badge: 'Live on Ethereum Mainnet',
+		badge: 'Live on Ink',
 		title: {
 			main: 'Predict markets.',
 			highlight: 'Earn rewards.'
