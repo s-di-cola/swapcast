@@ -102,13 +102,11 @@
 	 * Central function to handle all routing logic based on connection state
 	 */
 	function handleRouteBasedOnConnectionState() {
-		// Temporarily disabled for debugging
-		console.log('Wallet connection check bypassed for debugging');
-		// if (isConnected) {
-		// 	handleAuthenticatedRoutes();
-		// } else {
-		// 	handleUnauthenticatedAccess();
-		// }
+		if (isConnected) {
+			handleAuthenticatedRoutes();
+		} else {
+			handleUnauthenticatedAccess();
+		}
 	}
 
 	/**
