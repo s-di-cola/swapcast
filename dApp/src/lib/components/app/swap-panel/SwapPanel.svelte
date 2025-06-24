@@ -828,7 +828,7 @@
             isSubmitting = false;
             showConfirmationModal = false;
             setTimeout(() => {
-                goto('/my-predictions');
+                goto('/markets/my-predictions');
             }, 100);
         }
     }
