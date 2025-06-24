@@ -827,10 +827,10 @@
             });
         } finally {
             isSubmitting = false;
-            // Close modal and redirect to predictions page after transaction attempt
+            // FIXED: Always close modal and redirect to /app after transaction attempt
             showConfirmationModal = false;
             setTimeout(() => {
-                goto('/app/my-predictions');
+                goto('/app');
             }, 100);
         }
     }
