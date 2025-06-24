@@ -58,7 +58,7 @@
 	const financialItems: FinancialItem[] = $derived([
 		{
 			label: UI_TEXT.totalStake,
-			value: `$${formatCurrency(market.totalStake)}`
+			value: `${formatCurrency(market.totalStake)}`
 		},
 		{
 			label: UI_TEXT.bullishStake,

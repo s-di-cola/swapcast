@@ -168,8 +168,19 @@ export const GET: RequestHandler = async ({ url }) => {
 
 		const data = await response.json();
 		
-		if (!data[coinId] || typeof data[coinId].usd !== 'number') {
-			throw error(404, `Price not found for ${symbol}`);
+		// Debug log the full response
+		console.log(`CoinGecko API response for ${symbol} (${coinId}):`, JSON.stringify(data, null, 2));
+		
+		// Handle case where coin ID is not found in response
+		if (!data[coinId]) {
+			console.error(`Coin ID '${coinId}' not found in CoinGecko response for symbol '${symbol}'`);
+			throw error(404, `Price data not found for ${symbol} (ID: ${coinId})`);
+		}
+
+		// Check if USD price is available
+		if (typeof data[coinId].usd !== 'number') {
+			console.error(`Invalid price data for ${symbol} (${coinId}):`, data[coinId]);
+			throw error(404, `Price not available for ${symbol}`);
 		}
 
 		const price = data[coinId].usd;
