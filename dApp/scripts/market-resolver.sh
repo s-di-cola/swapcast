@@ -74,12 +74,12 @@ echo -e "\n${YELLOW}Step 1: Setting oracle resolver address...${NC}"
 echo "Contract: $PM_CONTRACT"
 echo "Setting oracle resolver to: $ANVIL_USER"
 
-cast send $PM_CONTRACT "setOracleResolverAddress(address)" $ANVIL_USER --unlocked
+cast send "$PM_CONTRACT" "setOracleResolverAddress(address)" "$ANVIL_USER" --from "$ANVIL_USER" --unlocked
 check_success
 
 # Verify the change
 echo "Verifying oracle resolver address..."
-CURRENT_RESOLVER=$(cast call $PM_CONTRACT "oracleResolverAddress()")
+CURRENT_RESOLVER=$(cast call "$PM_CONTRACT" "oracleResolverAddress()")
 echo "Current oracle resolver: $CURRENT_RESOLVER"
 
 # Step 2: Get user inputs
@@ -87,7 +87,7 @@ echo -e "\n${YELLOW}Step 2: Getting market resolution parameters...${NC}"
 
 # Check market count first
 echo "Checking available markets..."
-MARKET_COUNT=$(cast call $PM_CONTRACT "getMarketCount()" 2>/dev/null)
+MARKET_COUNT=$(cast call "$PM_CONTRACT" "getMarketCount()" 2>/dev/null)
 if [ $? -eq 0 ]; then
     MARKET_COUNT_DEC=$((MARKET_COUNT))
     echo "Total markets available: $MARKET_COUNT_DEC"
@@ -104,7 +104,7 @@ fi
 
 # Validate market exists and get its details
 echo "Checking market $MARKET_ID..."
-MARKET_DETAILS=$(cast call $PM_CONTRACT "getMarketDetails(uint256)" $MARKET_ID 2>/dev/null)
+MARKET_DETAILS=$(cast call "$PM_CONTRACT" "getMarketDetails(uint256)" "$MARKET_ID" 2>/dev/null)
 if [ $? -ne 0 ]; then
     echo -e "${RED}Error: Market $MARKET_ID does not exist or is inaccessible${NC}"
     exit 1
@@ -113,6 +113,7 @@ fi
 # Parse market details (simplified - just check if it's resolved)
 echo "Market details fetched successfully"
 echo -e "${BLUE}Market $MARKET_ID appears to exist${NC}"
+echo "Market details: $MARKET_DETAILS"
 
 # Outcome (Bullish/Bearish)
 echo "Select outcome:"
@@ -134,7 +135,7 @@ fi
 # Step 3: Display summary
 echo -e "\n${YELLOW}Step 3: Resolution Summary${NC}"
 echo "Market ID: $MARKET_ID"
-echo "Outcome: $OUTCOME ($([ $OUTCOME -eq 0 ] && echo "Bearish" || echo "Bullish"))"
+echo "Outcome: $OUTCOME ($([ "$OUTCOME" -eq 0 ] && echo "Bearish" || echo "Bullish"))"
 echo "Price: $PRICE"
 
 read -p "Proceed with resolution? (y/N): " CONFIRM
@@ -147,9 +148,9 @@ fi
 echo -e "\n${YELLOW}Step 4: Resolving market...${NC}"
 echo "Calling resolveMarket($MARKET_ID, $OUTCOME, $PRICE)..."
 
-cast send $PM_CONTRACT "resolveMarket(uint256,uint8,int256)" $MARKET_ID $OUTCOME $PRICE --unlocked
+cast send "$PM_CONTRACT" "resolveMarket(uint256,uint8,int256)" "$MARKET_ID" "$OUTCOME" "$PRICE" --from "$ANVIL_USER" --unlocked
 check_success
 
 echo -e "\n${GREEN}🎉 Market $MARKET_ID resolved successfully!${NC}"
-echo "Outcome: $([ $OUTCOME -eq 0 ] && echo "Bearish" || echo "Bullish")"
+echo "Outcome: $([ "$OUTCOME" -eq 0 ] && echo "Bearish" || echo "Bullish")"
 echo "Price: $PRICE"
