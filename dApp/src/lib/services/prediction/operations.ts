@@ -91,20 +91,18 @@ export async function fetchUserPredictions(
     });
 
     return predictions.map((prediction, index) => {
-      // Debug each prediction's tokenId
       console.log(`🔍 Processing prediction ${index}:`, {
         id: prediction.id,
         tokenId: prediction.tokenId,
-        tokenIdType: typeof prediction.tokenId,
-        tokenIdExists: 'tokenId' in prediction,
-        allFields: Object.keys(prediction)
+        marketId: prediction.marketId,
+        outcome: prediction.outcome,
+        amount: prediction.amount
       });
 
       const amount = formatValueToEther(prediction.amount);
       const reward = prediction.reward ? formatValueToEther(prediction.reward) : null;
-      const marketIsResolved = Boolean(prediction.marketIsResolved);
 
-      // Ensure marketWinningOutcome is either 'above', 'below', or undefined (never 'pending')
+      // Handle marketWinningOutcome from the flat SubgraphUserPrediction structure
       let marketWinningOutcome: 'above' | 'below' | undefined;
       if (prediction.marketWinningOutcome !== undefined && prediction.marketWinningOutcome !== null) {
         const outcome = mapOutcome(prediction.marketWinningOutcome);
@@ -113,34 +111,25 @@ export async function fetchUserPredictions(
         marketWinningOutcome = undefined;
       }
 
-      // Handle tokenId extraction with detailed logging
-      let resolvedTokenId: string | undefined;
+      // Use the isWinning value from SubgraphUserPrediction if available, otherwise calculate
+      const isWinning = prediction.isWinning !== undefined
+          ? Boolean(prediction.isWinning)
+          : (prediction.marketIsResolved && marketWinningOutcome !== undefined && mapOutcome(prediction.outcome) === marketWinningOutcome);
 
-      if (prediction.tokenId !== undefined && prediction.tokenId !== null) {
-        resolvedTokenId = prediction.tokenId.toString();
-        console.log(`✅ Found tokenId for prediction ${index}:`, resolvedTokenId);
-      } else {
-        console.warn(`❌ No tokenId found for prediction ${index}:`, {
-          id: prediction.id,
-          availableFields: Object.keys(prediction)
-        });
-        resolvedTokenId = undefined;
-      }
-
-      const result = {
+      const result: UserPrediction = {
         id: prediction.id,
-        marketId: prediction.marketId || 'unknown',
-        marketDescription: prediction.marketDescription || 'Unknown Market',
+        marketId: prediction.marketId,
+        marketDescription: prediction.marketDescription,
         outcome: mapOutcome(prediction.outcome),
         amount,
-        stakedAmount: amount, // Same as amount for now
-        timestamp: Number(prediction.timestamp || 0),
-        claimed: Boolean(prediction.claimed),
+        stakedAmount: amount,
+        timestamp: Number(prediction.timestamp),
+        claimed: prediction.claimed,
         reward,
-        isWinning: marketIsResolved ? Boolean(prediction.isWinning) : false,
-        marketIsResolved,
+        isWinning,
+        marketIsResolved: prediction.marketIsResolved,
         marketWinningOutcome,
-        tokenId: resolvedTokenId
+        tokenId: prediction.tokenId
       };
 
       console.log(`🔍 Final processed prediction ${index}:`, {
@@ -294,9 +283,9 @@ export async function fetchUserPredictionStats(userAddress: string): Promise<Pre
 export async function fetchClaimableRewards(userAddress: string): Promise<ClaimableReward[]> {
   try {
     const predictions = await fetchUserPredictions(userAddress);
-    const claimablePredictions = predictions.filter(p => p.isWinning && !p.claimed);
+    const claimablePredictions = predictions.filter(p => p.isWinning && !p.claimed && p.reward);
 
-    // Group by market and outcome
+    // Group by market and outcome (though now each prediction is unique by tokenId)
     return groupClaimableRewards(claimablePredictions);
   } catch (error) {
     console.error('Failed to fetch claimable rewards:', error);

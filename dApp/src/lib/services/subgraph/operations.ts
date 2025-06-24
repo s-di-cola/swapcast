@@ -133,9 +133,10 @@ export async function getUserPredictions(
 			const isResolved = market.isResolved;
 
 			return {
-				id: prediction.id,
+				id: prediction.id, // This is now the tokenId
+				tokenId: prediction.tokenId || prediction.id, // Ensure tokenId is always present
 				marketId: market.id,
-				marketDescription: market.description,
+				marketDescription: market.description || market.name || 'Unknown Market',
 				outcome: prediction.outcome,
 				amount: prediction.amount,
 				timestamp: prediction.timestamp,
@@ -219,9 +220,9 @@ export async function getAllMarketsFromSubgraph(
 }
 
 /**
- * Searches markets by description
+ * Searches markets by name/description
  *
- * @param searchTerm - Search term to match against market descriptions
+ * @param searchTerm - Search term to match against market names/descriptions
  * @param limit - Maximum number of results (default: 20)
  * @returns Promise resolving to matching markets
  *

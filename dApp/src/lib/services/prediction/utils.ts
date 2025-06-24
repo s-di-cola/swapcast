@@ -37,20 +37,8 @@ export function transformPrediction(
   const isWinning = marketData.winningOutcome !== undefined &&
       prediction.outcome === marketData.winningOutcome;
 
-  // Fixed tokenId extraction with proper handling
-  let tokenId: string | undefined;
-
-  if ('tokenId' in prediction && prediction.tokenId !== undefined && prediction.tokenId !== null) {
-    tokenId = String(prediction.tokenId);
-    console.log('✅ Found direct tokenId:', tokenId);
-  } else {
-    console.warn('❌ No tokenId found in prediction:', {
-      id: prediction.id,
-      availableFields: Object.keys(prediction)
-    });
-    tokenId = undefined;
-  }
-
+  // Since tokenId is now the prediction ID, they should be the same
+  const tokenId = prediction.id; // prediction.id is now the tokenId
   const marketId = prediction.market?.id || '';
   const amount = 'amount' in prediction ? String(prediction.amount) : '0';
   const timestamp = 'timestamp' in prediction ? Number(prediction.timestamp) : 0;
@@ -67,9 +55,9 @@ export function transformPrediction(
   }
 
   return {
-    id: prediction.id,
+    id: prediction.id, // This is now the tokenId
     marketId,
-    marketDescription: prediction.market?.description || marketData.description || 'Unknown Market',
+    marketDescription: prediction.market?.description || prediction.market?.name || marketData.description || 'Unknown Market',
     outcome: mapOutcome(prediction.outcome),
     amount: formatEther(BigInt(amount)),
     stakedAmount: formatEther(BigInt(amount)), // Using amount for stakedAmount as per original logic
@@ -79,7 +67,7 @@ export function transformPrediction(
     isWinning,
     marketIsResolved: marketData.isResolved || false,
     marketWinningOutcome,
-    tokenId
+    tokenId // Same as id since id is now tokenId
   };
 }
 
@@ -98,7 +86,6 @@ export function calculateClaimableRewards(predictions: UserPrediction[]): string
       .reduce((sum, p) => sum + parseFloat(p.reward || '0'), 0)
       .toFixed(6);
 }
-
 
 /**
  * Formats a Unix timestamp to a human-readable date string
@@ -129,28 +116,20 @@ export function formatDate(timestamp: number): string {
  * // ]
  */
 export function groupClaimableRewards(predictions: UserPrediction[]): ClaimableReward[] {
-  const claimable: Record<string, ClaimableReward> = {};
+  const claimable: ClaimableReward[] = [];
 
   predictions.forEach(prediction => {
     if (!prediction.isWinning || prediction.claimed || !prediction.reward || !prediction.tokenId) return;
 
-    const key = `${prediction.marketId}-${prediction.outcome}`;
-
-    if (!claimable[key]) {
-      claimable[key] = {
-        tokenId: prediction.tokenId,
-        amount: '0',
-        marketId: prediction.marketId,
-        outcome: prediction.outcome as 'above' | 'below'
-      };
-    }
-
-    // Sum up rewards for the same market/outcome
-    claimable[key].amount = (
-        parseFloat(claimable[key].amount) +
-        parseFloat(prediction.reward || '0')
-    ).toString();
+    // Since each prediction has a unique tokenId, we don't need to group them
+    // Each prediction becomes its own claimable reward
+    claimable.push({
+      tokenId: prediction.tokenId,
+      amount: prediction.reward,
+      marketId: prediction.marketId,
+      outcome: prediction.outcome as 'above' | 'below'
+    });
   });
 
-  return Object.values(claimable);
+  return claimable;
 }

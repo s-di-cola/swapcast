@@ -1,11 +1,10 @@
 import type { Address } from 'viem';
-import type { SubgraphPrediction as BasePrediction } from '$lib/services/subgraph/types';
 
 /**
  * Represents a user's prediction in the application
  */
 export interface UserPrediction {
-  /** Unique prediction ID */
+  /** Unique prediction ID (now the tokenId) */
   id: string;
   /** ID of the market this prediction is for */
   marketId: string;
@@ -29,8 +28,8 @@ export interface UserPrediction {
   marketIsResolved: boolean;
   /** The winning outcome of the market (only set if market is resolved) */
   marketWinningOutcome?: 'above' | 'below';
-  /** Optional token ID if this is an NFT */
-  tokenId?: string;
+  /** Token ID (same as id since we now use tokenId as the primary key) */
+  tokenId: string;
 }
 
 /**
@@ -38,11 +37,12 @@ export interface UserPrediction {
  */
 export function isUserPrediction(obj: any): obj is UserPrediction {
   return (
-    obj &&
-    typeof obj === 'object' &&
-    'id' in obj &&
-    'marketId' in obj &&
-    'outcome' in obj
+      obj &&
+      typeof obj === 'object' &&
+      'id' in obj &&
+      'marketId' in obj &&
+      'outcome' in obj &&
+      'tokenId' in obj
   );
 }
 

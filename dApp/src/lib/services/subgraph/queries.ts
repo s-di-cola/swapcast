@@ -19,9 +19,11 @@ export const GET_MARKET_PREDICTIONS = gql`
 			skip: $skip
 		) {
 			id
+			tokenId
 			market {
 				id
-				description
+				name
+				description: name
 			}
 			user {
 				id
@@ -44,17 +46,18 @@ export const GET_MARKET_DETAILS = gql`
 		market(id: $marketId) {
 			id
 			marketId
-			description
+			name
+			assetSymbol
+			description: name
 			creationTimestamp
 			expirationTimestamp
+			priceAggregator
+			priceThreshold
 			isResolved
 			winningOutcome
 			finalPrice
 			totalStakedOutcome0
 			totalStakedOutcome1
-			baseToken
-			quoteToken
-			priceThreshold
 		}
 	}
 `;
@@ -75,7 +78,8 @@ export const GET_USER_PREDICTIONS = gql`
 			tokenId
 			market {
 				id
-				description
+				name
+				description: name
 				isResolved
 				winningOutcome
 			}
@@ -99,6 +103,7 @@ export const GET_MARKET_STATS = gql`
 			totalStakedOutcome1
 			predictions(first: 1000) {
 				id
+				tokenId
 				user {
 					id
 				}
@@ -115,9 +120,11 @@ export const GET_RECENT_PREDICTIONS = gql`
 	query GetRecentPredictions($limit: Int!, $skip: Int!) {
 		predictions(orderBy: timestamp, orderDirection: desc, first: $limit, skip: $skip) {
 			id
+			tokenId
 			market {
 				id
-				description
+				name
+				description: name
 			}
 			user {
 				id
@@ -140,34 +147,37 @@ export const GET_ALL_MARKETS = gql`
 		markets(orderBy: creationTimestamp, orderDirection: desc, first: $limit, skip: $skip) {
 			id
 			marketId
-			description
+			name
+			assetSymbol
+			description: name
 			creationTimestamp
 			expirationTimestamp
+			priceAggregator
+			priceThreshold
 			isResolved
 			winningOutcome
 			totalStakedOutcome0
 			totalStakedOutcome1
-			baseToken
-			quoteToken
-			priceThreshold
 		}
 	}
 `;
 
 /**
- * Query to search markets by description
+ * Query to search markets by name/description
  */
 export const SEARCH_MARKETS = gql`
 	query SearchMarkets($searchTerm: String!, $limit: Int!) {
 		markets(
-			where: { description_contains_nocase: $searchTerm }
+			where: { name_contains_nocase: $searchTerm }
 			orderBy: creationTimestamp
 			orderDirection: desc
 			first: $limit
 		) {
 			id
 			marketId
-			description
+			name
+			assetSymbol
+			description: name
 			creationTimestamp
 			expirationTimestamp
 			isResolved
@@ -189,6 +199,7 @@ export const GET_GLOBAL_STATS = gql`
 			totalStaked
 			totalUsers
 			totalClaimed
+			totalProtocolFees
 		}
 	}
 `;
@@ -206,7 +217,8 @@ export const GET_ANALYTICS_DATA = gql`
 		) {
 			id
 			marketId
-			description
+			name
+			description: name
 			creationTimestamp
 			isResolved
 			totalStakedOutcome0
@@ -221,12 +233,14 @@ export const GET_ANALYTICS_DATA = gql`
 			first: 1000 # Increased limit to ensure we get all predictions
 		) {
 			id
+			tokenId
 			timestamp
 			outcome
 			amount
 			market {
 				id
-				description
+				name
+				description: name
 			}
 		}
 
@@ -235,17 +249,6 @@ export const GET_ANALYTICS_DATA = gql`
 			totalMarkets
 			totalPredictions
 			totalStaked
-		}
-	}
-`;
-
-/**
- * Query to fetch the Treasury balance
- */
-export const GET_TREASURY_BALANCE = gql`
-	query GetTreasuryBalance {
-		treasury {
-			balance
 		}
 	}
 `;
