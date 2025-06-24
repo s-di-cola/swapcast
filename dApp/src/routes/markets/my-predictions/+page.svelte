@@ -15,6 +15,7 @@
 		isChunkLoadError,
 		setupChunkErrorHandling
 	} from '$lib/services/prediction';
+	import UserPredictionChart from '$lib/components/app/my-predictions/UserPredictionChart.svelte';
 	import type { PredictionStats, UserPrediction } from '$lib/services/prediction/types';
 	import { toastStore } from '$lib/stores/toastStore';
 	import { onMount } from 'svelte';
@@ -213,7 +214,6 @@
 		window.location.reload();
 	}
 </script>
-
 <div class="mx-auto min-h-screen max-w-7xl bg-gray-50 p-6 pt-16 md:p-10 md:pt-20">
 	<div class="mb-8">
 		<h1 class="text-3xl font-bold text-gray-900">My Prediction Portfolio</h1>
@@ -269,6 +269,19 @@
 		</div>
 
 		<ClaimableRewardsBanner {claimableAmount} onClaimAll={claimAllRewards} />
+		<div class="overflow-hidden rounded-xl border border-gray-200 bg-white shadow-sm mb-6">
+			<div class="border-b border-gray-200 px-6 py-4">
+				<div class="flex items-center justify-between">
+					<div>
+						<h2 class="text-lg font-semibold text-gray-900">Your Prediction Activity</h2>
+						<p class="text-sm text-gray-500">
+							Performance of your predictions compared to win rate
+						</p>
+					</div>				
+				</div>
+			</div>
+			<UserPredictionChart userId={userAddress} />
+		</div>
 
 		<div class="overflow-hidden rounded-xl border border-gray-200 bg-white shadow-sm">
 			<div class="border-b border-gray-200 px-6 py-4">
@@ -278,8 +291,7 @@
 						<p class="text-sm text-gray-500">
 							Markets you've predicted on and their current status
 						</p>
-					</div>
-					<div class="text-sm text-gray-500">
+					</div>					<div class="text-sm text-gray-500">
 						Showing {(currentPage - 1) * itemsPerPage + 1}
 						-{Math.min(currentPage * itemsPerPage, positions.length)} of {positions.length} positions
 					</div>
