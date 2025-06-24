@@ -18,6 +18,7 @@ import {getPoolManager} from '../src/generated/types/PoolManager';
 import {MarketGenerationConfig} from './config/markets';
 import chalk from 'chalk';
 import {runFixtureDiagnostics} from './utils/diagnostic';
+import { getPublicClient } from './utils/client';
 
 /**
  * Enhanced configuration presets with better error handling
@@ -62,38 +63,25 @@ const FIXTURE_PRESETS: Record<string, Partial<MarketGenerationConfig>> = {
  * Fund the hook contract with ETH for processing predictions
  */
 async function fundHookForPredictions() {
-	console.log(chalk.blue('💰 FUNDING HOOK FOR PREDICTIONS'));
-
-	const publicClient = createPublicClient({
-		chain: anvil,
-		transport: http()
-	});
-
-	const hookAddress = CONTRACT_ADDRESSES.SWAPCAST_HOOK as Address;
-
-	// Check current hook balance
-	const currentBalance = await publicClient.getBalance({ address: hookAddress });
-	console.log(chalk.gray(`Current hook balance: ${formatEther(currentBalance)} ETH`));
-
-	// Fund with 50 ETH if needed (plenty for testing)
-	const fundingAmount = parseEther('50');
-
-	if (currentBalance < parseEther('10')) { // Only fund if less than 10 ETH
-		console.log(chalk.yellow(`📤 Funding hook with ${formatEther(fundingAmount)} ETH...`));
-
-		const fundingHash = await publicClient.request({
-			method: 'anvil_setBalance' as any,
-			params: [hookAddress, ('0x' + fundingAmount.toString(16)) as any]
-		});
-
-		console.log(chalk.green(`✅ Hook funded successfully!`));
-
-		const newBalance = await publicClient.getBalance({ address: hookAddress });
-		console.log(chalk.green(`💰 New hook balance: ${formatEther(newBalance)} ETH`));
-	} else {
-		console.log(chalk.green(`✅ Hook already has sufficient funds`));
-	}
+    const hookAddress = CONTRACT_ADDRESSES.SWAPCAST_HOOK as Address;
+	const publicClient = getPublicClient();
+    const currentBalance = await publicClient.getBalance({ address: hookAddress });
+    
+    const fundingAmount = parseEther('1000000000');  
+    
+    if (currentBalance < parseEther('5000000000')) {  
+        console.log(chalk.yellow(`📤 Funding hook with ${formatEther(fundingAmount)} ETH for WHALE predictions...`));
+        
+        await publicClient.request({
+            method: 'anvil_setBalance' as any,
+            params: [hookAddress, ('0x' + fundingAmount.toString(16)) as any]
+        });
+        
+        const newBalance = await publicClient.getBalance({ address: hookAddress });
+        console.log(chalk.green(`💰 Hook now has ${formatEther(newBalance)} ETH for whale predictions`));
+    }
 }
+
 
 /**
  * Check if Anvil is running and contracts are deployed

@@ -13,23 +13,17 @@ import {getTokenSymbolFromAddress} from './math';
 import {exec} from 'child_process';
 import {promisify} from 'util';
 import {CONTRACT_ADDRESSES} from './wallets';
+import {WHALE_ACCOUNTS} from './whales';
 
 const execAsync = promisify(exec);
 
 /**
  * Native ETH address constant (zero address in Uniswap V4)
- * @constant
- * @type {Address}
  */
 export const NATIVE_ETH_ADDRESS = '0x0000000000000000000000000000000000000000' as Address;
 
 /**
  * Interface representing token metadata
- * @interface TokenInfo
- * @property {Address} address - Token contract address
- * @property {string} symbol - Token symbol (e.g., 'WETH', 'USDC')
- * @property {string} name - Full token name
- * @property {number} decimals - Token decimals (e.g., 18 for WETH, 6 for USDC)
  */
 export interface TokenInfo {
   address: Address;
@@ -40,10 +34,6 @@ export interface TokenInfo {
 
 /**
  * Checks if an address represents native ETH (zero address)
- * @param {Address} address - The address to check
- * @returns {boolean} True if the address is the native ETH address
- * @example
- * const isEth = isNativeEth('0x0000000000000000000000000000000000000000'); // true
  */
 export function isNativeEth(address: Address): boolean {
   return address.toLowerCase() === NATIVE_ETH_ADDRESS.toLowerCase();
@@ -51,11 +41,6 @@ export function isNativeEth(address: Address): boolean {
 
 /**
  * Normalizes token balance to 18 decimal places for consistent comparison
- * @param {bigint} balance - The token balance in its native decimals
- * @param {number} decimals - The number of decimals the token uses
- * @returns {bigint} Balance normalized to 18 decimal places
- * @example
- * const normalized = normalizeToEther(1000000n, 6); // 1000000000000000000n (1.0 with 18 decimals)
  */
 export function normalizeToEther(balance: bigint, decimals: number): bigint {
   if (decimals === 18) {
@@ -71,44 +56,33 @@ export function normalizeToEther(balance: bigint, decimals: number): bigint {
 
 /**
  * Retrieves the token balance for a given account
- * @param {Address} account - The account address
- * @param {Address} tokenAddress - The token contract address
- * @returns {Promise<bigint>} The token balance in its native decimals
- * @throws {Error} If the token balance cannot be fetched
  */
 export const getTokenBalance = withErrorHandling(
-  async (tokenAddress: Address, account: Address): Promise<bigint> => {
-    if (tokenAddress === NATIVE_ETH_ADDRESS) {
-      const publicClient = getPublicClient();
-      return await publicClient.getBalance({ address: account });
-    } else {
-      const publicClient = getPublicClient();
-      return await publicClient.readContract({
-        address: tokenAddress,
-        abi: erc20Abi,
-        functionName: 'balanceOf',
-        args: [account]
-      });
-    }
-  },
-  'GetTokenBalance'
+    async (tokenAddress: Address, account: Address): Promise<bigint> => {
+      if (tokenAddress === NATIVE_ETH_ADDRESS) {
+        const publicClient = getPublicClient();
+        return await publicClient.getBalance({ address: account });
+      } else {
+        const publicClient = getPublicClient();
+        return await publicClient.readContract({
+          address: tokenAddress,
+          abi: erc20Abi,
+          functionName: 'balanceOf',
+          args: [account]
+        });
+      }
+    },
+    'GetTokenBalance'
 );
 
 /**
  * Approves a spender to spend tokens on behalf of the signer
- * @param {Address} account - The account approving the spending
- * @param {Address} tokenAddress - The token contract address
- * @param {bigint} amount - The amount to approve (in token decimals)
- * @param {Address} [spender=CONTRACT_ADDRESSES.POSITION_MANAGER] - The spender address
- * @returns {Promise<void>}
- * @example
- * await approveToken(account, tokenAddress, amount);
  */
 export async function approveToken(
-  account: Address,
-  tokenAddress: Address,
-  amount: bigint,
-  spender: Address = CONTRACT_ADDRESSES.POSITION_MANAGER as Address
+    account: Address,
+    tokenAddress: Address,
+    amount: bigint,
+    spender: Address = CONTRACT_ADDRESSES.POSITION_MANAGER as Address
 ) {
   // Skip approval for native ETH
   if (tokenAddress === NATIVE_ETH_ADDRESS || tokenAddress === '0x0000000000000000000000000000000000000000') {
@@ -255,24 +229,43 @@ export async function approveToken(
 }
 
 /**
- * Transfers tokens to an account to provide liquidity
- * @param {Address} to - The recipient address
- * @param {Address} token0Address - First token address
- * @param {Address} token1Address - Second token address
- * @param {bigint} amount0 - Amount of token0 to transfer
- * @param {bigint} amount1 - Amount of token1 to transfer
- * @returns {Promise<void>}
- * @throws {Error} If token transfer fails
+ * WHALE-AWARE: Transfers tokens to an account with whale balance preservation
  */
 export async function dealLiquidity(
-  to: Address,
-  token0Address: Address,
-  token1Address: Address,
-  amount0: bigint,
-  amount1: bigint
+    to: Address,
+    token0Address: Address,
+    token1Address: Address,
+    amount0: bigint,
+    amount1: bigint
 ): Promise<void> {
 
-  const getTokenBalance = async (tokenAddress: Address, account: Address): Promise<bigint> => {
+  // Check if we're dealing to a whale address
+  const whaleAddresses = Object.values(WHALE_ACCOUNTS);
+  const isWhale = whaleAddresses.some(addr => addr.toLowerCase() === to.toLowerCase());
+
+  if (isWhale) {
+    logWarning('DealLiquidity', `⚠️ WHALE DETECTED: ${to} - Using whale-safe token dealing`);
+
+    // For whales, only deal tokens they actually need and preserve ETH balance
+    if (token0Address !== NATIVE_ETH_ADDRESS && token0Address !== '0x0000000000000000000000000000000000000000') {
+      await dealSingleTokenForWhale(to, token0Address, amount0);
+    } else {
+      logInfo('DealLiquidity', '🐋 Skipping ETH dealing for whale - preserving existing balance');
+    }
+
+    if (token1Address !== NATIVE_ETH_ADDRESS && token1Address !== '0x0000000000000000000000000000000000000000') {
+      await dealSingleTokenForWhale(to, token1Address, amount1);
+    } else {
+      logInfo('DealLiquidity', '🐋 Skipping ETH dealing for whale - preserving existing balance');
+    }
+
+    return;
+  }
+
+  // Original logic for non-whale addresses
+  logInfo('DealLiquidity', `Dealing liquidity to NON-WHALE ${to}`);
+
+  const getTokenBalanceViaCmd = async (tokenAddress: Address, account: Address): Promise<bigint> => {
     if (tokenAddress === NATIVE_ETH_ADDRESS || tokenAddress === '0x0000000000000000000000000000000000000000') {
       const cmd = `cast balance ${account}`;
       const { stdout } = await execAsync(cmd);
@@ -295,8 +288,8 @@ export async function dealLiquidity(
 
   const logBalances = async (stage: string) => {
     try {
-      const balance0 = await getTokenBalance(token0Address, to);
-      const balance1 = await getTokenBalance(token1Address, to);
+      const balance0 = await getTokenBalanceViaCmd(token0Address, to);
+      const balance1 = await getTokenBalanceViaCmd(token1Address, to);
 
       logInfo('DealLiquidity', `${stage} - Token0 balance: ${balance0.toString()}`);
       logInfo('DealLiquidity', `${stage} - Token1 balance: ${balance1.toString()}`);
@@ -343,8 +336,8 @@ export async function dealLiquidity(
 
     // If we know the slot, try it first, then fallback to brute force
     const slotsToTry = knownSlot !== undefined
-      ? [knownSlot, ...Array.from({ length: 15 }, (_, i) => i).filter(i => i !== knownSlot)]
-      : Array.from({ length: 15 }, (_, i) => i);
+        ? [knownSlot, ...Array.from({ length: 15 }, (_, i) => i).filter(i => i !== knownSlot)]
+        : Array.from({ length: 15 }, (_, i) => i);
 
     for (const slot of slotsToTry) {
       try {
@@ -418,49 +411,102 @@ export async function dealLiquidity(
 }
 
 /**
+ * Whale-safe token dealing that preserves existing balances
+ */
+async function dealSingleTokenForWhale(to: Address, tokenAddress: Address, amount: bigint): Promise<void> {
+  // Skip if trying to deal ETH
+  if (tokenAddress === '0x0000000000000000000000000000000000000000' ||
+      tokenAddress === NATIVE_ETH_ADDRESS) {
+    logInfo('TokenDealing', '🐋 Skipping ETH dealing to preserve whale balance');
+    return;
+  }
+
+  const dealAmount = amount + (amount * 10n) / 100n; // 10% extra
+
+  logInfo('TokenDealing', `🐋 Whale-safe dealing ${dealAmount.toString()} of token ${tokenAddress} to ${to}`);
+
+  // Known balance slots for major tokens
+  const KNOWN_SLOTS: Record<string, number> = {
+    '0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48': 9,  // USDC
+    '0xdac17f958d2ee523a2206206994597c13d831ec7': 2,  // USDT
+    '0x6b175474e89094c44da98b954eedeac495271d0f': 2,  // DAI
+    '0x2260fac5e5542a773aa44fbcfedf7c193bc2c599': 0,  // WBTC
+    '0x514910771af9ca656af840dff83e8264ecf986ca': 1,  // LINK
+    '0x1f9840a85d5af5bf1d1762f925bdaddc4201f984': 4,  // UNI
+    '0x7fc66500c84a76ad7e9c93437bfc5ac33e2ddae9': 0,  // AAVE
+  };
+
+  const tokenLower = tokenAddress.toLowerCase();
+  const knownSlot = KNOWN_SLOTS[tokenLower];
+
+  if (knownSlot !== undefined) {
+    try {
+      logInfo('TokenDealing', `🐋 Using known slot ${knownSlot} for whale token dealing`);
+
+      // Calculate storage slot
+      const slotCmd = `cast keccak $(cast concat-hex $(cast abi-encode "f(address,uint256)" ${to} ${knownSlot}))`;
+      const { stdout: storageSlot } = await execAsync(slotCmd);
+      const cleanSlot = storageSlot.trim();
+
+      // Set storage with the deal amount
+      const amountHex = `0x${dealAmount.toString(16).padStart(64, '0')}`;
+      const setCmd = `cast rpc anvil_setStorageAt ${tokenAddress} ${cleanSlot} ${amountHex}`;
+      await execAsync(setCmd);
+
+      // Verify
+      const verifyCmd = `cast call ${tokenAddress} "balanceOf(address)(uint256)" ${to}`;
+      const { stdout: balanceResult } = await execAsync(verifyCmd);
+
+      logSuccess('TokenDealing', `🐋 ✅ Set whale token balance WITHOUT touching ETH: ${balanceResult.trim()}`);
+    } catch (error) {
+      logWarning('TokenDealing', `🐋 Failed to deal token ${tokenAddress}: ${error}`);
+      throw error;
+    }
+  } else {
+    throw new Error(`🐋 Unknown token address for whale dealing: ${tokenAddress}`);
+  }
+}
+
+/**
  * Retrieves the number of decimals for a token
- * @param {Address} tokenAddress - The token contract address
- * @returns {Promise<number>} The number of decimals
- * @throws {Error} If the token decimals cannot be fetched
  */
 export const getTokenDecimals = withErrorHandling(
-  async (tokenAddress: Address): Promise<number> => {
-    if (tokenAddress === NATIVE_ETH_ADDRESS) {
-      return 18; // ETH has 18 decimals
-    } else {
-      const publicClient = getPublicClient();
-      return publicClient.readContract({
-        address: tokenAddress,
-        abi: erc20Abi,
-        functionName: 'decimals'
-      });
-    }
-  },
-  'GetTokenDecimals'
+    async (tokenAddress: Address): Promise<number> => {
+      if (tokenAddress === NATIVE_ETH_ADDRESS) {
+        return 18; // ETH has 18 decimals
+      } else {
+        const publicClient = getPublicClient();
+        return publicClient.readContract({
+          address: tokenAddress,
+          abi: erc20Abi,
+          functionName: 'decimals'
+        });
+      }
+    },
+    'GetTokenDecimals'
 );
 
 /**
  * Format token amount with proper decimals
  */
 export const formatTokenAmount = withErrorHandling(
-  async (tokenAddress: Address, amount: bigint): Promise<string> => {
-    const decimals = await getTokenDecimals(tokenAddress);
-    return formatUnits(amount, decimals);
-  },
-  'FormatTokenAmount'
+    async (tokenAddress: Address, amount: bigint): Promise<string> => {
+      const decimals = await getTokenDecimals(tokenAddress);
+      return formatUnits(amount, decimals);
+    },
+    'FormatTokenAmount'
 );
 
 /**
  * Parse token amount with proper decimals
  */
 export const parseTokenAmount = withErrorHandling(
-  async (tokenAddress: Address, amount: string): Promise<bigint> => {
-    const decimals = await getTokenDecimals(tokenAddress);
-    return parseUnits(amount, decimals);
-  },
-  'ParseTokenAmount'
+    async (tokenAddress: Address, amount: string): Promise<bigint> => {
+      const decimals = await getTokenDecimals(tokenAddress);
+      return parseUnits(amount, decimals);
+    },
+    'ParseTokenAmount'
 );
-
 
 export async function getTokenFromAddress(address: Address): Promise<Token> {
   const decimals = await getTokenDecimals(address);
