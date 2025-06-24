@@ -1,4 +1,4 @@
-type GlobalStat @entity {
+type GlobalStat @entity(immutable: false) {
   id: ID!
   totalMarkets: BigInt!
   totalPredictions: BigInt!
@@ -8,7 +8,7 @@ type GlobalStat @entity {
   totalProtocolFees: BigInt!
 }
 
-type User @entity {
+type User @entity(immutable: false) {
   id: ID! # User address
   address: Bytes!
   totalStaked: BigInt!
@@ -18,7 +18,7 @@ type User @entity {
   predictions: [Prediction!]! @derivedFrom(field: "user")
 }
 
-type Market @entity {
+type Market @entity(immutable: false) {
   id: ID! # Market ID as string
   marketId: BigInt!
   name: String!
@@ -37,7 +37,7 @@ type Market @entity {
   resolution: MarketResolution @derivedFrom(field: "market")
 }
 
-type Prediction @entity {
+type Prediction @entity(immutable: false) {
   id: ID! # TokenId as string (since tokenId is unique)
   market: Market!
   user: User!
@@ -49,7 +49,7 @@ type Prediction @entity {
   reward: BigInt
 }
 
-type MarketResolution @entity {
+type MarketResolution @entity(immutable: true) {
   id: ID! # Market ID
   market: Market!
   winningOutcome: Int!

@@ -1,4 +1,4 @@
-import { BigInt, log } from "@graphprotocol/graph-ts";
+import { BigInt, log, Bytes, Address } from "@graphprotocol/graph-ts";
 import {
   FeeConfigurationChanged,
   FeePaid,
@@ -34,7 +34,7 @@ function getGlobalStats(): GlobalStat {
 
 /**
  * Loads or creates a user entity
- * @param address - The user's address
+ * @param address - The user's address as string
  * @returns The user entity
  */
 function getOrCreateUser(address: string): User {
@@ -42,7 +42,7 @@ function getOrCreateUser(address: string): User {
 
   if (user == null) {
     user = new User(address);
-    user.address = address;
+    user.address = Bytes.fromHexString(address);
     user.totalStaked = BigInt.fromI32(0);
     user.totalWon = BigInt.fromI32(0);
     user.totalClaimed = BigInt.fromI32(0);
@@ -352,11 +352,11 @@ export function handleFeePaid(event: FeePaid): void {
  * @param event - The FeeConfigurationChanged event
  */
 export function handleFeeConfigurationChanged(event: FeeConfigurationChanged): void {
-  const newTreasuryAddress = event.params.newTreasuryAddress.toHexString();
+  const newTreasuryAddress = event.params.newTreasuryAddress;
   const newFeeBasisPoints = event.params.newFeeBasisPoints;
 
   log.info('Fee configuration updated - Treasury: {}, Fee: {} bips', [
-    newTreasuryAddress,
+    newTreasuryAddress.toHexString(),
     newFeeBasisPoints.toString()
   ]);
 
