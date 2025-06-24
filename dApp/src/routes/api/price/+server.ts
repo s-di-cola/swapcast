@@ -1,6 +1,6 @@
 /**
  * Server-side price API endpoint
- * 
+ *
  * This endpoint proxies requests to CoinGecko API with authentication
  * to avoid exposing the API key to the client.
  */
@@ -13,22 +13,22 @@ import type { RequestHandler } from './$types';
 
 // Static mapping for common cryptocurrencies to avoid API calls
 const COMMON_COIN_IDS: Record<string, string> = {
-	'BTC': 'bitcoin',
-	'ETH': 'ethereum',
-	'USDC': 'usd-coin',
-	'USDT': 'tether',
-	'DAI': 'dai',
-	'SOL': 'solana',
-	'MATIC': 'matic-network',
-	'AVAX': 'avalanche-2',
-	'BNB': 'binancecoin',
-	'XRP': 'ripple',
-	'ADA': 'cardano',
-	'DOT': 'polkadot',
-	'DOGE': 'dogecoin',
-	'SHIB': 'shiba-inu',
-	'UNI': 'uniswap',
-	'LINK': 'chainlink'
+	BTC: 'bitcoin',
+	ETH: 'ethereum',
+	USDC: 'usd-coin',
+	USDT: 'tether',
+	DAI: 'dai',
+	SOL: 'solana',
+	MATIC: 'matic-network',
+	AVAX: 'avalanche-2',
+	BNB: 'binancecoin',
+	XRP: 'ripple',
+	ADA: 'cardano',
+	DOT: 'polkadot',
+	DOGE: 'dogecoin',
+	SHIB: 'shiba-inu',
+	UNI: 'uniswap',
+	LINK: 'chainlink'
 };
 
 // Cache for coin list to avoid repeated API calls
@@ -45,6 +45,29 @@ let lastRequestTime = 0;
 const MIN_REQUEST_INTERVAL = 200; // 200ms between requests (max 5 req/sec)
 
 /**
+ * Get the API URL with fallback to free tier
+ */
+function getApiUrl(): string {
+	return PUBLIC_COINGECKO_API_URL || 'https://api.coingecko.com/api/v3';
+}
+
+/**
+ * Get headers with optional API key
+ */
+function getHeaders(): Record<string, string> {
+	const headers: Record<string, string> = {
+		'Content-Type': 'application/json'
+	};
+
+	// Only add API key if it exists
+	if (PRIVATE_COINGECKO_API_KEY && PRIVATE_COINGECKO_API_KEY.trim()) {
+		headers['X-CG-Pro-API-Key'] = PRIVATE_COINGECKO_API_KEY;
+	}
+
+	return headers;
+}
+
+/**
  * Fetches the coin list from CoinGecko API and finds the ID for a given symbol
  *
  * @param symbol - The symbol to look up (e.g., 'BTC', 'ETH')
@@ -52,28 +75,26 @@ const MIN_REQUEST_INTERVAL = 200; // 200ms between requests (max 5 req/sec)
  */
 async function getCoinIdFromSymbol(symbol: string): Promise<string> {
 	const upperSymbol = symbol.toUpperCase();
-	
+
 	// Check common coins mapping first to avoid API calls
 	if (COMMON_COIN_IDS[upperSymbol]) {
 		return COMMON_COIN_IDS[upperSymbol];
 	}
-	
+
 	const now = Date.now();
-	
+
 	// Fetch or use cached coin list
 	if (!coinListCache || now - coinListTimestamp > COIN_LIST_TTL) {
 		try {
-			const apiUrl = `${PUBLIC_COINGECKO_API_URL}/coins/list`;
+			const apiUrl = `${getApiUrl()}/coins/list`;
 			const response = await fetch(apiUrl, {
-				headers: {
-					'X-CG-Pro-API-Key': PRIVATE_COINGECKO_API_KEY
-				}
+				headers: getHeaders()
 			});
-			
+
 			if (!response.ok) {
 				throw new Error(`CoinGecko API error: ${response.status} ${response.statusText}`);
 			}
-			
+
 			const data = await response.json();
 			coinListCache = Array.isArray(data) ? data : [];
 			coinListTimestamp = now;
@@ -84,25 +105,21 @@ async function getCoinIdFromSymbol(symbol: string): Promise<string> {
 			return symbol.toLowerCase();
 		}
 	}
-	
+
 	// Find the coin by symbol
 	if (coinListCache && coinListCache.length > 0) {
 		// First try exact match
-		const exactMatch = coinListCache.find(coin => 
-			coin.symbol.toUpperCase() === upperSymbol
-		);
-		
+		const exactMatch = coinListCache.find((coin) => coin.symbol.toUpperCase() === upperSymbol);
+
 		if (exactMatch) return exactMatch.id;
-		
+
 		// If multiple coins have the same symbol, prioritize by market cap or popularity
 		// For now, we'll just take the first match as a simple approach
-		const matches = coinListCache.filter(coin => 
-			coin.symbol.toUpperCase() === upperSymbol
-		);
-		
+		const matches = coinListCache.filter((coin) => coin.symbol.toUpperCase() === upperSymbol);
+
 		if (matches.length > 0) return matches[0].id;
 	}
-	
+
 	// Fallback to using the symbol itself
 	return symbol.toLowerCase();
 }
@@ -136,41 +153,40 @@ export const GET: RequestHandler = async ({ url }) => {
 			if (timeSinceLastRequest < MIN_REQUEST_INTERVAL) {
 				// Wait to respect rate limit
 				const delay = MIN_REQUEST_INTERVAL - timeSinceLastRequest;
-				await new Promise(resolve => setTimeout(resolve, delay));
+				await new Promise((resolve) => setTimeout(resolve, delay));
 			}
 		}
-		
+
 		// Get coin ID from symbol using the CoinGecko API
 		const coinId = await getCoinIdFromSymbol(symbol);
 
 		// Build URL with API key
-		const apiUrl = `${PUBLIC_COINGECKO_API_URL}/simple/price?ids=${coinId}&vs_currencies=usd`;
-		
+		const apiUrl = `${getApiUrl()}/simple/price?ids=${coinId}&vs_currencies=usd`;
+
 		// Make authenticated request
 		const response = await fetch(apiUrl, {
-			headers: {
-				'X-CG-Pro-API-Key': PRIVATE_COINGECKO_API_KEY
-			}
+			headers: getHeaders()
 		});
-		
+
 		// Update last request time for rate limiting
 		lastRequestTime = Date.now();
 
 		if (!response.ok) {
 			// Provide more detailed error information for the client
-			const errorMessage = response.status === 429 
-				? 'CoinGecko rate limit exceeded. Please try again later.'
-				: `CoinGecko API error: ${response.statusText}`;
-			
+			const errorMessage =
+				response.status === 429
+					? 'CoinGecko rate limit exceeded. Please try again later.'
+					: `CoinGecko API error: ${response.statusText}`;
+
 			console.error(`CoinGecko API error for ${symbol}: ${response.status} ${response.statusText}`);
 			throw error(response.status, errorMessage);
 		}
 
 		const data = await response.json();
-		
+
 		// Debug log the full response
 		console.log(`CoinGecko API response for ${symbol} (${coinId}):`, JSON.stringify(data, null, 2));
-		
+
 		// Handle case where coin ID is not found in response
 		if (!data[coinId]) {
 			console.error(`Coin ID '${coinId}' not found in CoinGecko response for symbol '${symbol}'`);
@@ -184,10 +200,10 @@ export const GET: RequestHandler = async ({ url }) => {
 		}
 
 		const price = data[coinId].usd;
-		
+
 		// Cache the result
 		priceCache[cacheKey] = { price, timestamp: now };
-		
+
 		return json({ price });
 	} catch (err) {
 		console.error('Error fetching price data:', err);
