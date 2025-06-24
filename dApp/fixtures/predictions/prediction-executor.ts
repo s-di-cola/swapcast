@@ -1,8 +1,12 @@
-import {MarketCreationResult} from '../markets';
-import {logSuccess, logWarning, withRetry} from '../utils/error';
-import {OUTCOME_BEARISH, OUTCOME_BULLISH, recordPredictionViaSwap} from './prediction-swap';
-import {ensureWhaleHasTokens, getMarketTokens, validateWhaleBalanceForSwap, WhaleAccount} from '../utils/whales';
-import {calculateFee, validateMarket} from './prediction-core';
+import { MarketCreationResult } from '../markets';
+import { logSuccess, logWarning, withRetry } from '../utils/error';
+import { ensureWhaleHasTokens, getMarketTokens, validateWhaleBalanceForSwap, WhaleAccount } from '../utils/whales';
+import { calculateFee, validateMarket } from './prediction-core';
+import {
+    OUTCOME_BEARISH,
+    OUTCOME_BULLISH,
+    recordPredictionViaSwapWithRealisticAmount
+} from './prediction-swap';
 
 /**
  * Records a single prediction for a whale account
@@ -56,7 +60,7 @@ const recordSinglePrediction = async (
 
         // Pick randomly from valid outcomes
         const outcome = validOutcomes[Math.floor(Math.random() * validOutcomes.length)];
-        await recordPredictionViaSwap(
+        await recordPredictionViaSwapWithRealisticAmount(
             whale.address,
             market.pool,
             BigInt(market.id),
