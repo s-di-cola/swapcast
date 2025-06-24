@@ -1,16 +1,17 @@
 <script lang="ts">
+	import { PUBLIC_TREASURY_ADDRESS } from '$env/static/public';
+	import { getCurrentNetworkConfig } from '$lib/utils/network';
 	import { onMount } from 'svelte';
+	import { createPublicClient, http } from 'viem';
 	import AdminAnalyticsChart from './AdminAnalyticsChart.svelte';
-	import { executeQuery } from '$lib/services/subgraph';
-	import { GET_ANALYTICS_DATA } from '$lib/services/subgraph/queries';
-	import { getDateRangeForAnalytics } from '$lib/utils/analytics';
+	import { formatEth } from '$lib/utils/formatter';
 
 	interface LegendItem {
 		color: string;
 		label: string;
 	}
 
-	let treasuryBalance = $state(0);
+	let treasuryBalance = $state('0');
 	let selectedTimeRange = $state<'7d' | '30d'>('7d');
 
 	const LEGEND_ITEMS: LegendItem[] = [
@@ -22,36 +23,22 @@
 		await fetchTreasuryBalance();
 	});
 
-	interface AnalyticsResponse {
-		globalStats: Array<{
-			totalMarkets: string;
-			totalPredictions: string;
-			totalStaked: string;
-		}>;
-		markets: any[];
-		predictions: any[];
-	}
-
 	async function fetchTreasuryBalance() {
-		try {
-			// Get date range for query
-			const { startTimestamp, endTimestamp } = getDateRangeForAnalytics(30); // Last 30 days
-
-			// Fetch data from subgraph
-			const response = await executeQuery<AnalyticsResponse>(GET_ANALYTICS_DATA, {
-				startTimestamp,
-				endTimestamp
+        try {
+			const { chain , rpcUrl} = getCurrentNetworkConfig();
+            const publicClient = createPublicClient({
+				chain,
+				transport: http(rpcUrl)
 			});
-
-			if (response?.globalStats?.[0]?.totalStaked) {
-				// Convert from wei to ETH and format to 2 decimal places
-				const totalStaked = parseFloat(response.globalStats[0].totalStaked) / 1e18;
-				treasuryBalance = parseFloat(totalStaked.toFixed(2));
-			}
-		} catch (error) {
-			console.error('Error fetching treasury balance:', error);
-		}
-	}
+            const balance = await publicClient.getBalance({
+                address: PUBLIC_TREASURY_ADDRESS
+            });
+            
+             treasuryBalance = formatEth(balance,{fromWei: true});
+        } catch (error) {
+            console.error('Error fetching treasury balance:', error);
+        }
+    }
 
 	function setTimeRange(range: '7d' | '30d'): void {
 		selectedTimeRange = range;
