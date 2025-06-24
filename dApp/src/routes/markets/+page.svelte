@@ -31,6 +31,9 @@
 	// Search state
 	let searchQuery = $state('');
 
+	// Filter state
+	let hideResolvedMarkets = $state(false);
+
 	// Markets loading state
 	let isLoading = $state(true);
 	let loadError = $state<string | null>(null);
@@ -111,22 +114,33 @@
 		}
 	}
 
-	// Filter markets based on search query
+	// State for filtered markets
 	let filteredMarkets: Market[] = $state([]);
 
+	// Filter markets based on search query and resolved filter
 	$effect(() => {
 		if (!marketData?.markets) {
 			filteredMarkets = [];
 			return;
 		}
 
-		filteredMarkets = searchQuery
-			? marketData.markets.filter(
-					(market) =>
-						market.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-						market.assetPair.toLowerCase().includes(searchQuery.toLowerCase())
-				)
-			: marketData.markets;
+		let results = [...marketData.markets];
+
+		// Apply resolved filter if enabled
+		if (hideResolvedMarkets) {
+			results = results.filter(market => market.status !== 'Resolved');
+		}
+
+		// Apply search filter
+		if (searchQuery) {
+			results = results.filter(market =>
+				`${market.name} ${market.assetSymbol} ${market.assetPair}`
+					.toLowerCase()
+					.includes(searchQuery.toLowerCase())
+			);
+		}
+
+		filteredMarkets = results;
 	});
 
 	// Pagination handlers
@@ -312,6 +326,13 @@
 									<span class="sr-only">List view</span>
 								</button>
 							</div>
+
+							<!-- Hide Resolved Markets Toggle -->
+							<label class="relative ml-2 inline-flex cursor-pointer items-center">
+								<input type="checkbox" class="peer sr-only" bind:checked={hideResolvedMarkets} />
+								<div class="peer h-6 w-11 rounded-full bg-gray-200 after:absolute after:left-[2px] after:top-[2px] after:h-5 after:w-5 after:rounded-full after:border after:border-gray-300 after:bg-white after:transition-all after:content-[''] peer-checked:bg-indigo-600 peer-checked:after:translate-x-full peer-checked:after:border-white peer-focus:outline-none peer-focus:ring-2 peer-focus:ring-indigo-500"></div>
+								<span class="ml-2 text-sm font-medium text-gray-700">Hide Resolved</span>
+							</label>
 						</div>
 
 						<!-- Market grid or list using MarketCard components with loading states -->
