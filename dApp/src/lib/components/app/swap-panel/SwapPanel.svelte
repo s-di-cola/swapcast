@@ -828,7 +828,7 @@
             isSubmitting = false;
             showConfirmationModal = false;
             setTimeout(() => {
-                goto('/app');
+                goto('/my-predictions');
             }, 100);
         }
     }
