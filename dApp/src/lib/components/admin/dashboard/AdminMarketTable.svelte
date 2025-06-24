@@ -1,7 +1,5 @@
 <script lang="ts">
-	import { formatCurrency } from '$lib/helpers/formatters';
-	import type { Market } from '$lib/services/market';
-	import type { MarketSortField, SortDirection } from '$lib/services/market';
+	import type { Market, MarketSortField, SortDirection } from '$lib/services/market';
 
 	interface Props {
 		markets?: Market[];

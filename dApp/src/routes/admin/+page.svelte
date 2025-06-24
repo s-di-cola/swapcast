@@ -1,20 +1,20 @@
 <script lang="ts">
 	import {
-		getAllMarkets,
-		getActiveMarketsCount,
-		type Market,
-		type MarketSortField,
-		type SortDirection,
-		type MarketPaginationOptions
-	} from '$lib/services/market';
+		AdminAnalyticsSection,
+		AdminMarketTable,
+		AdminSummaryCards
+	} from '$lib/components/admin/dashboard';
 	import { CreateMarketModal, MarketDetailsModal } from '$lib/components/admin/market';
 	import {
-		AdminSummaryCards,
-		AdminAnalyticsSection,
-		AdminMarketTable
-	} from '$lib/components/admin/dashboard';
+		getActiveMarketsCount,
+		getAllMarkets,
+		type Market,
+		type MarketPaginationOptions,
+		type MarketSortField,
+		type SortDirection
+	} from '$lib/services/market';
+	import { getGlobalStats } from '$lib/services/subgraph';
 	import { toastStore } from '$lib/stores/toastStore';
-	import { formatCurrency } from '$lib/helpers/formatters';
 
 	interface DashboardState {
 		markets: Market[];
@@ -108,44 +108,20 @@
 	}
 
 	/**
-	 * Calculate total stake for the markets provided
+	 * Get total staked amount across all markets from the subgraph
+	 * @returns Total staked amount in ETH
 	 */
-	function calculateTotalStake(markets: Market[]): number {
-		return markets.reduce((sum: number, market: Market) => {
-			// Convert bigint values to number if necessary and ensure we have numbers
-			const stake0 =
-				typeof market.totalStake0 === 'bigint'
-					? Number(market.totalStake0) / 1e18
-					: Number(market.totalStake0 || 0) / 1e18;
-
-			const stake1 =
-				typeof market.totalStake1 === 'bigint'
-					? Number(market.totalStake1) / 1e18
-					: Number(market.totalStake1 || 0) / 1e18;
-
-			return sum + stake0 + stake1;
-		}, 0);
-	}
-
-	/**
-	 * Calculate total stake across ALL markets, not just the paginated ones
-	 */
-	async function calculateTotalStakeAcrossAllMarkets(): Promise<number> {
+	async function getTotalStakedFromSubgraph(): Promise<number> {
 		try {
-			// Get the total market count first
-			const count = dashboardState.marketCount || 0;
-
-			// Use a page size that will fit all markets (or 100 as a reasonable maximum)
-			const pageSize = count > 0 ? Math.min(count, 100) : 50;
-
-			// Get all markets in a single request
-			const allMarketsResult = await getAllMarkets({
-				page: 1,
-				pageSize
-			});
-			return calculateTotalStake(allMarketsResult.markets);
+			const globalStats = await getGlobalStats();
+			if (!globalStats) {
+				console.warn('No global stats available from subgraph');
+				return 0;
+			}
+			// Convert from wei to ETH
+			return parseFloat(globalStats.totalStaked) / 1e18;
 		} catch (error) {
-			console.error('Error calculating total stake across all markets:', error);
+			console.error('Error fetching total staked from subgraph:', error);
 			return 0;
 		}
 	}
@@ -162,12 +138,14 @@
 				sortDirection: paginationState.sortDirection
 			};
 
-			// Get paginated markets, active count, and total stake across all markets
-			const [paginatedResult, activeCount, totalStakeAcrossAll] = await Promise.all([
+			// Get paginated markets and active count in parallel
+			const [paginatedResult, activeCount] = await Promise.all([
 				getAllMarkets(paginationOptions),
-				getActiveMarketsCount(),
-				calculateTotalStakeAcrossAllMarkets()
+				getActiveMarketsCount()
 			]);
+
+			// Get total stake from subgraph
+			const totalStakeAcrossAll = await getTotalStakedFromSubgraph();
 
 			dashboardState.markets = paginatedResult.markets;
 			dashboardState.marketCount = paginatedResult.totalCount;

@@ -39,7 +39,8 @@ export {
 	getAllMarketsFromSubgraph,
 	searchMarkets,
 	getMarketStatistics,
-	batchGetMarkets
+	batchGetMarkets,
+	getGlobalStats
 } from './operations';
 
 // Re-export utility functions
@@ -66,5 +67,6 @@ export {
 	GET_MARKET_STATS,
 	GET_RECENT_PREDICTIONS,
 	GET_ALL_MARKETS,
-	SEARCH_MARKETS
+	SEARCH_MARKETS,
+	GET_GLOBAL_STATS
 } from './queries';

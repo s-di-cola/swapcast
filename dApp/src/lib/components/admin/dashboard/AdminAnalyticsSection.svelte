@@ -1,8 +1,6 @@
 <script lang="ts">
-	import { PUBLIC_TREASURY_ADDRESS } from '$env/static/public';
-	import { getCurrentNetworkConfig } from '$lib/utils/network';
 	import { onMount } from 'svelte';
-	import { createPublicClient, http } from 'viem';
+	import { getGlobalStats } from '$lib/services/subgraph';
 	import AdminAnalyticsChart from './AdminAnalyticsChart.svelte';
 	import { formatEth } from '$lib/utils/formatter';
 
@@ -20,25 +18,26 @@
 	] as const;
 
 	onMount(async () => {
-		await fetchTreasuryBalance();
+		await fetchProtocolFees();
 	});
 
-	async function fetchTreasuryBalance() {
-        try {
-			const { chain , rpcUrl} = getCurrentNetworkConfig();
-            const publicClient = createPublicClient({
-				chain,
-				transport: http(rpcUrl)
-			});
-            const balance = await publicClient.getBalance({
-                address: PUBLIC_TREASURY_ADDRESS
-            });
-            
-             treasuryBalance = formatEth(balance,{fromWei: true});
-        } catch (error) {
-            console.error('Error fetching treasury balance:', error);
-        }
-    }
+	/**
+	 * Fetches total protocol fees from subgraph global stats
+	 */
+	async function fetchProtocolFees() {
+		try {
+			const globalStats = await getGlobalStats();
+			if (globalStats) {
+				treasuryBalance = formatEth(globalStats.totalProtocolFees, { fromWei: true });
+			} else {
+				console.warn('No global stats available');
+				treasuryBalance = '0';
+			}
+		} catch (error) {
+			console.error('Error fetching protocol fees:', error);
+			treasuryBalance = '0';
+		}
+	}
 
 	function setTimeRange(range: '7d' | '30d'): void {
 		selectedTimeRange = range;
