@@ -12,7 +12,6 @@
     - [PredictionTypes](src/types/PredictionTypes.sol/contract.PredictionTypes.md)
   - [MarketLogic](src/MarketLogic.sol/library.MarketLogic.md)
   - [OracleResolver](src/OracleResolver.sol/contract.OracleResolver.md)
-  - [PoolStateReader](src/PoolStateReader.sol/contract.PoolStateReader.md)
   - [PredictionManager](src/PredictionManager.sol/contract.PredictionManager.md)
   - [RewardDistributor](src/RewardDistributor.sol/contract.RewardDistributor.md)
   - [SwapCastHook](src/SwapCastHook.sol/contract.SwapCastHook.md)

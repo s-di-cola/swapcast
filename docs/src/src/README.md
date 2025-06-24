@@ -5,7 +5,6 @@
 - [types](/src/types)
 - [MarketLogic](MarketLogic.sol/library.MarketLogic.md)
 - [OracleResolver](OracleResolver.sol/contract.OracleResolver.md)
-- [PoolStateReader](PoolStateReader.sol/contract.PoolStateReader.md)
 - [PredictionManager](PredictionManager.sol/contract.PredictionManager.md)
 - [RewardDistributor](RewardDistributor.sol/contract.RewardDistributor.md)
 - [SwapCastHook](SwapCastHook.sol/contract.SwapCastHook.md)

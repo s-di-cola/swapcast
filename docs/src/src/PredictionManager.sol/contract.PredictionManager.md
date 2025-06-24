@@ -1,5 +1,5 @@
 # PredictionManager
-[Git Source](https://github.com/s-di-cola/swapcast/blob/9b6b46be02650f9c58e274852b090b12fb64d452/src/PredictionManager.sol)
+[Git Source](https://github.com/s-di-cola/swapcast/blob/88d8bde27d6b1e5a64749c80e888344e6f0fdadc/src/PredictionManager.sol)
 
 **Inherits:**
 Ownable, [IPredictionManager](/src/interfaces/IPredictionManager.sol/interface.IPredictionManager.md), [IPredictionManagerForResolver](/src/interfaces/IPredictionManagerForResolver.sol/interface.IPredictionManagerForResolver.md), [IPredictionManagerForDistributor](/src/interfaces/IPredictionManagerForDistributor.sol/interface.IPredictionManagerForDistributor.md), ILogAutomation, AutomationCompatibleInterface, IERC721Receiver
@@ -104,6 +104,13 @@ mapping(uint256 => uint256) public marketMinStakes;
 
 ```solidity
 mapping(uint256 => PoolKey) public marketIdToPoolKey;
+```
+
+
+### tokenIdToMarketId
+
+```solidity
+mapping(uint256 => uint256) public tokenIdToMarketId;
 ```
 
 
@@ -277,6 +284,7 @@ Records a prediction for a user on a specific market.
 2. Calculating and transferring protocol fees
 3. Minting an NFT representing the prediction position
 4. Updating market state with the new prediction
+5. Storing the tokenId to marketId mapping
 The function uses the MarketLogic library for core prediction logic.*
 
 **Notes:**
@@ -360,7 +368,8 @@ The function performs the following steps:
 1. Retrieves the prediction details from the NFT
 2. Validates that the market exists
 3. Calls the MarketLogic library to handle the reward claim logic
-4. Emits a RewardClaimed event with the reward amount*
+4. Cleans up the tokenId mapping after successful claim
+5. Emits a RewardClaimed event with the reward amount*
 
 **Notes:**
 - reverts: NotRewardDistributor If called by an address other than the authorized reward distributor.
@@ -435,6 +444,66 @@ function getMarketIdAtIndex(uint256 _index) external view returns (uint256);
 ```solidity
 function getActiveMarkets() external view returns (uint256[] memory);
 ```
+
+### getMarketIdByTokenId
+
+Gets the market ID associated with a given NFT token ID.
+
+
+```solidity
+function getMarketIdByTokenId(uint256 _tokenId) external view returns (uint256);
+```
+**Parameters**
+
+|Name|Type|Description|
+|----|----|-----------|
+|`_tokenId`|`uint256`|The ID of the SwapCastNFT token.|
+
+**Returns**
+
+|Name|Type|Description|
+|----|----|-----------|
+|`<none>`|`uint256`|The market ID associated with the token, or 0 if not found.|
+
+
+### getPredictionDetailsByTokenId
+
+Gets comprehensive prediction details for a given NFT token ID.
+
+*This function combines data from both the NFT contract and the market mapping
+to provide complete prediction information in a single call.*
+
+
+```solidity
+function getPredictionDetailsByTokenId(uint256 _tokenId)
+    external
+    view
+    returns (
+        uint256 marketId,
+        PredictionTypes.Outcome outcome,
+        uint256 convictionStake,
+        address owner,
+        bool isResolved,
+        PredictionTypes.Outcome winningOutcome
+    );
+```
+**Parameters**
+
+|Name|Type|Description|
+|----|----|-----------|
+|`_tokenId`|`uint256`|The ID of the SwapCastNFT token.|
+
+**Returns**
+
+|Name|Type|Description|
+|----|----|-----------|
+|`marketId`|`uint256`|The market ID associated with the prediction.|
+|`outcome`|`PredictionTypes.Outcome`|The predicted outcome (Bullish or Bearish).|
+|`convictionStake`|`uint256`|The amount staked on this prediction.|
+|`owner`|`address`|The current owner of the NFT.|
+|`isResolved`|`bool`|Whether the associated market has been resolved.|
+|`winningOutcome`|`PredictionTypes.Outcome`|The winning outcome if the market is resolved (undefined if not resolved).|
+
 
 ### checkLog
 
