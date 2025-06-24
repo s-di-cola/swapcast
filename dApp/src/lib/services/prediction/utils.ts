@@ -133,3 +133,76 @@ export function groupClaimableRewards(predictions: UserPrediction[]): ClaimableR
 
   return claimable;
 }
+
+export function formatAmount(amount: string | number): string {
+  try {
+    const num = typeof amount === 'string' ? parseFloat(amount) : amount;
+    return isNaN(num) ? '0.0000' : num.toFixed(4);
+  } catch (err) {
+    console.error('Amount formatting error:', err);
+    return '0.0000';
+  }
+}
+
+export function getOutcomeLabel(outcome: string): string {
+  switch (outcome) {
+    case 'above': return 'Bullish';
+    case 'below': return 'Bearish';
+    default: return 'Pending';
+  }
+}
+
+export function getOutcomeColor(outcome: string): string {
+  switch (outcome) {
+    case 'above': return 'bg-green-100 text-green-800';
+    case 'below': return 'bg-red-100 text-red-800';
+    default: return 'bg-gray-100 text-gray-800';
+  }
+}
+
+export function getStatusColor(prediction: any): string {
+  if (!prediction.marketIsResolved) return 'bg-yellow-100 text-yellow-800';
+  if (prediction.isWinning) return 'bg-green-100 text-green-800';
+  return 'bg-red-100 text-red-800';
+}
+
+export function getStatusText(prediction: any): string {
+  if (!prediction.marketIsResolved) return 'Pending';
+  if (prediction.marketWinningOutcome) {
+    return prediction.isWinning ? 'Won' : 'Lost';
+  }
+  return 'Pending';
+}
+
+export function estimateUSDValue(ethAmount: string, ethPrice: number = 2000): string {
+  try {
+    const amount = parseFloat(ethAmount);
+    return isNaN(amount) ? '0.00' : (amount * ethPrice).toFixed(2);
+  } catch (err) {
+    console.error('USD value estimation error:', err);
+    return '0.00';
+  }
+}
+
+export function getMarketDisplayName(prediction: any): string {
+  try {
+    const desc = prediction.marketDescription;
+    if (desc && desc.includes('/')) {
+      return desc.split(' ')[0] || desc;
+    }
+    return desc || `Market #${prediction.marketId}`;
+  } catch (err) {
+    console.error('Market name formatting error:', err);
+    return `Market #${prediction.marketId}`;
+  }
+}
+
+export function getMarketInitial(prediction: any): string {
+  try {
+    const name = getMarketDisplayName(prediction);
+    return name.charAt(0).toUpperCase();
+  } catch (err) {
+    console.error('Market initial formatting error:', err);
+    return 'M';
+  }
+}

@@ -11,23 +11,39 @@
 
 // Core operations
 export {
-  fetchUserPredictions,
-  claimReward,
-  fetchUserPredictionStats,
-  fetchClaimableRewards,
+    fetchUserPredictions,
+    claimReward,
+    fetchUserPredictionStats,
+    fetchClaimableRewards,
 } from './operations';
 
 // Types
 export type {
-  UserPrediction,
-  ClaimableReward,
-  PredictionStats,
-  ClaimRewardParams
+    UserPrediction,
+    ClaimableReward,
+    PredictionStats,
+    ClaimRewardParams
 } from './types';
 
-// Internal utilities (only expose what's needed by the frontend)
+// Internal utilities
 export {
-  calculateClaimableRewards,
-  groupClaimableRewards,
-  mapOutcome
+    calculateClaimableRewards,
+    groupClaimableRewards,
+    mapOutcome,
+    getMarketInitial,
+    getMarketDisplayName,
+    getOutcomeLabel,
+    getStatusText,
+    formatDate,
+    formatAmount,
+    estimateUSDValue,
+    getStatusColor,
+    getOutcomeColor
 } from './utils';
+
+
+// Handlers
+export{
+    setupChunkErrorHandling,
+    isChunkLoadError
+} from './handlers';
