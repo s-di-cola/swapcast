@@ -1,6 +1,6 @@
 <script lang="ts">
   import { appKit } from '$lib/configs/wallet.config';
-  import { batchClaimRewards, claimReward, fetchUserPredictions, fetchUserPredictionStats } from '$lib/services/prediction';
+  import {claimReward, fetchUserPredictions, fetchUserPredictionStats } from '$lib/services/prediction';
   import type { PredictionStats, UserPrediction } from '$lib/services/prediction/types';
   import { toastStore } from '$lib/stores/toastStore';
   import { onMount } from 'svelte';
@@ -23,7 +23,10 @@
   // Non-reactive state for connection
   let isConnected = $state(false);
   let userAddress = $state('');
-  
+
+  // Claiming state
+  let claimingTokenIds = $state(new Set<string>());
+
   // Derived state (non-reactive to appKit)
   const totalPages = $derived(Math.ceil(positions.length / itemsPerPage));
   const paginatedPositions = $derived(() => {
@@ -50,20 +53,20 @@
   onMount(async () => {
     // Initial connection check
     updateConnectionStatus();
-    
+
     // Set up wallet event listeners
     if (appKit) {
       appKit.subscribeAccount((account) => {
         const wasConnected = isConnected;
         updateConnectionStatus();
-        
+
         // Only reload data if connection status changed or address changed
         if (isConnected && (!wasConnected || userAddress !== account?.address)) {
           loadDataWithRetry();
         }
       });
     }
-    
+
     // Load initial data if connected
     if (isConnected) {
       await loadDataWithRetry();
@@ -79,12 +82,12 @@
         console.log(`Chunk load failed, retrying... (${retryCount}/${maxRetries})`);
         // Wait a bit before retrying
         await new Promise(resolve => setTimeout(resolve, 1000 * retryCount));
-        
+
         // Clear any cached modules that might be causing issues
         if ('webpackChunkName' in window) {
           delete (window as any).webpackChunkName;
         }
-        
+
         await loadDataWithRetry();
       } else {
         throw err;
@@ -94,7 +97,7 @@
 
   function isChunkLoadError(err: any): boolean {
     const errorMessage = err?.message?.toLowerCase() || '';
-    return errorMessage.includes('loading chunk') || 
+    return errorMessage.includes('loading chunk') ||
            errorMessage.includes('loading css chunk') ||
            errorMessage.includes('chunk load failed') ||
            errorMessage.includes('loading module');
@@ -112,7 +115,7 @@
       error = null;
 
       // Add timeout and retry logic for API calls
-      const timeout = new Promise((_, reject) => 
+      const timeout = new Promise((_, reject) =>
         setTimeout(() => reject(new Error('Request timeout')), 30000)
       );
 
@@ -131,11 +134,11 @@
         totalClaimed: '0',
         claimableAmount: '0'
       };
-      
+
       console.log('Loaded data:', { positions, stats });
     } catch (err) {
       console.error('Failed to load data:', err);
-      
+
       if (isChunkLoadError(err)) {
         error = 'Failed to load required resources. Please refresh the page.';
         toastStore.error('Page resources failed to load. Please refresh and try again.');
@@ -197,54 +200,59 @@
     return prediction.marketIsResolved;
   }
 
+  // Fixed handleClaimReward function to match the service API
   async function handleClaimReward(tokenId: string) {
-    if (!tokenId) {
-      toastStore.error('Invalid token ID');
+    if (!tokenId || claimingTokenIds.has(tokenId)) {
+      toastStore.error('Invalid token ID or already claiming');
       return;
     }
 
     try {
-      await claimReward({ 
-        tokenId,
-        onSuccess: () => {
-          toastStore.success('Reward claimed successfully!');
-          loadDataWithRetry(); // Use retry version
-        },
-        onError: (error) => {
-          console.error('Failed to claim reward:', error);
-          toastStore.error('Failed to claim reward');
-        }
-      });
+      // Add to claiming set to prevent duplicate claims
+      claimingTokenIds.add(tokenId);
+      toastStore.info('Processing claim transaction...');
+
+      // Call the service function with just the tokenId
+      const result = await claimReward(tokenId);
+
+      if (result.success) {
+        toastStore.success(`Claim successful: ${result.hash?.slice(0, 10)}...`);
+        // Update the position immediately
+        positions = positions.map(p =>
+          p.tokenId === tokenId ? { ...p, claimed: true } : p
+        );
+        // Refresh data after successful claim
+        setTimeout(loadDataWithRetry, 2000);
+      } else {
+        toastStore.error(result.error || 'Failed to claim reward');
+      }
     } catch (err) {
       console.error('Failed to claim reward:', err);
-      if (isChunkLoadError(err)) {
-        toastStore.error('Failed to load claim interface. Please refresh and try again.');
-      } else {
-        toastStore.error('Failed to claim reward');
-      }
+      const errorMessage = err instanceof Error ? err.message : 'Unknown error occurred';
+      toastStore.error(`Failed to claim reward: ${errorMessage}`);
+    } finally {
+      // Remove from claiming set
+      claimingTokenIds.delete(tokenId);
     }
   }
 
+  // Simplified claimAllRewards function
   async function claimAllRewards() {
-    const claimableTokenIds = positions
-      .filter(p => p.isWinning && !p.claimed && p.tokenId)
-      .map(p => p.tokenId!)
-      .filter(Boolean);
+    const claimablePositions = positions.filter(p => p.isWinning && !p.claimed && p.tokenId);
 
-    if (claimableTokenIds.length === 0) {
+    if (claimablePositions.length === 0) {
       toastStore.warning('No rewards to claim');
       return;
     }
 
-    try {
-      await batchClaimRewards(claimableTokenIds);
-      await loadDataWithRetry(); // Use retry version
-    } catch (err) {
-      console.error('Failed to claim rewards:', err);
-      if (isChunkLoadError(err)) {
-        toastStore.error('Failed to load claim interface. Please refresh and try again.');
-      } else {
-        toastStore.error('Failed to claim some rewards');
+    toastStore.info(`Claiming ${claimablePositions.length} rewards...`);
+
+    // Claim each reward individually since we don't have batch claiming
+    for (const position of claimablePositions) {
+      if (position.tokenId) {
+        await handleClaimReward(position.tokenId);
+        // Small delay between claims to avoid overwhelming the network
+        await new Promise(resolve => setTimeout(resolve, 1000));
       }
     }
   }
@@ -364,14 +372,14 @@
         <div class="ml-3">
           <p class="text-sm text-red-700">{error}</p>
           <div class="mt-2 flex gap-2">
-            <button 
+            <button
               onclick={loadDataWithRetry}
               class="text-sm text-red-800 underline hover:text-red-900"
             >
               Try again
             </button>
             {#if error.includes('resources') || error.includes('chunk')}
-              <button 
+              <button
                 onclick={handleChunkError}
                 class="text-sm text-red-800 underline hover:text-red-900"
               >
@@ -455,9 +463,7 @@
                   <th scope="col" class="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Amount</th>
                   <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Date</th>
                   <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
-                  <th scope="col" class="relative px-6 py-3">
-                    <span class="sr-only">Actions</span>
-                  </th>
+                  <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
                 </tr>
               </thead>
               <tbody class="divide-y divide-gray-200 bg-white">
@@ -505,9 +511,10 @@
                       {#if isMarketResolved(position) && position.isWinning && !position.claimed && position.tokenId}
                         <button
                           onclick={() => handleClaimReward(position.tokenId!)}
-                          class="text-indigo-600 hover:text-indigo-900"
+                          disabled={claimingTokenIds.has(position.tokenId!)}
+                          class="inline-flex items-center rounded-md bg-blue-600 px-2 py-1 text-xs font-medium text-white hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed"
                         >
-                          Claim Rewards
+                          {claimingTokenIds.has(position.tokenId!) ? 'Claiming...' : 'Claim'}
                         </button>
                       {:else if position.claimed}
                         <span class="inline-flex items-center text-sm text-gray-500">
@@ -517,7 +524,9 @@
                           Claimed
                         </span>
                       {:else}
-                        <span class="text-gray-400">—</span>
+                        <div class="flex items-center justify-start h-full">
+                          <span class="text-sm text-gray-500">Waiting for resolution</span>
+                        </div>
                       {/if}
                     </td>
                   </tr>
