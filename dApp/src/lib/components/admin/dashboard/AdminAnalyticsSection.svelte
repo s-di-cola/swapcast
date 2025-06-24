@@ -63,7 +63,7 @@
 			</div>
 
 			<div class="text-right">
-				<h3 class="text-2xl font-bold text-gray-900">{treasuryBalance} ETH</h3>
+				<h3 class="text-2xl font-bold text-gray-900">{treasuryBalance}</h3>
 				<p class="text-sm text-gray-500">Treasury Balance</p>
 			</div>
 		</div>
