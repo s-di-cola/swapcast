@@ -10,26 +10,58 @@ import {Pool} from "@uniswap/v4-sdk";
 import {Token} from "@uniswap/sdk-core";
 import {getProtocolConfig} from './prediction-core';
 
-/** Bullish market outcome */
+/**
+ * Numeric constant representing a bullish market outcome.
+ * @constant {number}
+ * @default 1
+ */
 export const OUTCOME_BULLISH = 1;
 
-/** Bearish market outcome */
+/**
+ * Numeric constant representing a bearish market outcome.
+ * @constant {number}
+ * @default 0
+ */
 export const OUTCOME_BEARISH = 0;
 
-/** Universal Router command for V4 swaps */
+/**
+ * Command code for V4 swaps in the Universal Router.
+ * @constant {number}
+ * @default 0x10
+ */
 const V4_SWAP_COMMAND = 0x10;
 
-/** V4Router action for exact input single swaps */
+/**
+ * Action code for exact input single swaps in V4Router.
+ * @constant {number}
+ * @default 0x06
+ */
 const SWAP_EXACT_IN_SINGLE = 0x06;
 
-/** V4Router action to settle all open positions */
+/**
+ * Action code to settle all open positions in V4Router.
+ * @constant {number}
+ * @default 0x0c
+ */
 const SETTLE_ALL = 0x0c;
 
-/** V4Router action to take all available assets */
+/**
+ * Action code to take all available assets in V4Router.
+ * @constant {number}
+ * @default 0x0f
+ */
 const TAKE_ALL = 0x0f;
 
 /**
- * Creates properly formatted hookData for the SwapCastHook
+ * Creates properly formatted hookData for the SwapCastHook.
+ * This data is encoded and passed to the hook during swap execution.
+ *
+ * @param {Address} userAddress - The address of the user making the prediction
+ * @param {bigint} marketId - The ID of the market being predicted on
+ * @param {number} outcome - The predicted outcome (0 for bearish, 1 for bullish)
+ * @param {bigint} stakeAmount - The amount being staked on the prediction (in wei)
+ * @returns {`0x${string}`} The encoded hook data as a hex string
+ * @throws {Error} If the stake amount exceeds uint128 maximum
  */
 function createPredictionHookData(
     userAddress: Address,
@@ -52,7 +84,11 @@ function createPredictionHookData(
 }
 
 /**
- * Calculate the total ETH amount needed for prediction
+ * Calculates the total ETH amount needed for a prediction including protocol fees.
+ *
+ * @param {bigint} stakeAmount - The base stake amount in wei
+ * @param {bigint} feeBasisPoints - The protocol fee in basis points (1/100th of a percent)
+ * @returns {bigint} The total ETH amount needed (stake + fee) in wei
  */
 function calculateTotalETHNeeded(stakeAmount: bigint, feeBasisPoints: bigint): bigint {
   const MAX_BASIS_POINTS = 10000n;
@@ -64,9 +100,18 @@ function calculateTotalETHNeeded(stakeAmount: bigint, feeBasisPoints: bigint): b
 }
 
 /**
- * Get token info from pool currency (handles both native ETH and ERC20)
+ * Extracts token information from a pool currency, handling both native ETH and ERC20 tokens.
+ *
+ * @param {any} currency - The currency object from the pool (can be Token or native currency)
+ * @returns {Object} Token information object with address, symbol, decimals, and isNative flag
  */
-function getTokenFromCurrency(currency: any) {
+function getTokenFromCurrency(currency: any): {
+  address: Address;
+  symbol: string;
+  decimals: number;
+  isNative: boolean;
+} {
+  // Handle native ETH case
   if (!currency.isToken) {
     return {
       address: NATIVE_ETH_ADDRESS,
@@ -76,17 +121,26 @@ function getTokenFromCurrency(currency: any) {
     };
   }
 
+  // Handle ERC20 token case
   const token = currency as Token;
   return {
     address: token.address as Address,
-    symbol: token.symbol,
+    symbol: token.symbol || 'UNKNOWN',
     decimals: token.decimals,
     isNative: false
   };
 }
 
 /**
- * Validates token balance
+ * Validates if a user has sufficient token balance for a transaction.
+ *
+ * @param {Address} userAddress - The address of the user to check balance for
+ * @param {ReturnType<typeof getTokenFromCurrency>} tokenInfo - Token information object
+ * @param {bigint} requiredAmount - The minimum required token amount in wei
+ * @returns {Promise<{valid: boolean, balance: bigint, formatted: string}>} Object containing:
+ *   - valid: boolean indicating if balance is sufficient
+ *   - balance: actual balance in wei
+ *   - formatted: formatted balance string with decimals
  */
 async function validateTokenBalance(
     userAddress: Address,
@@ -116,7 +170,13 @@ async function validateTokenBalance(
 }
 
 /**
- * Generate realistic swap amounts for whales based on stake amount and available balance
+ * Generates a realistic swap amount for whale accounts based on stake amount and available balance.
+ * The function ensures the swap amount is reasonable relative to the stake and available balance.
+ *
+ * @param {Address} userAddress - The address of the user/whale
+ * @param {ReturnType<typeof getTokenFromCurrency>} inputToken - The token being swapped from
+ * @param {bigint} stakeAmount - The prediction stake amount in wei
+ * @returns {Promise<bigint>} The calculated swap amount in the token's smallest unit
  */
 async function generateWhaleSwapAmount(
     userAddress: Address,
@@ -156,7 +216,18 @@ async function generateWhaleSwapAmount(
 }
 
 /**
- * Records a prediction by executing a swap transaction with separate swap and stake amounts
+ * Records a prediction by executing a swap transaction with separate swap and stake amounts.
+ * This is the core function that interacts with the Universal Router to perform the swap
+ * and record the prediction in a single transaction.
+ *
+ * @param {Address} userAddress - The address making the prediction
+ * @param {Pool} pool - The Uniswap V4 pool to swap through
+ * @param {bigint} marketId - The ID of the prediction market
+ * @param {number} outcome - The predicted outcome (0 for bearish, 1 for bullish)
+ * @param {bigint} swapAmount - The amount to swap (in token's native decimals)
+ * @param {bigint} stakeAmount - The prediction stake amount (always in ETH/18 decimals)
+ * @returns {Promise<Hash>} The transaction hash of the executed swap
+ * @throws {Error} If the swap amount is zero or if the transaction fails
  */
 export const recordPredictionViaSwap = withErrorHandling(
     async (
@@ -328,7 +399,15 @@ export const recordPredictionViaSwap = withErrorHandling(
 );
 
 /**
- * Wrapper function that generates realistic swap amounts for fixtures
+ * Wrapper function that generates realistic swap amounts for fixtures before recording a prediction.
+ * This is the main entry point for test scripts and fixtures.
+ *
+ * @param {Address} userAddress - The address making the prediction
+ * @param {Pool} pool - The Uniswap V4 pool to swap through
+ * @param {bigint} marketId - The ID of the prediction market
+ * @param {number} outcome - The predicted outcome (0 for bearish, 1 for bullish)
+ * @param {bigint} stakeAmount - The prediction stake amount (always in ETH/18 decimals)
+ * @returns {Promise<Hash>} The transaction hash of the executed swap
  */
 export const recordPredictionViaSwapWithRealisticAmount = withErrorHandling(
     async (
