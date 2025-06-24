@@ -14,9 +14,8 @@
 			href: '/app'
 		},
 		items: [
-			{ href: '/app/markets', text: 'Markets' },
-			{ href: '/app/portfolio', text: 'Portfolio' },
-			{ href: '/app/my-positions', text: 'My Positions' }
+			{ href: '/app', text: 'Markets' },
+			{ href: '/app/my-predictions', text: 'My Predictions' }
 		]
 	} as const;
 
@@ -36,7 +35,8 @@
 		actions: 'flex items-center'
 	} as const;
 
-	const navItems = $derived<readonly NavItem[]>(isAdmin() ? [] : NAVIGATION_CONFIG.items);
+	const adminNavItem = { href: '/admin', text: 'Admin' };
+	const navItems = $derived<readonly NavItem[]>(NAVIGATION_CONFIG.items);
 
 	function getNavItemStyles(href: string): string {
 		const baseStyles = STYLES.navItem.base;
@@ -55,15 +55,21 @@
 				</a>
 			</div>
 
-			{#if !isAdmin()}
-				<nav class={STYLES.nav}>
-					{#each navItems as item}
-						<a href={item.href} class={getNavItemStyles(item.href)}>
-							{item.text}
-						</a>
-					{/each}
-				</nav>
-			{/if}
+			<nav class={STYLES.nav}>
+				{#each navItems as item}
+					<a href={item.href} class={getNavItemStyles(item.href)}>
+						{item.text}
+					</a>
+				{/each}
+				{#if isAdmin()}
+					<a 
+						href={adminNavItem.href} 
+						class="px-3 py-2 text-sm font-semibold text-red-600 hover:text-red-700"
+					>
+						{adminNavItem.text}
+					</a>
+				{/if}
+			</nav>
 
 			<div class={STYLES.actions}>
 				<WalletConnection />

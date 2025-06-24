@@ -2,6 +2,7 @@
 	import { page } from '$app/state';
 	import { Footer, ToastContainer } from '$lib/components/common';
 	import { Header } from '$lib/components/landing';
+	import AppHeader from '$lib/components/app/AppHeader.svelte';
 	import { goto } from '$app/navigation';
 	import { browser } from '$app/environment';
 	import { onMount } from 'svelte';
@@ -170,13 +171,20 @@
 
 {#if isMounted}
 	<div class="flex min-h-screen flex-col bg-white">
-		<!-- Unified header with different props based on route -->
-		<Header
-			showLandingLinks={!isConnected || (!isAppRoute && !isAdminRoute)}
-			showAppLinks={isAppRoute}
-			showAdminLinks={isAdminRoute}
-			title={isAdminRoute ? 'SwapCast Admin' : 'SwapCast'}
-		/>
+		<!-- Show AppHeader for app routes, otherwise show landing header -->
+		{#if isAppRoute}
+			<AppHeader />
+		{:else}
+			<Header
+				showLandingLinks={!isConnected || !isAdminRoute}
+				isConnected={isConnected}
+				userAddress={userAddress}
+				isAppRoute={isAppRoute}
+				isAdminRoute={isAdminRoute}
+				isProtectedRoute={isProtectedRoute}
+				{pathname}
+			/>
+		{/if}
 
 		<main class="flex-1">
 			{@render children()}
