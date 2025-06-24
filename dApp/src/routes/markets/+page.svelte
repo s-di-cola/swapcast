@@ -46,6 +46,41 @@
 	// Store for current prices
 	let marketPrices = $state<Record<string, number | null>>({});
 
+	// State for filtered markets
+	let filteredMarkets: Market[] = $state([]);
+
+	// Filter markets based on search query and resolved filter - with loop prevention
+	$effect(() => {
+		if (!marketData?.markets) {
+			filteredMarkets = [];
+			return;
+		}
+
+		let results = [...marketData.markets];
+
+		// Apply resolved filter if enabled
+		if (hideResolvedMarkets) {
+			results = results.filter(market => market.status !== 'Resolved');
+		}
+
+		// Apply search filter
+		if (searchQuery) {
+			results = results.filter(market =>
+				`${market.name} ${market.assetSymbol} ${market.assetPair}`
+					.toLowerCase()
+					.includes(searchQuery.toLowerCase())
+			);
+		}
+
+		// Only update if the results are actually different to prevent infinite loops
+		const currentIds = filteredMarkets.map(m => m.id).join(',');
+		const newIds = results.map(m => m.id).join(',');
+		
+		if (currentIds !== newIds) {
+			filteredMarkets = results;
+		}
+	});
+
 	// Fetch markets with pagination
 	async function fetchMarkets() {
 		isLoading = true;
@@ -113,35 +148,6 @@
 			marketPrices = { ...marketPrices, ...newPrices };
 		}
 	}
-
-	// State for filtered markets
-	let filteredMarkets: Market[] = $state([]);
-
-	// Filter markets based on search query and resolved filter
-	$effect(() => {
-		if (!marketData?.markets) {
-			filteredMarkets = [];
-			return;
-		}
-
-		let results = [...marketData.markets];
-
-		// Apply resolved filter if enabled
-		if (hideResolvedMarkets) {
-			results = results.filter(market => market.status !== 'Resolved');
-		}
-
-		// Apply search filter
-		if (searchQuery) {
-			results = results.filter(market =>
-				`${market.name} ${market.assetSymbol} ${market.assetPair}`
-					.toLowerCase()
-					.includes(searchQuery.toLowerCase())
-			);
-		}
-
-		filteredMarkets = results;
-	});
 
 	// Pagination handlers
 	function goToNextPage() {

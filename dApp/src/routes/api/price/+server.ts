@@ -71,9 +71,10 @@ function getHeaders(): Record<string, string> {
  * Fetches the coin list from CoinGecko API and finds the ID for a given symbol
  *
  * @param symbol - The symbol to look up (e.g., 'BTC', 'ETH')
+ * @param fetchFn - The fetch function to use (event.fetch in SvelteKit)
  * @returns Promise resolving to the coin ID or the lowercase symbol as fallback
  */
-async function getCoinIdFromSymbol(symbol: string): Promise<string> {
+async function getCoinIdFromSymbol(symbol: string, fetchFn: typeof fetch): Promise<string> {
 	const upperSymbol = symbol.toUpperCase();
 
 	// Check common coins mapping first to avoid API calls
@@ -87,7 +88,7 @@ async function getCoinIdFromSymbol(symbol: string): Promise<string> {
 	if (!coinListCache || now - coinListTimestamp > COIN_LIST_TTL) {
 		try {
 			const apiUrl = `${getApiUrl()}/coins/list`;
-			const response = await fetch(apiUrl, {
+			const response = await fetchFn(apiUrl, {
 				headers: getHeaders()
 			});
 
@@ -98,7 +99,6 @@ async function getCoinIdFromSymbol(symbol: string): Promise<string> {
 			const data = await response.json();
 			coinListCache = Array.isArray(data) ? data : [];
 			coinListTimestamp = now;
-			console.log(`Fetched ${coinListCache.length} coins from CoinGecko`);
 		} catch (err) {
 			console.error('Error fetching coin list:', err);
 			// If we can't fetch the list, return the symbol as fallback
@@ -131,7 +131,7 @@ async function getCoinIdFromSymbol(symbol: string): Promise<string> {
 /**
  * GET handler for price data
  */
-export const GET: RequestHandler = async ({ url }) => {
+export const GET: RequestHandler = async ({ url, fetch }) => {
 	// Get symbol from query params
 	const symbol = url.searchParams.get('symbol');
 	if (!symbol) {
@@ -158,12 +158,12 @@ export const GET: RequestHandler = async ({ url }) => {
 		}
 
 		// Get coin ID from symbol using the CoinGecko API
-		const coinId = await getCoinIdFromSymbol(symbol);
+		const coinId = await getCoinIdFromSymbol(symbol, fetch);
 
 		// Build URL with API key
 		const apiUrl = `${getApiUrl()}/simple/price?ids=${coinId}&vs_currencies=usd`;
 
-		// Make authenticated request
+		// Make authenticated request using event.fetch
 		const response = await fetch(apiUrl, {
 			headers: getHeaders()
 		});
@@ -183,9 +183,6 @@ export const GET: RequestHandler = async ({ url }) => {
 		}
 
 		const data = await response.json();
-
-		// Debug log the full response
-		console.log(`CoinGecko API response for ${symbol} (${coinId}):`, JSON.stringify(data, null, 2));
 
 		// Handle case where coin ID is not found in response
 		if (!data[coinId]) {
