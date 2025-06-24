@@ -565,7 +565,6 @@
         return errors.length > 0 ? errors[0] : null;
     });
 
-    // FIXED: Ensure swap button is only enabled when form is valid and not submitting
     let isSubmitEnabled = $derived(() => {
         return formValid() && !isSubmitting && !disabled;
     });
@@ -602,7 +601,7 @@
     }
 
     /**
-     * Execute the swap and prediction transaction - IMPROVED ERROR HANDLING
+     * Execute the swap and prediction transaction -
      */
     async function executeSwapAndPredict() {
         if (!formValid) {
@@ -827,7 +826,6 @@
             });
         } finally {
             isSubmitting = false;
-            // FIXED: Always close modal and redirect to /app after transaction attempt
             showConfirmationModal = false;
             setTimeout(() => {
                 goto('/app');
