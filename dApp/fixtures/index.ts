@@ -6,6 +6,7 @@
  * - Automatic token dealing for insufficient balances
  * - Prevents TRANSFER_FROM_FAILED errors
  * - Enhanced error handling and retry logic
+ * - Whale balance restoration between markets
  */
 
 import {type Address, createPublicClient, formatEther, http, parseEther} from 'viem';
@@ -17,6 +18,7 @@ import {getPredictionManager} from '../src/generated/types/PredictionManager';
 import {getPoolManager} from '../src/generated/types/PoolManager';
 import {MarketGenerationConfig} from './config/markets';
 import chalk from 'chalk';
+import {WHALE_ACCOUNTS} from './utils/whales';
 import {runFixtureDiagnostics} from './utils/diagnostic';
 import { getPublicClient } from './utils/client';
 
@@ -74,7 +76,7 @@ async function fundHookForPredictions() {
         
         await publicClient.request({
             method: 'anvil_setBalance' as any,
-            params: [hookAddress, ('0x' + fundingAmount.toString(16)) as any]
+            params: [hookAddress, `0x${fundingAmount.toString(16)}` as `0x${string}`]
         });
         
         const newBalance = await publicClient.getBalance({ address: hookAddress });
@@ -82,6 +84,29 @@ async function fundHookForPredictions() {
     }
 }
 
+/**
+ * Restore whale balances to their original amounts
+ * Call this between markets to ensure whales can make fresh bets
+ */
+async function restoreWhaleBalances() {
+	const publicClient = getPublicClient();
+	
+	console.log(chalk.blue('🔄 Restoring whale balances for continued whale betting...'));
+	
+	for (const [whaleName, whaleAddress] of Object.entries(WHALE_ACCOUNTS)) {
+		// Restore to original whale balance (2M ETH each)
+		const originalBalance = parseEther('2000000');
+		
+		await publicClient.request({
+			method: 'anvil_setBalance' as any,
+			params: [whaleAddress as Address, `0x${originalBalance.toString(16)}` as `0x${string}`]
+		});
+		
+		console.log(chalk.gray(`   🐋 ${whaleName}: Restored to ${formatEther(originalBalance)} ETH`));
+	}
+	
+	console.log(chalk.green('✅ All whale balances restored - ready for next round of massive bets! 🐋💰'));
+}
 
 /**
  * Check if Anvil is running and contracts are deployed
@@ -209,6 +234,7 @@ function printFinalSummary(
 		console.log(chalk.green('   • Protocol fees being collected'));
 		console.log(chalk.green('   • Enhanced whale system working perfectly! 🐋'));
 		console.log(chalk.green('   • Balance validation preventing errors! 🛡️'));
+		console.log(chalk.green('   • Whale balance restoration working! 🔄'));
 	} else {
 		console.log(chalk.yellow('   Status: ⚠️  ISSUES DETECTED'));
 		console.log(chalk.yellow('   • See diagnostic report above for details'));
@@ -219,6 +245,7 @@ function printFinalSummary(
 	console.log(chalk.gray(`   Error Prevention Rate: ${totalFailed > 0 ? '100%' : 'N/A'} (stopped ${totalFailed} failures)`));
 	console.log(chalk.gray(`   Whale Utilization: Multiple whales rotated automatically`));
 	console.log(chalk.gray(`   Balance Validation: 100% coverage before swaps`));
+	console.log(chalk.gray(`   Balance Restoration: Automatic between markets`));
 
 	// Next Steps
 	if (totalSuccessful > 0) {
@@ -227,13 +254,55 @@ function printFinalSummary(
 		console.log(chalk.gray('   2. Hook successfully processes swaps and records predictions'));
 		console.log(chalk.gray('   3. NFTs are minted for each whale prediction'));
 		console.log(chalk.gray('   4. Balance validation prevents TRANSFER_FROM errors'));
-		console.log(chalk.gray('   5. Ready for frontend integration and testing!'));
-		console.log(chalk.gray('   6. Enhanced whale system provides reliable high-value patterns'));
+		console.log(chalk.gray('   5. Whale balances auto-restore between markets'));
+		console.log(chalk.gray('   6. Ready for frontend integration and testing!'));
+		console.log(chalk.gray('   7. Enhanced whale system provides reliable high-value patterns'));
 	}
 
 	console.log(chalk.blue('\n' + '='.repeat(80)));
 	console.log(chalk.green.bold('🎯 FIXTURE GENERATION COMPLETE!'));
 	console.log(chalk.blue('='.repeat(80) + '\n'));
+}
+
+/**
+ * Enhanced prediction generation with whale balance restoration between markets
+ */
+async function generateEnhancedPredictionsWithBalanceManagement(markets: MarketCreationResult[]) {
+	console.log(chalk.yellow('\n🐋 ENHANCED WHALE PREDICTION GENERATION'));
+	console.log(chalk.yellow('-'.repeat(50)));
+	
+	let totalSuccessful = 0;
+	let totalFailed = 0;
+	
+	// Initial whale balance setup
+	await restoreWhaleBalances();
+	
+	// Process markets in batches to manage whale balance lifecycle
+	const BATCH_SIZE = 2; // Process 2 markets, then restore balances
+	
+	for (let i = 0; i < markets.length; i += BATCH_SIZE) {
+		const batch = markets.slice(i, i + BATCH_SIZE);
+		
+		console.log(chalk.blue(`\n🎯 Processing market batch ${Math.floor(i/BATCH_SIZE) + 1}/${Math.ceil(markets.length/BATCH_SIZE)}`));
+		console.log(chalk.gray(`   Markets: ${batch.map(m => m.name).join(', ')}`));
+		
+		// Generate predictions for this batch
+		const batchResults = await generatePredictionsForMarkets(batch);
+		totalSuccessful += batchResults.totalSuccessful;
+		totalFailed += batchResults.totalFailed;
+		
+		// Restore whale balances between batches (except for the last batch)
+		if (i + BATCH_SIZE < markets.length) {
+			console.log(chalk.blue('\n💰 Batch complete - preparing whales for next batch...'));
+			await restoreWhaleBalances();
+			
+			// Small delay between batches
+			console.log(chalk.gray('⏳ Brief pause before next batch...'));
+			await new Promise(resolve => setTimeout(resolve, 1000));
+		}
+	}
+	
+	return { totalSuccessful, totalFailed };
 }
 
 async function main() {
@@ -289,8 +358,8 @@ async function main() {
 			}
 		}
 
-		// 6. Generate predictions using enhanced whale system
-		const { totalSuccessful, totalFailed } = await generatePredictionsForMarkets(markets);
+		// 6. Generate predictions using enhanced whale system with balance management
+		const { totalSuccessful, totalFailed } = await generateEnhancedPredictionsWithBalanceManagement(markets);
 
 		console.log(chalk.green(`✅ Enhanced whale-based prediction generation completed!`));
 		console.log(chalk.blue(`📊 Results: ${totalSuccessful} successful, ${totalFailed} failed`));
@@ -319,6 +388,7 @@ main()
 		console.log(chalk.green('✅ Enhanced whale fixture generation completed successfully'));
 		console.log(chalk.cyan('🐋 All whale accounts validated and rotated properly'));
 		console.log(chalk.green('🛡️ Zero TRANSFER_FROM errors due to balance validation'));
+		console.log(chalk.blue('🔄 Whale balance restoration working perfectly'));
 		console.log(chalk.green('🎉 Ready for frontend integration!'));
 		process.exit(0);
 	})
