@@ -36,13 +36,15 @@ contract PythOracleResolver is Ownable {
     /**
      * @notice Represents the oracle configuration for a specific market.
      * @param priceId The Pyth price feed ID (32-byte identifier)
-     * @param priceThreshold The price level that determines the winning outcome. If the oracle price is at or above this threshold,
-     *                       outcome 0 wins; otherwise, outcome 1 wins.
+     * @param priceThreshold The price level that determines the winning outcome in user-friendly format.
+     *                       If the oracle price is at or above this threshold, outcome 0 wins; otherwise, outcome 1 wins.
+     * @param expectedExpo The expected exponent from Pyth for this price feed (e.g., -8 for USD pairs)
      * @param isRegistered A flag indicating whether an oracle has been registered for this market ID.
      */
     struct MarketOracle {
         bytes32 priceId; // Pyth price feed ID
-        uint256 priceThreshold; // Price at or above which outcome 0 is winning
+        uint256 priceThreshold; // Price threshold in user-friendly format (e.g., 2000 for $2000)
+        int32 expectedExpo; // Expected Pyth exponent (e.g., -8 for USD pairs)
         bool isRegistered;
     }
 
@@ -134,6 +136,26 @@ contract PythOracleResolver is Ownable {
     error InvalidPrice();
 
     /**
+     * @notice Reverts if insufficient fee is provided for price update.
+     */
+    error InsufficientUpdateFee(uint256 provided, uint256 required);
+
+    /**
+     * @notice Reverts if the price confidence interval is too wide.
+     */
+    error PriceConfidenceTooLow(uint256 confidence, uint256 price);
+
+    /**
+     * @notice Reverts if the price is too old (separate from staleness).
+     */
+    error PriceTooOld(uint256 marketId, uint256 age, uint256 maxAge);
+
+    /**
+     * @notice Reverts if the price feed's exponent doesn't match the expected exponent.
+     */
+    error UnexpectedPriceExponent(int32 expected, int32 actual);
+
+    /**
      * @notice Constructs a new PythOracleResolver instance.
      * @param _predictionManagerAddress The address of the PredictionManager contract this resolver will interact with.
      * @param _pythContract The address of the Pyth Network contract.
@@ -157,13 +179,14 @@ contract PythOracleResolver is Ownable {
      * @dev Only callable by the contract owner. Emits {OracleRegistered}.
      * @param _marketId The ID of the market to register the oracle for.
      * @param _priceId The Pyth price feed ID (32-byte identifier).
-     * @param _priceThreshold The price threshold for determining the winning outcome.
-     *        Must be greater than zero and should account for Pyth's price scaling.
+     * @param _priceThreshold The price threshold for determining the winning outcome in user-friendly format.
+     *        Must be greater than zero (e.g., 2000 for $2000).
+     * @param _expectedExpo The expected exponent from Pyth for this price feed (e.g., -8 for USD pairs).
      * @custom:reverts InvalidPriceId If the price ID is zero bytes
      * @custom:reverts OracleAlreadyRegistered If an oracle is already registered for this market
      * @custom:reverts InvalidPriceThreshold If the price threshold is set to zero
      */
-    function registerOracle(uint256 _marketId, bytes32 _priceId, uint256 _priceThreshold)
+    function registerOracle(uint256 _marketId, bytes32 _priceId, uint256 _priceThreshold, int32 _expectedExpo)
         external
         onlyOwner
     {
@@ -178,6 +201,7 @@ contract PythOracleResolver is Ownable {
         marketOracles[_marketId] = MarketOracle({
             priceId: _priceId,
             priceThreshold: _priceThreshold,
+            expectedExpo: _expectedExpo,
             isRegistered: true
         });
 
@@ -226,11 +250,19 @@ contract PythOracleResolver is Ownable {
         // Cache values to avoid multiple SLOADs
         bytes32 priceId = mo.priceId;
         uint256 priceThreshold = mo.priceThreshold;
+        int32 expectedExpo = mo.expectedExpo;
         uint256 maxStaleness = maxPriceStalenessSeconds;
 
-        // Update price feeds with Pyth data
+        // Validate and handle update fee
         uint fee = pyth.getUpdateFee(priceUpdateData);
+        if (msg.value < fee) revert InsufficientUpdateFee(msg.value, fee);
+        
         pyth.updatePriceFeeds{value: fee}(priceUpdateData);
+        
+        // Refund excess payment
+        if (msg.value > fee) {
+            payable(msg.sender).transfer(msg.value - fee);
+        }
 
         // Get the latest price from Pyth
         PythStructs.Price memory pythPrice = pyth.getPrice(priceId);
@@ -238,15 +270,41 @@ contract PythOracleResolver is Ownable {
         // Validate price data
         if (pythPrice.price <= 0) revert InvalidPrice();
         
+        // Validate exponent matches expected
+        if (pythPrice.expo != expectedExpo) {
+            revert UnexpectedPriceExponent(expectedExpo, pythPrice.expo);
+        }
+        
+        // Check price confidence - reject if confidence is more than 1% of price
+        uint256 confidenceInterval = pythPrice.conf;
+        uint256 priceValue = uint256(uint64(pythPrice.price));
+        if (confidenceInterval * 100 > priceValue) {
+            revert PriceConfidenceTooLow(confidenceInterval, priceValue);
+        }
+        
         // Check price staleness
         uint256 currentTime = block.timestamp;
         if (currentTime - pythPrice.publishTime > maxStaleness) {
             revert PriceIsStale(_marketId, pythPrice.publishTime, currentTime);
         }
+        
+        // Additional check for price age (stricter than staleness)
+        uint256 priceAge = currentTime - pythPrice.publishTime;
+        uint256 maxPriceAge = 60; // 60 seconds max for market resolution
+        if (priceAge > maxPriceAge) {
+            revert PriceTooOld(_marketId, priceAge, maxPriceAge);
+        }
 
-        // Convert Pyth price to uint256 for comparison
-        // Note: Pyth prices can be negative in theory, but for assets we expect positive prices
-        uint256 currentPrice = uint256(uint64(pythPrice.price));
+        // Convert Pyth price to user-friendly format using the expected exponent
+        // Since exponent is validated to match expectedExpo, we can safely convert
+        uint256 currentPrice;
+        if (expectedExpo >= 0) {
+            // Positive exponent: multiply by 10^expo
+            currentPrice = priceValue * (10 ** uint256(int256(expectedExpo)));
+        } else {
+            // Negative exponent: divide by 10^(-expo)
+            currentPrice = priceValue / (10 ** uint256(-int256(expectedExpo)));
+        }
 
         // Determine the winning outcome based on the price threshold
         PredictionTypes.Outcome winningOutcome = currentPrice >= priceThreshold
