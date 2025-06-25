@@ -62,6 +62,8 @@
 		selectedMarketId: null
 	});
 
+	let isMounted = $state(false);
+
 	const TOAST_CONFIG = {
 		duration: 5000,
 		successMessages: {
@@ -276,7 +278,10 @@
 
 	// Initialize component and handle cleanup
 	$effect(() => {
-		updateMarketData();
+		if (!isMounted) {
+			isMounted = true;
+			updateMarketData();
+		}
 	});
 
 	// Update page title reactively
