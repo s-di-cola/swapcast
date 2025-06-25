@@ -1,6 +1,6 @@
 <script lang="ts">
-	import type { Market } from '$lib/services/market/types';
-	import { formatNumber } from '$lib/helpers/formatters';
+	import type {Market} from '$lib/services/market/types';
+	import {formatNumber} from '$lib/helpers/formatters';
 
 	// Use SvelteKit 5 syntax for props
 	const {
