@@ -314,6 +314,6 @@ contract PythOracleResolver is Ownable {
      * @return price The current price data.
      */
     function getCurrentPrice(bytes32 priceId) external view returns (PythStructs.Price memory price) {
-        return pyth.getPrice(priceId);
+        return pyth.getPriceUnsafe(priceId);
     }
 }

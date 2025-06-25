@@ -12,7 +12,7 @@ extra_output_files = ["abi"]
 
 remappings = [
     "@chainlink/contracts/=lib/foundry-chainlink-toolkit/lib/chainlink-brownie-contracts/contracts/src/",
-    "@pythnetwork/pyth-sdk-solidity/=lib/pyth-sdk-solidity/"
+    "@pythnetwork/pyth-sdk-solidity/=node_modules/@pythnetwork/pyth-sdk-solidity/"
 ]
 
 [rpc_endpoints]

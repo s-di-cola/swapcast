@@ -604,7 +604,8 @@ contract PythOracleResolverTest is Test {
             expo,
             price, // emaPrice (same as price for simplicity)
             conf,  // emaConf (same as conf for simplicity)
-            uint64(publishTime)
+            uint64(publishTime),
+            uint64(publishTime - 1)
         );
         
         bytes[] memory updateDataArray = new bytes[](1);
@@ -628,7 +629,8 @@ contract PythOracleResolverTest is Test {
             expo,
             price, // emaPrice
             conf,  // emaConf
-            uint64(publishTime)
+            uint64(publishTime),
+            uint64(publishTime - 1) // prevPublishTime (one second earlier)
         );
         
         bytes[] memory updateDataArray = new bytes[](1);
