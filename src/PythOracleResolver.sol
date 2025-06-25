@@ -112,14 +112,6 @@ contract PythOracleResolver is Ownable {
     error ResolutionFailedInManager(uint256 marketId);
 
     /**
-     * @notice Reverts if the Pyth price feed data is older than `maxPriceStalenessSeconds`.
-     * @param marketId The ID of the market being resolved.
-     * @param lastUpdatedAt The timestamp when the price feed was last updated.
-     * @param currentBlockTimestamp The current block timestamp.
-     */
-    error PriceIsStale(uint256 marketId, uint256 lastUpdatedAt, uint256 currentBlockTimestamp);
-
-    /**
      * @notice Reverts if the price threshold is set to zero.
      * @dev A price threshold of zero is invalid as it cannot be used to determine a winning outcome.
      */
@@ -144,11 +136,6 @@ contract PythOracleResolver is Ownable {
      * @notice Reverts if the price confidence interval is too wide.
      */
     error PriceConfidenceTooLow(uint256 confidence, uint256 price);
-
-    /**
-     * @notice Reverts if the price is too old (separate from staleness).
-     */
-    error PriceTooOld(uint256 marketId, uint256 age, uint256 maxAge);
 
     /**
      * @notice Reverts if the price feed's exponent doesn't match the expected exponent.
@@ -264,8 +251,12 @@ contract PythOracleResolver is Ownable {
             payable(msg.sender).transfer(msg.value - fee);
         }
 
-        // Get the latest price from Pyth
-        PythStructs.Price memory pythPrice = pyth.getPrice(priceId);
+        // Get the latest price from Pyth with automatic staleness check
+        // Use the stricter of maxStaleness or 60 seconds for market resolution
+        uint256 maxPriceAge = 60; // 60 seconds max for market resolution
+        uint256 effectiveMaxAge = maxStaleness < maxPriceAge ? maxStaleness : maxPriceAge;
+        
+        PythStructs.Price memory pythPrice = pyth.getPriceNoOlderThan(priceId, effectiveMaxAge);
 
         // Validate price data
         if (pythPrice.price <= 0) revert InvalidPrice();
@@ -280,19 +271,6 @@ contract PythOracleResolver is Ownable {
         uint256 priceValue = uint256(uint64(pythPrice.price));
         if (confidenceInterval * 100 > priceValue) {
             revert PriceConfidenceTooLow(confidenceInterval, priceValue);
-        }
-        
-        // Check price staleness
-        uint256 currentTime = block.timestamp;
-        if (currentTime - pythPrice.publishTime > maxStaleness) {
-            revert PriceIsStale(_marketId, pythPrice.publishTime, currentTime);
-        }
-        
-        // Additional check for price age (stricter than staleness)
-        uint256 priceAge = currentTime - pythPrice.publishTime;
-        uint256 maxPriceAge = 60; // 60 seconds max for market resolution
-        if (priceAge > maxPriceAge) {
-            revert PriceTooOld(_marketId, priceAge, maxPriceAge);
         }
 
         // Convert Pyth price to user-friendly format using the expected exponent
