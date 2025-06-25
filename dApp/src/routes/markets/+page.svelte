@@ -15,7 +15,7 @@
 		type MarketPaginationOptions,
 		type PaginatedMarkets
 	} from '$lib/services/market';
-	import { getServerPrice, getBatchServerPrices } from '$lib/services/price';
+	import { getCurrentPrice, getBatchPrices } from '$lib/services/price';
 
 	// Market selection state
 	let selectedMarket: Market | null = $state(null);
@@ -75,7 +75,7 @@
 		// Only update if the results are actually different to prevent infinite loops
 		const currentIds = filteredMarkets.map(m => m.id).join(',');
 		const newIds = results.map(m => m.id).join(',');
-		
+
 		if (currentIds !== newIds) {
 			filteredMarkets = results;
 		}
@@ -95,7 +95,7 @@
 			};
 
 			marketData = await getAllMarkets(paginationOptions);
-			
+
 			// Fetch prices for the loaded markets
 			await fetchPricesForMarkets(marketData.markets);
 		} catch (error) {
@@ -115,20 +115,20 @@
 
 		// Create a unique list of asset symbols to fetch prices for
 		const assetSymbols = [...new Set(markets.map((market) => market.assetSymbol))];
-		
+
 		try {
 			// Use the server-backed batch price fetching function
-			const newPrices = await getBatchServerPrices(assetSymbols);
-			
+			const newPrices = await getBatchPrices(assetSymbols);
+
 			// Update the prices state
 			marketPrices = { ...marketPrices, ...newPrices };
 		} catch (error) {
 			console.error('Error fetching prices:', error);
-			
+
 			// Fallback to individual fetches if batch fails
 			const pricePromises = assetSymbols.map(async (symbol) => {
 				try {
-					const price = await getServerPrice(symbol);
+					const price = await getCurrentPrice(symbol);
 					return { symbol, price };
 				} catch (error) {
 					console.error(`Error fetching price for ${symbol}:`, error);

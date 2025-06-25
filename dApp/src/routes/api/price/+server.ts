@@ -1,209 +1,197 @@
+// +server.ts
 /**
- * Server-side price API endpoint
- *
- * This endpoint proxies requests to CoinGecko API with authentication
- * to avoid exposing the API key to the client.
+ * Simplified Server API for Price Data
+ * Uses LRU cache and CoinGecko search API
  */
 
 import { json, error } from '@sveltejs/kit';
-//@ts-ignore present in .env
+import { LRUCache } from 'lru-cache';
+//@ts-ignore
 import { PRIVATE_COINGECKO_API_KEY } from '$env/static/private';
 import { PUBLIC_COINGECKO_API_URL } from '$env/static/public';
 import type { RequestHandler } from './$types';
 
-// Static mapping for common cryptocurrencies to avoid API calls
-const COMMON_COIN_IDS: Record<string, string> = {
-	BTC: 'bitcoin',
-	ETH: 'ethereum',
-	USDC: 'usd-coin',
-	USDT: 'tether',
-	DAI: 'dai',
-	SOL: 'solana',
-	MATIC: 'matic-network',
-	AVAX: 'avalanche-2',
-	BNB: 'binancecoin',
-	XRP: 'ripple',
-	ADA: 'cardano',
-	DOT: 'polkadot',
-	DOGE: 'dogecoin',
-	SHIB: 'shiba-inu',
-	UNI: 'uniswap',
-	LINK: 'chainlink'
-};
+// LRU caches - much cleaner!
+const symbolCache = new LRUCache<string, string>({
+    max: 1000, // max 1000 symbol->ID mappings
+    ttl: 24 * 60 * 60 * 1000, // 24 hours
+});
 
-// Cache for coin list to avoid repeated API calls
-let coinListCache: { id: string; symbol: string; name: string }[] | null = null;
-let coinListTimestamp = 0;
-const COIN_LIST_TTL = 24 * 60 * 60 * 1000; // 24 hours
+const priceCache = new LRUCache<string, number>({
+    max: 500, // max 500 price entries
+    ttl: 2 * 60 * 1000, // 2 minutes
+});
 
-// Cache for price data
-const priceCache: Record<string, { price: number; timestamp: number }> = {};
-const PRICE_CACHE_TTL = 2 * 60 * 1000; // 2 minutes
-
-// Rate limiting
+// Simple rate limiting
 let lastRequestTime = 0;
-const MIN_REQUEST_INTERVAL = 200; // 200ms between requests (max 5 req/sec)
+const MIN_REQUEST_INTERVAL = 200; // 200ms
 
-/**
- * Get the API URL with fallback to free tier
- */
 function getApiUrl(): string {
-	return PUBLIC_COINGECKO_API_URL || 'https://api.coingecko.com/api/v3';
+    return PUBLIC_COINGECKO_API_URL || 'https://api.coingecko.com/api/v3';
 }
 
-/**
- * Get headers with optional API key
- */
 function getHeaders(): Record<string, string> {
-	const headers: Record<string, string> = {
-		'Content-Type': 'application/json'
-	};
+    const headers: Record<string, string> = {
+        'Content-Type': 'application/json',
+        'User-Agent': 'SwapCast-Frontend/1.0'
+    };
 
-	// Only add API key if it exists
-	if (PRIVATE_COINGECKO_API_KEY && PRIVATE_COINGECKO_API_KEY.trim()) {
-		headers['X-CG-Pro-API-Key'] = PRIVATE_COINGECKO_API_KEY;
-	}
+    if (PRIVATE_COINGECKO_API_KEY?.trim()) {
+        headers['x_cg_demo_api_key'] = PRIVATE_COINGECKO_API_KEY;  // This line is key!
+    }
 
-	return headers;
+    return headers;
+}
+
+async function rateLimit(): Promise<void> {
+    const now = Date.now();
+    if (lastRequestTime > 0) {
+        const timeSinceLastRequest = now - lastRequestTime;
+        if (timeSinceLastRequest < MIN_REQUEST_INTERVAL) {
+            await new Promise(resolve =>
+                setTimeout(resolve, MIN_REQUEST_INTERVAL - timeSinceLastRequest)
+            );
+        }
+    }
+    lastRequestTime = Date.now();
 }
 
 /**
- * Fetches the coin list from CoinGecko API and finds the ID for a given symbol
- *
- * @param symbol - The symbol to look up (e.g., 'BTC', 'ETH')
- * @param fetchFn - The fetch function to use (event.fetch in SvelteKit)
- * @returns Promise resolving to the coin ID or the lowercase symbol as fallback
+ * Find coin ID using search API only
  */
-async function getCoinIdFromSymbol(symbol: string, fetchFn: typeof fetch): Promise<string> {
-	const upperSymbol = symbol.toUpperCase();
+async function findCoinId(symbol: string, fetchFn: typeof fetch): Promise<string | null> {
+    const upperSymbol = symbol.toUpperCase();
 
-	// Check common coins mapping first to avoid API calls
-	if (COMMON_COIN_IDS[upperSymbol]) {
-		return COMMON_COIN_IDS[upperSymbol];
-	}
+    // Check LRU cache first
+    const cached = symbolCache.get(upperSymbol);
+    if (cached) {
+        console.log(`[SERVER] Found ${symbol} in cache: ${cached}`);
+        return cached;
+    }
 
-	const now = Date.now();
+    try {
+        await rateLimit();
 
-	// Fetch or use cached coin list
-	if (!coinListCache || now - coinListTimestamp > COIN_LIST_TTL) {
-		try {
-			const apiUrl = `${getApiUrl()}/coins/list`;
-			const response = await fetchFn(apiUrl, {
-				headers: getHeaders()
-			});
+        const searchUrl = `${getApiUrl()}/search?query=${encodeURIComponent(symbol)}`;
+        console.log(`[SERVER] Making search request to: ${searchUrl}`);
+        console.log(`[SERVER] Using headers:`, getHeaders());
 
-			if (!response.ok) {
-				throw new Error(`CoinGecko API error: ${response.status} ${response.statusText}`);
-			}
+        const response = await fetchFn(searchUrl, { headers: getHeaders() });
 
-			const data = await response.json();
-			coinListCache = Array.isArray(data) ? data : [];
-			coinListTimestamp = now;
-		} catch (err) {
-			console.error('Error fetching coin list:', err);
-			// If we can't fetch the list, return the symbol as fallback
-			return symbol.toLowerCase();
-		}
-	}
+        console.log(`[SERVER] Search API response status: ${response.status}`);
 
-	// Find the coin by symbol
-	if (coinListCache && coinListCache.length > 0) {
-		// First try exact match
-		const exactMatch = coinListCache.find((coin) => coin.symbol.toUpperCase() === upperSymbol);
+        if (!response.ok) {
+            const errorText = await response.text();
+            console.error(`[SERVER] Search API error for ${symbol}:`, response.status, errorText);
+            return null;
+        }
 
-		if (exactMatch) return exactMatch.id;
+        const searchData = await response.json();
+        console.log(`[SERVER] Search results for ${symbol}:`, {
+            totalCoins: searchData.coins?.length || 0,
+            firstFew: searchData.coins?.slice(0, 5)?.map((c: any) => ({ id: c.id, symbol: c.symbol, name: c.name }))
+        });
 
-		// If multiple coins have the same symbol, prioritize by market cap or popularity
-		// For now, we'll just take the first match as a simple approach
-		const matches = coinListCache.filter((coin) => coin.symbol.toUpperCase() === upperSymbol);
+        // Rest of the function stays the same...
+        if (!searchData.coins || !Array.isArray(searchData.coins)) {
+            console.warn(`[SERVER] Invalid search response for ${symbol}:`, searchData);
+            return null;
+        }
 
-		if (matches.length > 0) return matches[0].id;
-	}
+        const exactMatch = searchData.coins.find((coin: any) =>
+            coin.symbol?.toUpperCase() === upperSymbol
+        );
 
-	// Fallback to using the symbol itself
-	return symbol.toLowerCase();
+        if (exactMatch) {
+            const coinId = exactMatch.id;
+            console.log(`[SERVER] Found exact match for ${symbol}: ${coinId}`);
+            symbolCache.set(upperSymbol, coinId);
+            return coinId;
+        }
+
+        console.warn(`[SERVER] No match found for symbol: ${symbol}`);
+        return null;
+
+    } catch (err) {
+        console.error(`[SERVER] Error searching for coin ${symbol}:`, err);
+        return null;
+    }
+}
+/**
+ * Get price with LRU cache
+ */
+async function getPrice(coinId: string, fetchFn: typeof fetch): Promise<number | null> {
+    // Check LRU cache first
+    const cached = priceCache.get(coinId);
+    if (cached !== undefined) {
+        return cached;
+    }
+
+    try {
+        await rateLimit();
+
+        const priceUrl = `${getApiUrl()}/simple/price?ids=${coinId}&vs_currencies=usd`;
+        const response = await fetchFn(priceUrl, { headers: getHeaders() });
+
+        if (!response.ok) {
+            console.error(`Price API error for ${coinId}:`, response.status);
+            return null;
+        }
+
+        const priceData = await response.json();
+
+        if (priceData[coinId]?.usd) {
+            const price = priceData[coinId].usd;
+            priceCache.set(coinId, price); // Cache in LRU
+            return price;
+        }
+
+        return null;
+
+    } catch (err) {
+        console.error(`Error fetching price for ${coinId}:`, err);
+        return null;
+    }
 }
 
-// Already defined above
-// const priceCache: Record<string, { price: number; timestamp: number }> = {};
-// Using PRICE_CACHE_TTL instead of CACHE_TTL
-
-/**
- * GET handler for price data
- */
 export const GET: RequestHandler = async ({ url, fetch }) => {
-	// Get symbol from query params
-	const symbol = url.searchParams.get('symbol');
-	if (!symbol) {
-		throw error(400, 'Symbol parameter is required');
-	}
+    const symbol = url.searchParams.get('symbol');
+    console.log(`[SERVER] Received request for symbol: ${symbol}`);
 
-	// Check cache first
-	const now = Date.now();
-	const cacheKey = symbol.toUpperCase();
-	if (priceCache[cacheKey] && now - priceCache[cacheKey].timestamp < PRICE_CACHE_TTL) {
-		return json({ price: priceCache[cacheKey].price });
-	}
+    if (!symbol?.trim()) {
+        throw error(400, 'Symbol parameter is required');
+    }
 
-	try {
-		// Apply rate limiting
-		const currentTime = Date.now();
-		if (lastRequestTime > 0) {
-			const timeSinceLastRequest = currentTime - lastRequestTime;
-			if (timeSinceLastRequest < MIN_REQUEST_INTERVAL) {
-				// Wait to respect rate limit
-				const delay = MIN_REQUEST_INTERVAL - timeSinceLastRequest;
-				await new Promise((resolve) => setTimeout(resolve, delay));
-			}
-		}
+    const cleanSymbol = symbol.trim();
 
-		// Get coin ID from symbol using the CoinGecko API
-		const coinId = await getCoinIdFromSymbol(symbol, fetch);
+    try {
+        // Step 1: Find coin ID
+        console.log(`[SERVER] Looking for coin ID for: ${cleanSymbol}`);
+        const coinId = await findCoinId(cleanSymbol, fetch);
+        console.log(`[SERVER] Found coin ID: ${coinId} for symbol: ${cleanSymbol}`);
 
-		// Build URL with API key
-		const apiUrl = `${getApiUrl()}/simple/price?ids=${coinId}&vs_currencies=usd`;
+        if (!coinId) {
+            console.log(`[SERVER] No coin ID found for: ${cleanSymbol}`);
+            throw error(404, `Cryptocurrency "${cleanSymbol}" not found`);
+        }
 
-		// Make authenticated request using event.fetch
-		const response = await fetch(apiUrl, {
-			headers: getHeaders()
-		});
+        // Step 2: Get price
+        console.log(`[SERVER] Getting price for coin ID: ${coinId}`);
+        const price = await getPrice(coinId, fetch);
+        console.log(`[SERVER] Got price: ${price} for coin ID: ${coinId}`);
 
-		// Update last request time for rate limiting
-		lastRequestTime = Date.now();
+        if (price === null) {
+            console.log(`[SERVER] No price available for coin ID: ${coinId}`);
+            throw error(404, `Price not available for ${cleanSymbol}`);
+        }
 
-		if (!response.ok) {
-			// Provide more detailed error information for the client
-			const errorMessage =
-				response.status === 429
-					? 'CoinGecko rate limit exceeded. Please try again later.'
-					: `CoinGecko API error: ${response.statusText}`;
+        return json({ price });
 
-			console.error(`CoinGecko API error for ${symbol}: ${response.status} ${response.statusText}`);
-			throw error(response.status, errorMessage);
-		}
-
-		const data = await response.json();
-
-		// Handle case where coin ID is not found in response
-		if (!data[coinId]) {
-			console.error(`Coin ID '${coinId}' not found in CoinGecko response for symbol '${symbol}'`);
-			throw error(404, `Price data not found for ${symbol} (ID: ${coinId})`);
-		}
-
-		// Check if USD price is available
-		if (typeof data[coinId].usd !== 'number') {
-			console.error(`Invalid price data for ${symbol} (${coinId}):`, data[coinId]);
-			throw error(404, `Price not available for ${symbol}`);
-		}
-
-		const price = data[coinId].usd;
-
-		// Cache the result
-		priceCache[cacheKey] = { price, timestamp: now };
-
-		return json({ price });
-	} catch (err) {
-		console.error('Error fetching price data:', err);
-		throw error(500, 'Unknown error fetching price data');
-	}
+    } catch (err: any) {
+        console.error(`[SERVER] Error for ${cleanSymbol}:`, err);
+        if (err.status) {
+            throw err;
+        }
+        throw error(500, 'Internal server error');
+    }
 };
