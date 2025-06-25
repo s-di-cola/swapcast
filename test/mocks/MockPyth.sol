@@ -80,7 +80,7 @@ contract MockPyth is IPyth {
     }
 
     function updatePriceFeedsIfNecessary(
-        bytes[] calldata updateData,
+        bytes[] calldata /* updateData */,
         bytes32[] calldata priceIds,
         uint64[] calldata publishTimes
     ) external payable override {
@@ -103,10 +103,10 @@ contract MockPyth is IPyth {
     }
 
     function parsePriceFeedUpdates(
-        bytes[] calldata updateData,
+        bytes[] calldata /* updateData */,
         bytes32[] calldata priceIds,
-        uint64 minPublishTime,
-        uint64 maxPublishTime
+        uint64 /* minPublishTime */,
+        uint64 /* maxPublishTime */
     ) external payable override returns (PythStructs.PriceFeed[] memory priceFeeds) {
         // Simple mock implementation
         priceFeeds = new PythStructs.PriceFeed[](priceIds.length);

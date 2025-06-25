@@ -548,7 +548,7 @@ contract PythOracleResolverTest is Test {
     // ===== Utility Function Tests =====
 
     /// @notice Tests getUpdateFee function.
-    function test_get_update_fee() public {
+    function test_get_update_fee() public view {
         bytes[] memory priceUpdateData = new bytes[](1);
         priceUpdateData[0] = "";
 
@@ -557,7 +557,7 @@ contract PythOracleResolverTest is Test {
     }
 
     /// @notice Tests getCurrentPrice function.
-    function test_get_current_price() public {
+    function test_get_current_price() public view {
         PythStructs.Price memory price = pythOracleResolver.getCurrentPrice(ETH_USD_PRICE_ID);
         
         assertEq(price.price, PYTH_PRICE_ABOVE_THRESHOLD, "Price should match mock");
