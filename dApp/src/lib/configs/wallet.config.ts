@@ -1,10 +1,10 @@
 import { createAppKit } from '@reown/appkit';
 import { WagmiAdapter } from '@reown/appkit-adapter-wagmi';
-import { anvil } from '$lib/configs/networks';
+import { anvil, ink_sepolia } from '$lib/configs/networks';
 // @ts-ignore
 import { PUBLIC_REOWN_PROJECT_ID } from '$env/static/public';
 
-export const networks = [anvil];
+export const networks = [anvil, ink_sepolia];
 export const wagmiAdapter = new WagmiAdapter({
 	projectId: PUBLIC_REOWN_PROJECT_ID,
 	networks
@@ -26,7 +26,7 @@ const getAppUrl = () => {
 
 export const appKit = createAppKit({
 	adapters: [wagmiAdapter],
-	networks: [anvil],
+	networks: [anvil, ink_sepolia],
 	metadata: {
 		name: 'SwapCast',
 		description: 'SwapCast Prediction Market',
