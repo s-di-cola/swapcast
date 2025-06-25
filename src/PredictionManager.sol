@@ -35,8 +35,8 @@ contract PredictionManager is
 
     // --- Constants ---
     bytes32 public constant MARKET_EXPIRED_SIGNATURE = keccak256("MarketExpired(uint256,uint256)");
+    uint256 public constant INK_CHAIN_ID = 763373; // Ink Sepolia chain ID
 
-    // --- Constants ---
     uint256 public constant MAX_BASIS_POINTS = 10_000; // 100% in basis points
 
     // --- State Variables ---
@@ -49,6 +49,7 @@ contract PredictionManager is
     uint256 public minStakeAmount; // Global minimum stake amount
     uint256 public defaultMarketMinStake; // Default minimum stake for new markets
     uint256 public maxPriceStalenessSeconds;
+    IPredictionManager.AutomationProvider public automationProvider; // Determines which automation system to use
 
     mapping(uint256 => Market) internal markets;
     mapping(uint256 => uint256) public marketMinStakes; // Market-specific minimum stakes
@@ -278,6 +279,16 @@ contract PredictionManager is
      */
     error EmptyMarketName();
 
+    /**
+     * @notice Thrown when a function that should only be called with Chainlink automation is called with a different provider.
+     */
+    error OnlyChainlinkAutomation();
+
+    /**
+     * @notice Thrown when a function that should only be called with Gelato automation is called with a different provider.
+     */
+    error OnlyGelatoAutomation();
+
     // --- Modifiers ---
     modifier onlyOracleResolverContract() {
         // Renamed to avoid clash with MarketLogic's potential name
@@ -289,6 +300,20 @@ contract PredictionManager is
         // Renamed
         if (msg.sender != rewardDistributorAddress) {
             revert NotRewardDistributor();
+        }
+        _;
+    }
+
+    modifier onlyChainlinkAutomation() {
+        if (automationProvider != IPredictionManager.AutomationProvider.CHAINLINK) {
+            revert OnlyChainlinkAutomation();
+        }
+        _;
+    }
+
+    modifier onlyGelatoAutomation() {
+        if (automationProvider != IPredictionManager.AutomationProvider.GELATO) {
+            revert OnlyGelatoAutomation();
         }
         _;
     }
@@ -322,6 +347,13 @@ contract PredictionManager is
         maxPriceStalenessSeconds = _maxPriceStalenessSeconds;
         oracleResolverAddress = _oracleResolverAddress;
         rewardDistributorAddress = _rewardDistributorAddress;
+        
+        // Set automation provider based on chain ID
+        if (block.chainid == INK_CHAIN_ID) {
+            automationProvider = IPredictionManager.AutomationProvider.GELATO;
+        } else {
+            automationProvider = IPredictionManager.AutomationProvider.CHAINLINK;
+        }
 
         emit FeeConfigurationChanged(_treasuryAddress, _initialFeeBasisPoints);
         emit MinStakeAmountChanged(_initialMinStakeAmount);
@@ -759,7 +791,8 @@ contract PredictionManager is
     function checkLog(
         Log calldata _log,
         bytes calldata /*_checkData*/ // Implements ILogAutomation
-    ) external view override returns (bool upkeepNeeded, bytes memory performData) {
+    ) external view override onlyChainlinkAutomation returns (bool upkeepNeeded, bytes memory performData) {
+        
         // Check if the log was emitted by this contract and is a MarketExpired event
         if (_log.source != address(this) || _log.topics.length < 2 || _log.topics[0] != MARKET_EXPIRED_SIGNATURE) {
             return (false, bytes(""));
@@ -875,8 +908,10 @@ contract PredictionManager is
         override(
             AutomationCompatibleInterface // Specify which override if multiple interfaces have it
         )
+        onlyChainlinkAutomation
         returns (bool upkeepNeeded, bytes memory performData)
     {
+        
         uint256[] memory marketIdsToNotify = new uint256[](_marketIdsList.length); // Max possible size
         uint256 count = 0;
 
@@ -907,6 +942,157 @@ contract PredictionManager is
         performData = abi.encode(LogAction.EmitMarketExpired, finalMarketIds);
         return (true, performData);
     }
+
+    // --- Gelato Automation Functions ---
+    /**
+     * @notice Checks if upkeep is needed by looking for expired markets (Gelato version).
+     * @dev This function is designed to be called by Gelato's automation system.
+     *      It scans through markets to find those that have expired but haven't been resolved.
+     * @return canExec Boolean indicating if there are markets needing resolution.
+     * @return execPayload Encoded data for the performGelatoUpkeep function containing market IDs to process.
+     */
+    function checker() external view onlyGelatoAutomation returns (bool canExec, bytes memory execPayload) {
+        
+        uint256[] memory expiredMarkets = _getExpiredMarkets();
+        
+        if (expiredMarkets.length == 0) {
+            return (false, "");
+        }
+        
+        // Encode the expired market IDs for the performGelatoUpkeepWithIds function
+        execPayload = abi.encodeWithSelector(this.performGelatoUpkeepWithIds.selector, expiredMarkets);
+        return (true, execPayload);
+    }
+    
+    /**
+     * @notice Performs upkeep by processing expired markets (Gelato version with parameters).
+     * @dev This function is called by Gelato when upkeep is needed.
+     *      It processes each expired market by emitting MarketExpired events and triggering resolution.
+     * @param expiredMarketIds Array of market IDs that need to be processed.
+     */
+    function performGelatoUpkeepWithIds(uint256[] calldata expiredMarketIds) external onlyGelatoAutomation {
+        
+        if (expiredMarketIds.length == 0) {
+            revert InvalidUpkeepData("No markets to process");
+        }
+        
+        // First, emit MarketExpired events for all expired markets
+        uint256 currentTime = block.timestamp;
+        for (uint256 i = 0; i < expiredMarketIds.length; i++) {
+            uint256 marketId = expiredMarketIds[i];
+            
+            // Verify the market is actually expired before emitting event
+            if (_isMarketExpired(marketId)) {
+                emit MarketExpired(marketId, currentTime);
+            }
+        }
+        
+        // Then attempt to resolve each market
+        for (uint256 i = 0; i < expiredMarketIds.length; i++) {
+            uint256 marketId = expiredMarketIds[i];
+            _triggerMarketResolution(marketId);
+        }
+    }
+    
+    /**
+     * @notice Performs Gelato upkeep to resolve expired markets (interface version).
+     * @dev This function is required by the IPredictionManager interface.
+     *      It automatically detects expired markets and processes them.
+     */
+    function performGelatoUpkeep() external onlyGelatoAutomation {
+        
+        uint256[] memory expiredMarkets = _getExpiredMarkets();
+        
+        if (expiredMarkets.length == 0) {
+            revert InvalidUpkeepData("No markets to process");
+        }
+        
+        // First, emit MarketExpired events for all expired markets
+        uint256 currentTime = block.timestamp;
+        for (uint256 i = 0; i < expiredMarkets.length; i++) {
+            uint256 marketId = expiredMarkets[i];
+            
+            // Verify the market is actually expired before emitting event
+            if (_isMarketExpired(marketId)) {
+                emit MarketExpired(marketId, currentTime);
+            }
+        }
+        
+        // Then attempt to resolve each market
+        for (uint256 i = 0; i < expiredMarkets.length; i++) {
+            uint256 marketId = expiredMarkets[i];
+            _triggerMarketResolution(marketId);
+        }
+    }
+    
+    /**
+     * @notice Manual function to resolve a specific market (for emergency use).
+     * @param marketId The ID of the market to resolve.
+     */
+    function resolveMarketManual(uint256 marketId) external onlyOwner {
+        _triggerMarketResolution(marketId);
+    }
+    
+    /**
+     * @notice Internal function to get all expired markets.
+     * @return expiredMarkets Array of market IDs that have expired but not been resolved.
+     */
+    function _getExpiredMarkets() internal view returns (uint256[] memory) {
+        uint256 marketCount = _marketIdsList.length;
+        uint256[] memory tempExpired = new uint256[](marketCount); // Max possible size
+        uint256 expiredCount = 0;
+        uint256 currentTime = block.timestamp;
+        
+        // Limit the number of markets we check to avoid gas issues (max 50)
+        uint256 marketsToCheck = marketCount > 50 ? 50 : marketCount;
+        
+        for (uint256 i = 0; i < marketsToCheck; i++) {
+            uint256 marketId = _marketIdsList[i];
+            Market storage market = markets[marketId];
+            
+            if (market.exists && !market.resolved && market.expirationTime > 0 && market.expirationTime <= currentTime) {
+                tempExpired[expiredCount] = marketId;
+                expiredCount++;
+            }
+        }
+        
+        // Resize array to actual count
+        uint256[] memory expiredMarkets = new uint256[](expiredCount);
+        for (uint256 i = 0; i < expiredCount; i++) {
+            expiredMarkets[i] = tempExpired[i];
+        }
+        
+        return expiredMarkets;
+    }
+    
+    /**
+     * @notice Internal function to check if a specific market has expired.
+     * @param marketId The ID of the market to check.
+     * @return expired True if the market has expired and is not resolved.
+     */
+    function _isMarketExpired(uint256 marketId) internal view returns (bool expired) {
+        Market storage market = markets[marketId];
+        return market.exists && !market.resolved && market.expirationTime > 0 && market.expirationTime <= block.timestamp;
+    }
+    
+    // --- View Functions for Automation ---
+    /**
+     * @notice Gets the list of currently expired markets.
+     * @return Array of market IDs that have expired but not been resolved.
+     */
+    function getExpiredMarkets() external view returns (uint256[] memory) {
+        return _getExpiredMarkets();
+    }
+    
+    /**
+     * @notice Checks if a specific market has expired.
+     * @param marketId The ID of the market to check.
+     * @return True if the market has expired and is not resolved.
+     */
+    function isMarketExpired(uint256 marketId) external view returns (bool) {
+        return _isMarketExpired(marketId);
+    }
+    
 
     // --- IERC721Receiver Implementation ---
     function onERC721Received(

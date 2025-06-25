@@ -96,7 +96,6 @@ contract DeploySwapCastInk is Script, StdCheats {
         console2.log("ADMIN_ADDRESS:", predictionManager.owner());
 
         // 4. Deploy OracleResolver with placeholder for Ink 
-        // NOTE: This will need to be updated to use Pyth Network instead of Chainlink
         oracleResolver = new OracleResolver(
             address(predictionManager), 
             ORACLE_REGISTRY, // This will be replaced with Pyth contract address
@@ -165,12 +164,5 @@ contract DeploySwapCastInk is Script, StdCheats {
         console2.log("SwapCastHook:    ", address(swapCastHook));
         console2.log("Pool Manager:    ", POOL_MANAGER_ADDRESS);
         console2.log("================================");
-        console2.log("");
-        console2.log("NEXT STEPS:");
-        console2.log("1. Update POOL_MANAGER_ADDRESS with actual Ink Uniswap v4 address");
-        console2.log("2. Replace OracleResolver with Pyth Network integration");
-        console2.log("3. Set up automation alternative (Gelato Network)");
-        console2.log("4. Update frontend contract addresses for Ink");
-        console2.log("5. Deploy and configure subgraph for Ink");
     }
 }
