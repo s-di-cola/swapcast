@@ -3,7 +3,7 @@
 	import { formatNumber } from '$lib/helpers/formatters';
 	import { onMount } from 'svelte';
 	import { ChevronLeft, RefreshCw } from 'lucide-svelte';
-	import { getServerPrice } from '$lib/services/price';
+	import { getCurrentPrice } from '$lib/services/price';
 
 	// Props
 	const { market, onChangeMarket = () => {} } = $props<{
@@ -28,11 +28,11 @@
 		try {
 			// Extract the base asset symbol from the asset pair
 			const assetSymbol = market.assetSymbol || market.assetPair?.split('/')[0];
-			
+
 			if (assetSymbol) {
 				// Get the current price from the server-backed price service
-				const price = await getServerPrice(assetSymbol);
-				
+				const price = await getCurrentPrice(assetSymbol);
+
 				// Only use the price if it's valid, don't fall back to threshold
 				if (price !== null && price > 0) {
 					currentPrice = price;

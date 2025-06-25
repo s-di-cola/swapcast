@@ -11,11 +11,9 @@
 export {
 	getHistoricalPriceData,
 	searchCoins,
-	fetchCoinList,
-	getCoinIdFromAssetPair,
+	getCurrentPrice,
+	getBatchPrices,
 	formatPriceDataForChart,
-	getServerPrice,
-	getBatchServerPrices
 } from './operations';
 
 // Type exports

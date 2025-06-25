@@ -9,7 +9,6 @@
 	import { appKit } from '$lib/configs/wallet.config';
 	import { isAdmin } from '$lib/utils/admin';
 
-
 	let { children } = $props<{ children: any }>();
 
 	// Determine route types
@@ -133,13 +132,13 @@
 			return;
 		}
 
-		// Then check if admin user is trying to access non-admin routes
-		if (isAdmin() && isAppRoute) {
+		// Check if admin user is trying to access non-admin routes (but allow admin routes)
+		if (isAdmin() && isAppRoute && !isAdminRoute) {
 			goto('/admin');
 			return;
 		}
 
-		// Finally check if non-admin user is trying to access admin routes
+		// Check if non-admin user is trying to access admin routes
 		if (!isAdmin() && isAdminRoute) {
 			goto('/markets');
 			return;
