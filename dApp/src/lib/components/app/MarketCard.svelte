@@ -33,7 +33,7 @@
 			class="relative overflow-hidden rounded-xl border border-gray-100 p-5 shadow-lg transition-all duration-300 {market.status === 'Resolved' ? 'bg-gray-50 opacity-75' : 'bg-white hover:border-indigo-200 hover:shadow-xl'}"
 	>
 		<!-- Market header with pair name and status -->
-		<div class="mb-3 flex items-center justify-between">
+		<div class="mb-3 flex h-6 items-center justify-between">
 			<p class="text-sm font-medium text-gray-600">{market.name} Market</p>
 			<div class="flex items-center space-x-2">
 				<span
@@ -85,21 +85,21 @@
 		</div>
 
 		<!-- Price information -->
-		<div class="mb-5 flex justify-between">
+		<div class="mb-5 flex h-12 items-end justify-between">
 			<div>
-				<p class="text-xs text-gray-500">{market.assetSymbol} Current Price</p>
-				<p class="text-lg font-semibold text-gray-800">${formatNumber(currentPrice)}</p>
+				<p class="text-xs text-gray-500 leading-tight">{market.assetSymbol} Current Price</p>
+				<p class="text-lg font-semibold text-gray-800 leading-tight">${formatNumber(currentPrice)}</p>
 			</div>
 			<div class="text-right">
-				<p class="text-xs text-gray-500">Target Price</p>
-				<p class="text-lg font-semibold text-gray-800">${formatNumber(market.priceThreshold)}</p>
+				<p class="text-xs text-gray-500 leading-tight">Target Price</p>
+				<p class="text-lg font-semibold text-gray-800 leading-tight">${formatNumber(market.priceThreshold)}</p>
 			</div>
 		</div>
 
 		<!-- Above/Below threshold boxes -->
-		<div class="mb-3 flex space-x-2">
-			<div class="w-1/2 rounded-lg p-3" style="background-color: #ecfdf5">
-				<div class="mb-2 flex items-center justify-between">
+		<div class="mb-3 flex h-20 space-x-2">
+			<div class="w-1/2 rounded-lg p-3 flex flex-col justify-between" style="background-color: #ecfdf5">
+				<div class="flex items-center justify-between">
 					<span
 							class="inline-flex items-center rounded-full bg-green-100 px-2 py-0.5 text-xs font-medium text-green-800"
 					>
@@ -143,8 +143,8 @@
 					{formatNumber(bullishPercentage, 1)}% conviction
 				</div>
 			</div>
-			<div class="w-1/2 rounded-lg p-3" style="background-color: #fef2f2">
-				<div class="mb-2 flex items-center justify-between">
+			<div class="w-1/2 rounded-lg p-3 flex flex-col justify-between" style="background-color: #fef2f2">
+				<div class="flex items-center justify-between">
 					<span
 							class="inline-flex items-center rounded-full bg-red-100 px-2 py-0.5 text-xs font-medium text-red-800"
 					>
@@ -196,16 +196,16 @@
 		</div>
 
 		<!-- Footer with labels - FIXED: Swap labels to match the bar logic -->
-		<div class="mb-4 flex items-center justify-between text-xs">
+		<div class="mb-4 flex h-4 items-center justify-between text-xs">
 			<div class="font-medium text-indigo-600">Bearish</div>
 			<div class="text-gray-500">Bullish</div>
 		</div>
 
 		<!-- Action buttons - side by side -->
-		<div class="flex flex-col space-y-2 sm:flex-row sm:space-y-0 sm:space-x-3">
+		<div class="flex h-10 flex-col space-y-2 sm:flex-row sm:space-y-0 sm:space-x-3">
 			<!-- View Details button -->
 			<button
-					class="flex w-full items-center justify-center rounded-lg border border-gray-300 bg-gray-100 px-3 py-2 text-sm font-medium text-gray-700 transition-colors hover:bg-gray-200 sm:flex-1 sm:px-4 sm:text-base"
+					class="flex h-10 w-full items-center justify-center rounded-lg border border-gray-300 bg-gray-100 px-3 py-2 text-sm font-medium text-gray-700 transition-colors hover:bg-gray-200 sm:flex-1 sm:px-4 sm:text-base"
 					onclick={() => onViewDetails(market.id)}
 			>
 				<svg
@@ -233,11 +233,10 @@
 
 			<!-- Select/Change Market button -->
 			<button
-					class="flex w-full items-center justify-center rounded-lg px-3 py-2 text-sm font-medium transition-colors sm:flex-1 sm:px-4 sm:text-base {market.status === 'Resolved' 
-					? 'cursor-not-allowed bg-gray-300 text-gray-500' 
+					class="flex h-10 w-full items-center justify-center rounded-lg px-3 py-2 text-sm font-medium transition-colors sm:flex-1 sm:px-4 sm:text-base {market.status === 'Resolved'
+					? 'cursor-not-allowed bg-gray-300 text-gray-500'
 					: 'bg-indigo-600 text-white hover:bg-indigo-700'}"
-				onclick={() => market.status !== 'Resolved' && onSelect(market.id)}
-				disabled={market.status === 'Resolved'}
+					onclick={() => market.status !== 'Resolved' && onSelect(market.id)}
 			>
 				<svg
 						class="h-4 w-4 flex-shrink-0 sm:mr-1"
