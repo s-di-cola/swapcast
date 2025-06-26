@@ -26,14 +26,10 @@ const recordSinglePrediction = async (
         if (!(await validateMarket(market))) return false;
 
         const finalStake = stakeAmount < minStakeAmount ? minStakeAmount * 2n : stakeAmount;
-        const { total } = calculateFee(finalStake);
-
-        // Validate ETH balance for transaction fees
-        const ethCheck = await validateWhaleBalanceForSwap(whale, 'ETH', total);
-        if (!ethCheck.valid) {
-            logWarning('Prediction', `${whale.name} insufficient ETH`);
-            return false;
-        }
+        
+        // With Delta feature: no separate ETH needed for staking
+        // Hook automatically takes 1% from swap output
+        // Only need ETH if swapping ETH itself
 
         // Ensure required tokens are available
         const requiredTokens = getMarketTokens({
@@ -65,9 +61,9 @@ const recordSinglePrediction = async (
             market.pool,
             BigInt(market.id),
             outcome,
-            finalStake
+            finalStake  // Used as estimatedStakeAmount for swap calculation
         );
-        logSuccess('Prediction', `✅ ${whale.name} predicted ${outcome} on market ${market.id}`);
+        logSuccess('Prediction', `✅ ${whale.name} predicted ${outcome} on market ${market.id} (Delta: 1% auto-stake)`);
         return true;
     } catch (error) {
         logWarning('Prediction', `Failed: ${error}`);

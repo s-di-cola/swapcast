@@ -57,52 +57,42 @@ interface BalanceValidationResult {
 }
 
 /**
- * Creates properly formatted hookData for the SwapCastHook.
+ * Creates properly formatted hookData for the SwapCastHook with Delta Feature.
  *
- * The hookData is packed as: [userAddress, marketId, outcome, stakeAmount]
- * This data is passed to the hook during swap execution to record the prediction.
+ * The hookData is packed as: [userAddress, marketId, outcome]
+ * The hook automatically calculates the stake as 1% of the swap output amount.
  *
  * @param userAddress - The address of the user making the prediction
  * @param marketId - The ID of the prediction market
  * @param outcome - The predicted outcome (0 for bearish, 1 for bullish)
- * @param stakeAmount - The amount being staked in wei (must fit in uint128)
  * @returns Formatted hook data as a hex string
- * @throws {Error} If stake amount exceeds uint128 maximum
  */
 function createPredictionHookData(
     userAddress: Address,
     marketId: bigint,
-    outcome: number,
-    stakeAmount: bigint
+    outcome: number
 ): `0x${string}` {
-  const maxUint128 = (2n ** 128n) - 1n;
-  if (stakeAmount > maxUint128) {
-    throw new Error(`Stake amount ${stakeAmount} exceeds uint128 maximum`);
-  }
-
   const hookData = encodePacked(
-      ['address', 'uint256', 'uint8', 'uint128'],
-      [userAddress, marketId, outcome, stakeAmount]
+      ['address', 'uint256', 'uint8'],
+      [userAddress, marketId, outcome]
   );
 
-  logInfo('HookData', `Created hookData: ${hookData}`);
+  logInfo('HookData', `Created hookData (Delta): ${hookData}`);
   return hookData;
 }
 
 /**
- * Calculates the total ETH amount needed for a prediction including protocol fees.
+ * Calculates the estimated stake amount from swap output (1% of swap).
+ * This is for informational purposes only - the actual calculation happens in the hook.
  *
- * @param stakeAmount - The base stake amount in wei
- * @param feeBasisPoints - Protocol fee in basis points (e.g., 200 = 2%)
- * @returns Total ETH needed (stake + fees) in wei
+ * @param swapOutputAmount - The expected output amount from the swap
+ * @returns Estimated stake amount (1% of swap output)
  */
-function calculateTotalETHNeeded(stakeAmount: bigint, feeBasisPoints: bigint): bigint {
-  const MAX_BASIS_POINTS = 10000n;
-  const fee = (stakeAmount * feeBasisPoints) / MAX_BASIS_POINTS;
-  const total = stakeAmount + fee;
-
-  logInfo('ETHCalculation', `Stake: ${stakeAmount}, Fee: ${fee}, Total: ${total}`);
-  return total;
+function calculateEstimatedStakeFromSwap(swapOutputAmount: bigint): bigint {
+  const estimatedStake = swapOutputAmount / 100n; // 1% of swap output
+  
+  logInfo('DeltaCalculation', `Swap Output: ${swapOutputAmount}, Estimated Stake: ${estimatedStake}`);
+  return estimatedStake;
 }
 
 /**
@@ -235,9 +225,9 @@ async function generateWhaleSwapAmount(
  * @param marketId - The ID of the prediction market
  * @param outcome - The predicted outcome (OUTCOME_BULLISH or OUTCOME_BEARISH)
  * @param swapAmount - The amount of input tokens to swap (in token's native decimals)
- * @param stakeAmount - The prediction stake amount (always in ETH/18 decimals)
  * @returns Promise resolving to the transaction hash
  * @throws {Error} If insufficient balance, zero swap amount, or transaction fails
+ * @note With Delta feature: stake is automatically calculated as 1% of swap output
  */
 export const recordPredictionViaSwap = withErrorHandling(
     async (
@@ -245,14 +235,10 @@ export const recordPredictionViaSwap = withErrorHandling(
         pool: Pool,
         marketId: bigint,
         outcome: number,
-        swapAmount: bigint,      // Actual amount to swap (in token's native decimals)
-        stakeAmount: bigint      // Prediction stake amount (always in ETH/18 decimals)
+        swapAmount: bigint      // Actual amount to swap (in token's native decimals)
     ): Promise<Hash> => {
 
       const universalRouter = getContract(getIUniversalRouter, CONTRACT_ADDRESSES.UNIVERSAL_ROUTER as Address);
-
-      const { protocolFeeBasisPoints } = await getProtocolConfig();
-      const predictionETHNeeded = calculateTotalETHNeeded(stakeAmount, protocolFeeBasisPoints);
 
       const token0 = getTokenFromCurrency(pool.currency0);
       const token1 = getTokenFromCurrency(pool.currency1);
@@ -268,11 +254,15 @@ export const recordPredictionViaSwap = withErrorHandling(
       // Use the provided swap amount directly (no conversion needed)
       const inputAmount = swapAmount;
 
-      const hookData = createPredictionHookData(userAddress, marketId, outcome, stakeAmount);
+      // Create hookData without stake amount (Delta feature)
+      const hookData = createPredictionHookData(userAddress, marketId, outcome);
+      
+      // Calculate estimated stake for logging purposes (1% of swap output)
+      const estimatedStake = calculateEstimatedStakeFromSwap(inputAmount);
 
-      logInfo('PredictionSwap', `Recording ${outcome === OUTCOME_BULLISH ? 'BULLISH' : 'BEARISH'} prediction`);
+      logInfo('PredictionSwap', `Recording ${outcome === OUTCOME_BULLISH ? 'BULLISH' : 'BEARISH'} prediction (Delta Mode)`);
       logInfo('PredictionSwap', `Swap: ${formatUnits(inputAmount, inputToken.decimals)} ${inputToken.symbol} → ${outputToken.symbol}`);
-      logInfo('PredictionSwap', `Prediction stake: ${formatUnits(stakeAmount, 18)} ETH`);
+      logInfo('PredictionSwap', `Estimated stake (1% of output): ~${formatUnits(estimatedStake, 18)} ETH`);
 
       // Validate that swap amount is not zero
       if (inputAmount === 0n) {
@@ -282,24 +272,27 @@ export const recordPredictionViaSwap = withErrorHandling(
       try {
         await impersonateAccount(userAddress);
 
-        // Use symbol check instead of isNative for ETH detection
+        // With Delta feature: only need ETH for the actual swap (if swapping ETH)
+        // No separate ETH needed for staking - hook takes 1% from swap output
         let totalETHNeeded: bigint;
         if (inputToken.symbol === 'ETH') {
-          // ETH swap: need swap amount + prediction ETH
-          totalETHNeeded = inputAmount + predictionETHNeeded;
-          logInfo('PredictionSwap', `ETH swap - Swap: ${formatUnits(inputAmount, 18)} ETH + Prediction: ${formatUnits(predictionETHNeeded, 18)} ETH`);
+          // ETH swap: only need the swap amount (hook takes 1% automatically)
+          totalETHNeeded = inputAmount;
+          logInfo('PredictionSwap', `ETH swap (Delta) - Swap: ${formatUnits(inputAmount, 18)} ETH (hook will take 1%)`);
         } else {
-          // Token swap: only need prediction ETH (tokens via approval)
-          totalETHNeeded = predictionETHNeeded;
-          logInfo('PredictionSwap', `Token swap - Only prediction: ${formatUnits(predictionETHNeeded, 18)} ETH`);
+          // Token swap: no ETH needed (hook handles staking from swap output)
+          totalETHNeeded = 0n;
+          logInfo('PredictionSwap', `Token swap (Delta) - No ETH needed (hook handles staking from output)`);
         }
 
-        logInfo('PredictionSwap', `Total ETH needed: ${formatUnits(totalETHNeeded, 18)} ETH`);
+        logInfo('PredictionSwap', `Total ETH needed for swap: ${formatUnits(totalETHNeeded, 18)} ETH`);
 
-        // Check ETH balance
-        const ethBalance = await getPublicClient().getBalance({ address: userAddress });
-        if (ethBalance < totalETHNeeded) {
-          throw new Error(`Insufficient ETH balance. Need: ${formatUnits(totalETHNeeded, 18)} ETH, Have: ${formatUnits(ethBalance, 18)} ETH`);
+        // Check ETH balance only if we need ETH for the swap
+        if (totalETHNeeded > 0n) {
+          const ethBalance = await getPublicClient().getBalance({ address: userAddress });
+          if (ethBalance < totalETHNeeded) {
+            throw new Error(`Insufficient ETH balance. Need: ${formatUnits(totalETHNeeded, 18)} ETH, Have: ${formatUnits(ethBalance, 18)} ETH`);
+          }
         }
 
         // Validate token balance for non-ETH swaps
@@ -374,7 +367,8 @@ export const recordPredictionViaSwap = withErrorHandling(
 
         const deadline = BigInt(Math.floor(Date.now() / 1000) + 60);
 
-        logInfo('PredictionSwap', `Executing with ETH value: ${formatUnits(totalETHNeeded, 18)} ETH`);
+        logInfo('PredictionSwap', `Executing Delta swap with ETH value: ${formatUnits(totalETHNeeded, 18)} ETH`);
+        logInfo('PredictionSwap', `Hook will automatically take 1% of output as stake`);
 
         const hash = await universalRouter.write.execute([commands, inputs, deadline], {
           account: userAddress,
@@ -422,9 +416,10 @@ export const recordPredictionViaSwap = withErrorHandling(
  * @param pool - The Uniswap V4 pool to trade in
  * @param marketId - The ID of the prediction market
  * @param outcome - The predicted outcome (OUTCOME_BULLISH or OUTCOME_BEARISH)
- * @param stakeAmount - The prediction stake amount (always in ETH/18 decimals)
+ * @param estimatedStakeAmount - Estimated stake for realistic swap calculation (ETH/18 decimals)
  * @returns Promise resolving to the transaction hash
  * @throws {Error} If balance validation fails or transaction execution fails
+ * @note With Delta feature: actual stake is 1% of swap output, not the estimated amount
  */
 export const recordPredictionViaSwapWithRealisticAmount = withErrorHandling(
     async (
@@ -432,7 +427,7 @@ export const recordPredictionViaSwapWithRealisticAmount = withErrorHandling(
         pool: Pool,
         marketId: bigint,
         outcome: number,
-        stakeAmount: bigint
+        estimatedStakeAmount: bigint
     ): Promise<Hash> => {
 
       // Determine input token based on outcome
@@ -442,12 +437,13 @@ export const recordPredictionViaSwapWithRealisticAmount = withErrorHandling(
       const inputToken = zeroForOne ? token0 : token1;
 
       // Generate realistic swap amount considering available balance
-      const swapAmount = await generateWhaleSwapAmount(userAddress, inputToken, stakeAmount);
+      const swapAmount = await generateWhaleSwapAmount(userAddress, inputToken, estimatedStakeAmount);
 
-      logInfo('RealisticSwap', `Generated swap: ${formatUnits(swapAmount, inputToken.decimals)} ${inputToken.symbol} vs ${formatUnits(stakeAmount, 18)} ETH stake`);
-      logInfo('RealisticSwap', `Available balance considered for realistic amount`);
+      logInfo('RealisticSwap', `Generated swap (Delta): ${formatUnits(swapAmount, inputToken.decimals)} ${inputToken.symbol}`);
+      logInfo('RealisticSwap', `Estimated stake reference: ${formatUnits(estimatedStakeAmount, 18)} ETH`);
+      logInfo('RealisticSwap', `Actual stake will be 1% of swap output`);
 
-      return recordPredictionViaSwap(userAddress, pool, marketId, outcome, swapAmount, stakeAmount);
+      return recordPredictionViaSwap(userAddress, pool, marketId, outcome, swapAmount);
     },
     'RecordPredictionViaSwapWithRealisticAmount'
 );
