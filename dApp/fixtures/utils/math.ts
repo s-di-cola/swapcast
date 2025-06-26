@@ -1,78 +1,49 @@
-import { encodeSqrtRatioX96 } from '@uniswap/v3-sdk';
-import chalk from 'chalk';
+/**
+ * @file Mathematical utilities for price calculations
+ * @description Provides functions for price calculations and token conversions
+ * @module utils/math
+ */
+
+import {encodeSqrtRatioX96} from '@uniswap/v3-sdk';
 import JSBI from 'jsbi';
-import { Address, parseUnits } from 'viem';
-import { TOKEN_CONFIGS } from '../config/tokens';
-import { PriceData } from '../services/price';
+import {Address, parseUnits} from 'viem';
+import {TOKEN_CONFIGS} from '../config/tokens';
+import {PriceData} from '../services/price';
 
 /**
- * Calculate sqrtPriceX96 from two separate USD prices
- * @param token0PriceUSD - Price of token0 in USD
- * @param token1PriceUSD - Price of token1 in USD
- * @param token0Decimals - Decimals of token0
- * @param token1Decimals - Decimals of token1
+ * Calculates the sqrtPriceX96 value from two USD-denominated token prices
+ * @param token0PriceUSD - Price data for the first token
+ * @param token1PriceUSD - Price data for the second token
+ * @returns {JSBI} The calculated sqrtPriceX96 value
+ * @example
+ * const sqrtPrice = calculateSqrtPriceX96FromUSDPrices(ethPrice, usdcPrice);
  */
 export function calculateSqrtPriceX96FromUSDPrices(
-	token0PriceUSD: PriceData, // e.g., ETH = $2000
-	token1PriceUSD: PriceData, // e.g., USDC = $1
-	token0Decimals: number,
-	token1Decimals: number
+	token0PriceUSD: PriceData,
+	token1PriceUSD: PriceData,
 ): JSBI {
-	// Calculate the ratio: how many token1 per 1 token0
 	const priceRatio = token0PriceUSD.price / token1PriceUSD.price;
+	const commonDecimals = 18;
+	const token0Amount = parseUnits('1', commonDecimals);
+	const token1Amount = parseUnits(priceRatio.toString(), commonDecimals);
 
-	const token0Amount = parseUnits('1', token0Decimals);
-	const token1Amount = parseUnits(priceRatio.toString(), token1Decimals);
+	// Debug logging removed in production
+	if (process.env.NODE_ENV === 'development') {
+		console.log(`🔍 Debug: ${token0PriceUSD.symbol}/${token1PriceUSD.symbol}`);
+		console.log(`🔍 Price ratio: ${priceRatio}`);
+		console.log(`🔍 Normalized token0Amount: ${token0Amount}`);
+		console.log(`🔍 Normalized token1Amount: ${token1Amount}`);
+	}
 
 	return encodeSqrtRatioX96(token1Amount.toString(), token0Amount.toString());
 }
 
 /**
- * Test function to validate calculations against known good values
- */
-export function testSqrtPriceCalculations(): void {
-	console.log(chalk.blue('\n🧪 TESTING SQRTPRICEX96 CALCULATIONS'));
-	console.log(chalk.blue('='.repeat(50)));
-
-	const testCases = [
-		{ token0: 'ETH', token1: 'USDC', marketPrice: 2500, description: 'ETH/USDC pair' },
-		{ token0: 'ETH', token1: 'USDT', marketPrice: 2500, description: 'ETH/USDT pair' },
-		{ token0: 'ETH', token1: 'DAI', marketPrice: 2500, description: 'ETH/DAI pair' },
-		{ token0: 'WBTC', token1: 'USDC', marketPrice: 45000, description: 'WBTC/USDC pair' },
-		{ token0: 'USDC', token1: 'USDT', marketPrice: 1, description: 'Stablecoin pair' }
-	];
-
-	for (const testCase of testCases) {
-		try {
-			console.log(chalk.yellow(`\n🧪 Testing ${testCase.description}`));
-			const result = calculateSqrtPriceX96(
-				testCase.token0,
-				testCase.token1,
-				testCase.marketPrice,
-				true
-			);
-
-			// Basic validation - result should be reasonable
-			const MIN_SQRT_PRICE = 4295128739n;
-			const MAX_SQRT_PRICE = 1461446703485210103287273052203988822378723970341n;
-
-			if (result > MIN_SQRT_PRICE && result < MAX_SQRT_PRICE) {
-				console.log(chalk.green(`✅ PASS: Result is within valid bounds`));
-			} else {
-				console.log(chalk.red(`❌ FAIL: Result is outside valid bounds`));
-			}
-		} catch (error) {
-			console.log(chalk.red(`❌ ERROR: ${error.message}`));
-		}
-	}
-
-	console.log(
-		chalk.blue('\n📊 Test Summary: If all tests show ✅ PASS, the math is working correctly')
-	);
-}
-
-/**
- * Maps token address to symbol (for compatibility)
+ * Retrieves the token symbol from its address
+ * @param address - The token contract address
+ * @returns The token symbol or 'UNKNOWN' if not found
+ * @example
+ * const symbol = getTokenSymbolFromAddress('0x...');
  */
 export function getTokenSymbolFromAddress(address: Address): string {
 	const addressLower = address.toLowerCase();
@@ -87,8 +58,12 @@ export function getTokenSymbolFromAddress(address: Address): string {
 }
 
 /**
- * Get market price for a base asset from our symbol
- * This is a helper to determine which token has the "market price"
+ * Determines if a token symbol represents a base asset with a market price
+ * @param token0Symbol - The symbol of the first token in the pair
+ * @param token1Symbol - The symbol of the second token in the pair
+ * @returns The base asset symbol if found, otherwise null
+ * @example
+ * const baseAsset = getBaseAssetFromPair('WETH', 'USDC'); // Returns 'WETH'
  */
 export function getBaseAssetFromPair(token0Symbol: string, token1Symbol: string): string | null {
 	const token0Config = TOKEN_CONFIGS[token0Symbol];

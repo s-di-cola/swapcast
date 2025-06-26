@@ -1,7 +1,5 @@
 <script lang="ts">
-	import { formatCurrency } from '$lib/helpers/formatters';
-	import type { Market } from '$lib/services/market';
-	import type { MarketSortField, SortDirection } from '$lib/services/market';
+	import type { Market, MarketSortField, SortDirection } from '$lib/services/market';
 
 	interface Props {
 		markets?: Market[];
@@ -203,7 +201,7 @@
 								${market.priceThreshold}
 							</td>
 							<td class="px-6 py-4 text-sm whitespace-nowrap text-gray-500">
-								{formatCurrency(market.totalStake)}
+								ETH {market.totalStake}
 							</td>
 							<td class="px-6 py-4 text-sm font-medium whitespace-nowrap">
 								<button

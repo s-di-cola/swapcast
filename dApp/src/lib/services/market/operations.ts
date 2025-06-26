@@ -4,21 +4,21 @@
  * High-level market operations and business logic
  */
 
-import { type Address, http, parseEther } from 'viem';
-import { createPool } from './poolService';
+import { PUBLIC_PREDICTIONMANAGER_ADDRESS } from '$env/static/public';
+import { getPredictionManager } from '$generated/types/PredictionManager';
 import { appKit } from '$lib/configs/wallet.config';
 import { getCurrentNetworkConfig } from '$lib/utils/network';
-import { PUBLIC_PREDICTIONMANAGER_ADDRESS } from '$env/static/public';
+import { type Address, http, parseEther } from 'viem';
 import { getMarketCount, getMarketDetails } from './contracts';
-import { getPredictionManager } from '$generated/types/PredictionManager';
-import { sortMarkets, applyDefaultSort } from './utils';
-import { CONTRACT_ADDRESSES } from '$fixtures/utils/wallets';
+import { createPool } from './poolService';
+import { applyDefaultSort, sortMarkets } from './utils';
+// Contract addresses are imported directly from environment variables
 import type {
+	MarketCreationResult,
 	MarketPaginationOptions,
 	PaginatedMarkets,
-	MarketCreationResult,
-	PoolOperationResult,
-	PoolKey
+	PoolKey,
+	PoolOperationResult
 } from './types';
 
 /**
@@ -170,7 +170,7 @@ export async function createMarket(
 	try {
 		const expirationTimestamp = BigInt(expirationTime);
 		const priceThreshold = parseEther(String(priceThresholdStr));
-		const priceAggregator = CONTRACT_ADDRESSES.ORACLE_RESOLVER as Address; // Using Oracle Resolver from environment
+		const priceAggregator = import.meta.env.VITE_PUBLIC_ORACLERESOLVER_ADDRESS as Address;
 
 		const { rpcUrl, chain } = getCurrentNetworkConfig();
 		const predictionManager = getPredictionManager({

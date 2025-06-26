@@ -1,5 +1,5 @@
 # MarketLogic
-[Git Source](https://github.com/s-di-cola/swapcast/blob/dbcbac891458b32482c3b0b147075506087f6b7d/src/MarketLogic.sol)
+[Git Source](https://github.com/s-di-cola/swapcast/blob/82ddc893e8422cccc3d9be9c37239b94209a6248/src/MarketLogic.sol)
 
 **Author:**
 Simone Di Cola
@@ -46,7 +46,7 @@ function recordPrediction(
     address treasuryAddress,
     uint256 protocolFeeBasisPoints,
     uint256 minStakeAmount
-) internal returns (uint256 stakeAmountNet, uint256 protocolFee);
+) internal returns (uint256 stakeAmountNet, uint256 protocolFee, uint256 tokenId);
 ```
 **Parameters**
 
@@ -67,6 +67,7 @@ function recordPrediction(
 |----|----|-----------|
 |`stakeAmountNet`|`uint256`|The net stake amount (same as convictionStakeDeclared).|
 |`protocolFee`|`uint256`|The calculated protocol fee amount that was transferred to treasury.|
+|`tokenId`|`uint256`||
 
 
 ### resolve

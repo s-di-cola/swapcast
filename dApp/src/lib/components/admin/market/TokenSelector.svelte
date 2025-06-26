@@ -31,6 +31,9 @@
 		id
 	}: Props = $props();
 
+	// Track failed image loads to prevent infinite loops
+	let failedImages = $state(new Set<string>());
+
 	const filteredTokens = $derived(
 		tokens.filter(
 			(t) =>
@@ -40,6 +43,23 @@
 					t.name.toLowerCase().includes(searchTerm.toLowerCase()))
 		)
 	);
+
+	// Check if a logo URL is valid (not IPFS or other problematic URLs)
+	function isValidLogoUrl(url: string): boolean {
+		if (!url) return false;
+		// Skip IPFS URLs and other problematic schemes
+		if (url.startsWith('ipfs://') || url.startsWith('data:')) {
+			return false;
+		}
+		return true;
+	}
+
+	// Handle image load errors
+	function handleImageError(event: Event, tokenAddress: string): void {
+		failedImages.add(tokenAddress);
+		// Prevent the default error behavior
+		event.preventDefault();
+	}
 </script>
 
 <div>
@@ -90,8 +110,13 @@
 					onclick={() => onSelect(token.address)}
 				>
 					<div class="flex items-center">
-						{#if token.logoURI}
-							<img src={token.logoURI} alt={token.symbol} class="mr-2 h-6 w-6 rounded-full" />
+						{#if token.logoURI && isValidLogoUrl(token.logoURI) && !failedImages.has(token.address)}
+							<img 
+								src={token.logoURI} 
+								alt={token.symbol} 
+								class="mr-2 h-6 w-6 rounded-full" 
+								onerror={(e) => handleImageError(e, token.address)}
+							/>
 						{:else}
 							<div
 								class="mr-2 flex h-6 w-6 items-center justify-center rounded-full bg-gray-200 text-xs font-bold"

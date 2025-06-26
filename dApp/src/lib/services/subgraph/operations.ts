@@ -13,7 +13,8 @@ import {
 	GET_MARKET_STATS,
 	GET_RECENT_PREDICTIONS,
 	GET_ALL_MARKETS,
-	SEARCH_MARKETS
+	SEARCH_MARKETS,
+	GET_GLOBAL_STATS
 } from './queries';
 import type {
 	SubgraphPrediction,
@@ -21,7 +22,8 @@ import type {
 	SubgraphUserPrediction,
 	SubgraphMarketStats,
 	SubgraphPaginationOptions,
-	SubgraphPaginatedResponse
+	SubgraphPaginatedResponse,
+	SubgraphGlobalStats
 } from './types';
 
 /**
@@ -126,18 +128,27 @@ export async function getUserPredictions(
 			return [];
 		}
 
-		// Transform to user prediction format with winning status
-		return result.predictions.map((prediction) => ({
-			id: prediction.id,
-			marketId: prediction.market.id,
-			marketDescription: prediction.market.description,
-			outcome: prediction.outcome,
-			amount: prediction.amount,
-			timestamp: prediction.timestamp,
-			claimed: prediction.claimed,
-			reward: prediction.reward,
-			isWinning: isPredictionWinning(prediction.outcome, (prediction.market as any).winningOutcome)
-		}));
+		// Transform to user prediction format with winning status and market resolution info
+		return result.predictions.map((prediction) => {
+			const market = prediction.market as SubgraphMarket;
+			const winningOutcome = market.winningOutcome;
+			const isResolved = market.isResolved;
+
+			return {
+				id: prediction.id, // This is now the tokenId
+				tokenId: prediction.tokenId || prediction.id, // Ensure tokenId is always present
+				marketId: market.id,
+				marketDescription: market.description || market.name || 'Unknown Market',
+				outcome: prediction.outcome,
+				amount: prediction.amount,
+				timestamp: prediction.timestamp,
+				claimed: prediction.claimed,
+				reward: prediction.reward,
+				isWinning: isResolved ? isPredictionWinning(prediction.outcome, winningOutcome) : undefined,
+				marketIsResolved: isResolved,
+				marketWinningOutcome: winningOutcome
+			};
+		});
 	} catch (error) {
 		console.error(`Error fetching predictions for user ${userAddress}:`, error);
 		return [];
@@ -211,9 +222,9 @@ export async function getAllMarketsFromSubgraph(
 }
 
 /**
- * Searches markets by description
+ * Searches markets by name/description
  *
- * @param searchTerm - Search term to match against market descriptions
+ * @param searchTerm - Search term to match against market names/descriptions
  * @param limit - Maximum number of results (default: 20)
  * @returns Promise resolving to matching markets
  *
@@ -276,6 +287,41 @@ export async function getMarketStatistics(marketId: string): Promise<SubgraphMar
 		return calculateMarketStats(result.market.predictions);
 	} catch (error) {
 		console.error(`Error fetching statistics for market ${marketId}:`, error);
+		return null;
+	}
+}
+
+/**
+ * Batch fetch multiple markets by IDs
+ *
+ * @param marketIds - Array of market IDs to fetch
+ * @returns Promise resolving to array of markets
+ *
+ * @example
+ * ```typescript
+ * const markets = await batchGetMarkets(['123', '456', '789']);
+ * // Process the returned markets array
+ * ```
+ */
+/**
+ * Fetches global platform statistics
+ *
+ * @returns Promise resolving to global stats or null if not available
+ *
+ * @example
+ * ```typescript
+ * const stats = await getGlobalStats();
+ * if (stats) {
+ *   // Access stats like stats.totalStaked, stats.totalMarkets, etc.
+ * }
+ * ```
+ */
+export async function getGlobalStats(): Promise<SubgraphGlobalStats | null> {
+	try {
+		const result = await executeQuery<{ globalStat: SubgraphGlobalStats }>(GET_GLOBAL_STATS);
+		return result?.globalStat || null;
+	} catch (error) {
+		console.error('Error fetching global stats:', error);
 		return null;
 	}
 }

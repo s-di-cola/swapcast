@@ -11,11 +11,12 @@
 	const NAVIGATION_CONFIG = {
 		brand: {
 			name: 'SwapCast',
-			href: '/'
+			href: '/app'
 		},
 		items: [
 			{ href: '/app/markets', text: 'Markets' },
-			{ href: '/app/portfolio', text: 'Portfolio' }
+			{ href: '/app/portfolio', text: 'Portfolio' },
+			{ href: '/app/my-positions', text: 'My Positions' }
 		]
 	} as const;
 

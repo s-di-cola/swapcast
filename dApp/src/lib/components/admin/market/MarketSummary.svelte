@@ -49,7 +49,7 @@
 		},
 		{
 			label: UI_TEXT.priceThreshold,
-			value: `$${formatCurrency(market.priceThreshold)}`
+			value: `${formatCurrency(market.priceThreshold)}`
 		}
 	]);
 </script>

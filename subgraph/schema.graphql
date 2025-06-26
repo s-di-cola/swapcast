@@ -1,55 +1,58 @@
-type Market @entity {
-  id: ID!
-  marketId: BigInt!
-  creationTimestamp: BigInt!
-  expirationTimestamp: BigInt!
-  description: String!
-  priceThreshold: BigInt
-  baseToken: String
-  quoteToken: String
-  isResolved: Boolean!
-  winningOutcome: Int
-  finalPrice: BigInt
-  totalStakedOutcome0: BigInt!
-  totalStakedOutcome1: BigInt!
-  predictions: [Prediction!]! @derivedFrom(field: "market")
-  resolution: MarketResolution @derivedFrom(field: "market")
-}
-
-type Prediction @entity {
-  id: ID!
-  market: Market!
-  user: User!
-  outcome: Int!
-  amount: BigInt!
-  timestamp: BigInt!
-  tokenId: BigInt
-  claimed: Boolean!
-  reward: BigInt
-}
-
-type User @entity {
-  id: ID!
-  address: String!
-  predictions: [Prediction!]! @derivedFrom(field: "user")
-  totalStaked: BigInt!
-  totalWon: BigInt!
-  totalClaimed: BigInt!
-}
-
-type MarketResolution @entity {
-  id: ID!
-  market: Market!
-  winningOutcome: Int!
-  finalPrice: BigInt!
-  resolutionTimestamp: BigInt!
-}
-
-type GlobalStat @entity {
+type GlobalStat @entity(immutable: false) {
   id: ID!
   totalMarkets: BigInt!
   totalPredictions: BigInt!
   totalStaked: BigInt!
   totalUsers: BigInt!
   totalClaimed: BigInt!
+  totalProtocolFees: BigInt!
+}
+
+type User @entity(immutable: false) {
+  id: ID! # User address
+  address: Bytes!
+  totalStaked: BigInt!
+  totalWon: BigInt!
+  totalClaimed: BigInt!
+  totalFeesPaid: BigInt!
+  predictions: [Prediction!]! @derivedFrom(field: "user")
+}
+
+type Market @entity(immutable: false) {
+  id: ID! # Market ID as string
+  marketId: BigInt!
+  name: String!
+  assetSymbol: String!
+  creationTimestamp: BigInt!
+  expirationTimestamp: BigInt!
+  priceAggregator: Bytes!
+  priceThreshold: BigInt!
+  isResolved: Boolean!
+  winningOutcome: Int
+  finalPrice: BigInt
+  totalStakedOutcome0: BigInt!
+  totalStakedOutcome1: BigInt!
+  totalProtocolFees: BigInt!
+  predictions: [Prediction!]! @derivedFrom(field: "market")
+  resolution: MarketResolution @derivedFrom(field: "market")
+}
+
+type Prediction @entity(immutable: false) {
+  id: ID! # TokenId as string (since tokenId is unique)
+  market: Market!
+  user: User!
+  outcome: Int!
+  amount: BigInt!
+  tokenId: BigInt!
+  timestamp: BigInt!
+  claimed: Boolean!
+  reward: BigInt
+}
+
+type MarketResolution @entity(immutable: true) {
+  id: ID! # Market ID
+  market: Market!
+  winningOutcome: Int!
+  finalPrice: BigInt!
+  resolutionTimestamp: BigInt!
 }

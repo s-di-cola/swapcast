@@ -28,7 +28,7 @@ contract MarketLogicWrapper {
     function recordPrediction(address user, PredictionTypes.Outcome outcome, uint256 convictionStakeDeclared)
         external
         payable
-        returns (uint256, uint256)
+        returns (uint256, uint256, uint256)
     {
         return market.recordPrediction(
             user,
@@ -144,13 +144,14 @@ contract MarketLogicTest is Test {
         uint256 expectedFee = (stakeAmount * wrapper.PROTOCOL_FEE_BASIS_POINTS()) / 10000;
 
         // Record prediction
-        (uint256 netStake, uint256 fee) = wrapper.recordPrediction{value: stakeAmount + expectedFee}(
+        (uint256 netStake, uint256 fee, uint256 tokenId) = wrapper.recordPrediction{value: stakeAmount + expectedFee}(
             user1, PredictionTypes.Outcome.Bullish, stakeAmount
         );
 
         // Verify results
         assertEq(netStake, stakeAmount, "Net stake amount mismatch");
         assertEq(fee, expectedFee, "Fee amount mismatch");
+        assertGt(tokenId, 0, "Token ID should be greater than 0");
 
         // Attempt to record prediction again (should revert)
         vm.expectRevert(abi.encodeWithSignature("AlreadyPredictedL(address,uint256)", user1, 1));
@@ -202,7 +203,7 @@ contract MarketLogicTest is Test {
         uint256 expectedFee = (stakeAmount * wrapper.PROTOCOL_FEE_BASIS_POINTS()) / 10000;
 
         // User 1 predicts Bullish
-        (uint256 tokenId1,) = wrapper.recordPrediction{value: stakeAmount + expectedFee}(
+        (uint256 tokenId1,,) = wrapper.recordPrediction{value: stakeAmount + expectedFee}(
             user1, PredictionTypes.Outcome.Bullish, stakeAmount
         );
         assertGt(tokenId1, 0, "Token ID should be greater than 0");
@@ -245,7 +246,7 @@ contract MarketLogicTest is Test {
         uint256 expectedFee = (stakeAmount * wrapper.PROTOCOL_FEE_BASIS_POINTS()) / 10000;
 
         // User 1 predicts Bullish
-        (uint256 tokenId1,) = wrapper.recordPrediction{value: stakeAmount + expectedFee}(
+        (uint256 tokenId1,,) = wrapper.recordPrediction{value: stakeAmount + expectedFee}(
             user1, PredictionTypes.Outcome.Bullish, stakeAmount
         );
 
@@ -271,7 +272,7 @@ contract MarketLogicTest is Test {
         uint256 stakeAmount = 1 ether;
         uint256 expectedFee = (stakeAmount * wrapper.PROTOCOL_FEE_BASIS_POINTS()) / 10000;
 
-        (uint256 tokenId1,) = wrapper.recordPrediction{value: stakeAmount + expectedFee}(
+        (uint256 tokenId1,,) = wrapper.recordPrediction{value: stakeAmount + expectedFee}(
             user1, PredictionTypes.Outcome.Bullish, stakeAmount
         );
 
@@ -291,7 +292,7 @@ contract MarketLogicTest is Test {
         uint256 expectedFee = (stakeAmount * wrapper.PROTOCOL_FEE_BASIS_POINTS()) / 10000;
 
         // User 1 predicts Bullish
-        (uint256 tokenId1,) = wrapper.recordPrediction{value: stakeAmount + expectedFee}(
+        (uint256 tokenId1,,) = wrapper.recordPrediction{value: stakeAmount + expectedFee}(
             user1, PredictionTypes.Outcome.Bullish, stakeAmount
         );
         assertGt(tokenId1, 0, "Token ID should be greater than 0");

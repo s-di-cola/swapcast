@@ -23,7 +23,9 @@ const TARGET_CONTRACTS = [
     'StateView',
     'IUniversalRouter',
     'IPositionManager',
-    'IPoolInitializer_v4'
+    'IPoolInitializer_v4',
+    'IV4Router',
+    'RewardDistributor'
 ];
 
 if (!existsSync(generatedDir)) {

@@ -3,7 +3,7 @@
 	import { onMount } from 'svelte';
 	import { Spinner } from 'flowbite-svelte';
 	import type { Market } from '$lib/services/market';
-	import { getHistoricalPriceData, getCoinIdFromAssetPair } from '$lib/services/price/operations';
+	import { getHistoricalPriceData, getCoinIdFromSymbol } from '$lib/services/price/operations';
 
 	interface Props {
 		market: Market;
@@ -276,7 +276,8 @@
 		chartState.error = null;
 
 		try {
-			const coinId = await getCoinIdFromAssetPair(market.assetPair);
+			const baseAsset = market.assetPair?.split('/')[0];
+			const coinId = baseAsset ? await getCoinIdFromSymbol(baseAsset) : null;
 
 			let chartData: ChartData;
 			if (!coinId) {

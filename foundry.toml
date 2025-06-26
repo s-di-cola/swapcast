@@ -11,7 +11,11 @@ extra_output = ["abi"]
 extra_output_files = ["abi"]
 
 remappings = [
-    "@chainlink/contracts/=lib/foundry-chainlink-toolkit/lib/chainlink-brownie-contracts/contracts/src/"
+    "@chainlink/contracts/=lib/foundry-chainlink-toolkit/lib/chainlink-brownie-contracts/contracts/src/",
+    "@pythnetwork/pyth-sdk-solidity/=node_modules/@pythnetwork/pyth-sdk-solidity/"
 ]
+
+[rpc_endpoints]
+ink_sepolia = "https://rpc-gel-sepolia.inkonchain.com/"
 
 # See more config options https://github.com/foundry-rs/foundry/blob/master/crates/config/README.md#all-options

@@ -1,16 +1,15 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
+	import { getGlobalStats } from '$lib/services/subgraph';
 	import AdminAnalyticsChart from './AdminAnalyticsChart.svelte';
-	import { executeQuery } from '$lib/services/subgraph';
-	import { GET_ANALYTICS_DATA } from '$lib/services/subgraph/queries';
-	import { getDateRangeForAnalytics } from '$lib/utils/analytics';
+	import { formatEth } from '$lib/utils/formatter';
 
 	interface LegendItem {
 		color: string;
 		label: string;
 	}
 
-	let treasuryBalance = $state(0);
+	let treasuryBalance = $state('0');
 	let selectedTimeRange = $state<'7d' | '30d'>('7d');
 
 	const LEGEND_ITEMS: LegendItem[] = [
@@ -19,37 +18,24 @@
 	] as const;
 
 	onMount(async () => {
-		await fetchTreasuryBalance();
+		await fetchProtocolFees();
 	});
 
-	interface AnalyticsResponse {
-		globalStats: Array<{
-			totalMarkets: string;
-			totalPredictions: string;
-			totalStaked: string;
-		}>;
-		markets: any[];
-		predictions: any[];
-	}
-
-	async function fetchTreasuryBalance() {
+	/**
+	 * Fetches total protocol fees from subgraph global stats
+	 */
+	async function fetchProtocolFees() {
 		try {
-			// Get date range for query
-			const { startTimestamp, endTimestamp } = getDateRangeForAnalytics(30); // Last 30 days
-
-			// Fetch data from subgraph
-			const response = await executeQuery<AnalyticsResponse>(GET_ANALYTICS_DATA, {
-				startTimestamp,
-				endTimestamp
-			});
-
-			if (response?.globalStats?.[0]?.totalStaked) {
-				// Convert from wei to ETH and format to 2 decimal places
-				const totalStaked = parseFloat(response.globalStats[0].totalStaked) / 1e18;
-				treasuryBalance = parseFloat(totalStaked.toFixed(2));
+			const globalStats = await getGlobalStats();
+			if (globalStats) {
+				treasuryBalance = formatEth(globalStats.totalProtocolFees, { fromWei: true });
+			} else {
+				console.warn('No global stats available');
+				treasuryBalance = '0';
 			}
 		} catch (error) {
-			console.error('Error fetching treasury balance:', error);
+			console.error('Error fetching protocol fees:', error);
+			treasuryBalance = '0';
 		}
 	}
 
@@ -77,7 +63,7 @@
 			</div>
 
 			<div class="text-right">
-				<h3 class="text-2xl font-bold text-gray-900">{treasuryBalance} ETH</h3>
+				<h3 class="text-2xl font-bold text-gray-900">{treasuryBalance}</h3>
 				<p class="text-sm text-gray-500">Treasury Balance</p>
 			</div>
 		</div>

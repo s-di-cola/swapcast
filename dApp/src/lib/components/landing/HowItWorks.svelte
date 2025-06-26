@@ -17,7 +17,7 @@
 			number: 1,
 			title: 'Connect Your Wallet',
 			description:
-				'Start by connecting your Ethereum wallet to the SwapCast platform. We support MetaMask, WalletConnect, and other popular wallets.',
+				'Start by connecting your crypto wallet to the SwapCast platform. We support MetaMask, WalletConnect, and other popular wallets.',
 			note: 'Connecting your wallet is secure and only requires a signature, not a transaction.',
 			isReversed: false
 		},
@@ -25,8 +25,8 @@
 			number: 2,
 			title: 'Select a Market',
 			description:
-				'Browse available markets or create a new one. Each market represents an asset pair with a price threshold and expiration time.',
-			note: 'Markets are powered by Chainlink price feeds for reliable and tamper-proof price data.',
+				'Browse available markets. Each market represents an asset pair with a price threshold and expiration time.',
+			note: 'Markets are powered by Chainlink and Pyth price feeds for reliable and tamper-proof price data.',
 			isReversed: true
 		},
 		{

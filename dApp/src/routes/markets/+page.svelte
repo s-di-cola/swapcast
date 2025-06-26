@@ -15,7 +15,7 @@
 		type MarketPaginationOptions,
 		type PaginatedMarkets
 	} from '$lib/services/market';
-	import { getServerPrice, getBatchServerPrices } from '$lib/services/price';
+	import { getCurrentPrice, getBatchPrices } from '$lib/services/price';
 
 	// Market selection state
 	let selectedMarket: Market | null = $state(null);
@@ -31,6 +31,9 @@
 	// Search state
 	let searchQuery = $state('');
 
+	// Filter state
+	let hideResolvedMarkets = $state(false);
+
 	// Markets loading state
 	let isLoading = $state(true);
 	let loadError = $state<string | null>(null);
@@ -42,6 +45,41 @@
 
 	// Store for current prices
 	let marketPrices = $state<Record<string, number | null>>({});
+
+	// State for filtered markets
+	let filteredMarkets: Market[] = $state([]);
+
+	// Filter markets based on search query and resolved filter - with loop prevention
+	$effect(() => {
+		if (!marketData?.markets) {
+			filteredMarkets = [];
+			return;
+		}
+
+		let results = [...marketData.markets];
+
+		// Apply resolved filter if enabled
+		if (hideResolvedMarkets) {
+			results = results.filter(market => market.status !== 'Resolved');
+		}
+
+		// Apply search filter
+		if (searchQuery) {
+			results = results.filter(market =>
+				`${market.name} ${market.assetSymbol} ${market.assetPair}`
+					.toLowerCase()
+					.includes(searchQuery.toLowerCase())
+			);
+		}
+
+		// Only update if the results are actually different to prevent infinite loops
+		const currentIds = filteredMarkets.map(m => m.id).join(',');
+		const newIds = results.map(m => m.id).join(',');
+
+		if (currentIds !== newIds) {
+			filteredMarkets = results;
+		}
+	});
 
 	// Fetch markets with pagination
 	async function fetchMarkets() {
@@ -57,7 +95,7 @@
 			};
 
 			marketData = await getAllMarkets(paginationOptions);
-			
+
 			// Fetch prices for the loaded markets
 			await fetchPricesForMarkets(marketData.markets);
 		} catch (error) {
@@ -77,20 +115,20 @@
 
 		// Create a unique list of asset symbols to fetch prices for
 		const assetSymbols = [...new Set(markets.map((market) => market.assetSymbol))];
-		
+
 		try {
 			// Use the server-backed batch price fetching function
-			const newPrices = await getBatchServerPrices(assetSymbols);
-			
+			const newPrices = await getBatchPrices(assetSymbols);
+
 			// Update the prices state
 			marketPrices = { ...marketPrices, ...newPrices };
 		} catch (error) {
 			console.error('Error fetching prices:', error);
-			
+
 			// Fallback to individual fetches if batch fails
 			const pricePromises = assetSymbols.map(async (symbol) => {
 				try {
-					const price = await getServerPrice(symbol);
+					const price = await getCurrentPrice(symbol);
 					return { symbol, price };
 				} catch (error) {
 					console.error(`Error fetching price for ${symbol}:`, error);
@@ -110,24 +148,6 @@
 			marketPrices = { ...marketPrices, ...newPrices };
 		}
 	}
-
-	// Filter markets based on search query
-	let filteredMarkets: Market[] = $state([]);
-
-	$effect(() => {
-		if (!marketData?.markets) {
-			filteredMarkets = [];
-			return;
-		}
-
-		filteredMarkets = searchQuery
-			? marketData.markets.filter(
-					(market) =>
-						market.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-						market.assetPair.toLowerCase().includes(searchQuery.toLowerCase())
-				)
-			: marketData.markets;
-	});
 
 	// Pagination handlers
 	function goToNextPage() {
@@ -312,6 +332,13 @@
 									<span class="sr-only">List view</span>
 								</button>
 							</div>
+
+							<!-- Hide Resolved Markets Toggle -->
+							<label class="relative ml-2 inline-flex cursor-pointer items-center">
+								<input type="checkbox" class="peer sr-only" bind:checked={hideResolvedMarkets} />
+								<div class="peer h-6 w-11 rounded-full bg-gray-200 after:absolute after:left-[2px] after:top-[2px] after:h-5 after:w-5 after:rounded-full after:border after:border-gray-300 after:bg-white after:transition-all after:content-[''] peer-checked:bg-indigo-600 peer-checked:after:translate-x-full peer-checked:after:border-white peer-focus:outline-none peer-focus:ring-2 peer-focus:ring-indigo-500"></div>
+								<span class="ml-2 text-sm font-medium text-gray-700">Hide Resolved</span>
+							</label>
 						</div>
 
 						<!-- Market grid or list using MarketCard components with loading states -->

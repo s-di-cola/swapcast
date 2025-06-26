@@ -9,11 +9,10 @@
 	import { appKit } from '$lib/configs/wallet.config';
 	import { isAdmin } from '$lib/utils/admin';
 
-
 	let { children } = $props<{ children: any }>();
 
 	// Determine route types
-	const isAppRoute = $derived(page.url.pathname.startsWith('/app'));
+	const isAppRoute = $derived(page.url.pathname.startsWith('/markets'));
 	const isAdminRoute = $derived(page.url.pathname.startsWith('/admin'));
 	const isProtectedRoute = $derived(isAppRoute || isAdminRoute);
 	const pathname = $derived(page.url.pathname);
@@ -102,13 +101,11 @@
 	 * Central function to handle all routing logic based on connection state
 	 */
 	function handleRouteBasedOnConnectionState() {
-		// Temporarily disabled for debugging
-		console.log('Wallet connection check bypassed for debugging');
-		// if (isConnected) {
-		// 	handleAuthenticatedRoutes();
-		// } else {
-		// 	handleUnauthenticatedAccess();
-		// }
+		if (isConnected) {
+			handleAuthenticatedRoutes();
+		} else {
+			handleUnauthenticatedAccess();
+		}
 	}
 
 	/**
@@ -130,20 +127,20 @@
 
 		if (isHomePage || isLoginPage) {
 			// Redirect to appropriate dashboard
-			const userDashboard = isAdmin() ? '/admin' : '/app';
+			const userDashboard = isAdmin() ? '/admin' : '/markets';
 			goto(userDashboard);
 			return;
 		}
 
-		// Then check if admin user is trying to access non-admin routes
-		if (isAdmin() && isAppRoute) {
+		// Check if admin user is trying to access non-admin routes (but allow admin routes)
+		if (isAdmin() && isAppRoute && !isAdminRoute) {
 			goto('/admin');
 			return;
 		}
 
-		// Finally check if non-admin user is trying to access admin routes
+		// Check if non-admin user is trying to access admin routes
 		if (!isAdmin() && isAdminRoute) {
-			goto('/app');
+			goto('/markets');
 			return;
 		}
 	}
@@ -172,9 +169,9 @@
 	<div class="flex min-h-screen flex-col bg-white">
 		<!-- Unified header with different props based on route -->
 		<Header
-			showLandingLinks={!isConnected || (!isAppRoute && !isAdminRoute)}
-			showAppLinks={isAppRoute}
-			showAdminLinks={isAdminRoute}
+			showLandingLinks={!isConnected && !isAppRoute && !isAdminRoute}
+			showAppLinks={isConnected && (isAppRoute || isAdminRoute)}
+			showAdminLinks={isConnected && isAdmin()}
 			title={isAdminRoute ? 'SwapCast Admin' : 'SwapCast'}
 		/>
 

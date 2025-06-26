@@ -6,9 +6,9 @@ dataSources:
     name: PredictionManager
     network: mainnet-fork
     source:
-      address: '0xfFb7c88a177c410722f4bFB0B58f6C7479a6DE26'
+      address: '0x93E05bA2d0683b61208AEC6D1f85e0991a02828e'
       abi: PredictionManager
-      startBlock: 22673393
+      startBlock: 22774126
     mapping:
       kind: ethereum/events
       apiVersion: 0.0.7
@@ -18,15 +18,17 @@ dataSources:
         - Prediction
         - User
         - MarketResolution
+        - GlobalStat
       abis:
         - name: PredictionManager
-          file: ../out/PredictionManager.sol/PredictionManager.json
+          file: >-
+            ../dApp/src/generated/abis/PredictionManager.sol/PredictionManager.json
         - name: OracleResolver
-          file: ../out/OracleResolver.sol/OracleResolver.json
+          file: ../dApp/src/generated/abis/OracleResolver.sol/OracleResolver.json
       eventHandlers:
-        - event: MarketCreated(indexed uint256)
+        - event: MarketCreated(indexed uint256,string,string,uint256,address,uint256)
           handler: handleMarketCreated
-        - event: StakeRecorded(indexed uint256,indexed address,uint8,uint256)
+        - event: StakeRecorded(indexed uint256,indexed address,uint8,uint256,uint256)
           handler: handlePredictionRecorded
         - event: MarketResolved(indexed uint256,uint8,int256,uint256)
           handler: handleMarketResolved

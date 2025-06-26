@@ -65,6 +65,9 @@
 	let isSubmitting = $state(false);
 	let minExpirationDate = $state<Date | undefined>();
 
+	// Track failed image loads to prevent infinite loops
+	let failedImages = $state(new Set<string>());
+
 	const FEE_TIERS = [
 		{ value: 100, label: '0.01%' },
 		{ value: 500, label: '0.05%' },
@@ -113,6 +116,23 @@
 		expirationInFuture: 'Expiration time must be in the future.'
 	} as const;
 
+	// Check if a logo URL is valid (not IPFS or other problematic URLs)
+	function isValidLogoUrl(url: string): boolean {
+		if (!url) return false;
+		// Skip IPFS URLs and other problematic schemes
+		if (url.startsWith('ipfs://') || url.startsWith('data:')) {
+			return false;
+		}
+		return true;
+	}
+
+	// Handle image load errors
+	function handleImageError(event: Event, tokenAddress: string): void {
+		failedImages.add(tokenAddress);
+		// Prevent the default error behavior
+		event.preventDefault();
+	}
+
 	onMount(async () => {
 		await loadTokenList();
 		initializeMinExpirationDate();
@@ -137,8 +157,6 @@
 						address // Properly formatted address
 					};
 				}) as TokenWithAddress[];
-			
-			console.log(`Loaded ${tokenList.length} tokens from token service`);
 		} catch (err: any) {
 			console.error('Error fetching token list:', err);
 			errorLoadingTokens = err.message || 'Could not load token list.';
@@ -236,12 +254,12 @@
 		}
 
 		// Create the market
-		const tokens = sortTokens(addressA, addressB, Number(appKit.getChainId()));
 		const tickSpacing = getTickSpacing(formData.feeTier);
 
+		// Create poolKey directly with sorted addresses
 		const poolKey = {
-			currency0: tokens[0].address as `0x${string}`,
-			currency1: tokens[1].address as `0x${string}`,
+			currency0: addressA.toLowerCase() < addressB.toLowerCase() ? addressA : addressB,
+			currency1: addressA.toLowerCase() < addressB.toLowerCase() ? addressB : addressA,
 			fee: formData.feeTier,
 			tickSpacing: tickSpacing,
 			hooks: PUBLIC_SWAPCASTHOOK_ADDRESS as `0x${string}`
@@ -482,11 +500,12 @@
 									onclick={() => (formData.tokenA_address = token.address)}
 								>
 									<div class="flex items-center">
-										{#if token.logoURI}
+										{#if token.logoURI && isValidLogoUrl(token.logoURI) && token.address && !failedImages.has(token.address)}
 											<img
 												src={token.logoURI}
 												alt={token.symbol || ""}
 												class="mr-2 h-6 w-6 rounded-full"
+												onerror={(e) => handleImageError(e, token.address!)}
 											/>
 										{:else}
 											<div
@@ -578,11 +597,12 @@
 									onclick={() => (formData.tokenB_address = token.address)}
 								>
 									<div class="flex items-center">
-										{#if token.logoURI}
+										{#if token.logoURI && isValidLogoUrl(token.logoURI) && token.address && !failedImages.has(token.address)}
 											<img
 												src={token.logoURI}
 												alt={token.symbol || ""}
 												class="mr-2 h-6 w-6 rounded-full"
+												onerror={(e) => handleImageError(e, token.address!)}
 											/>
 										{:else}
 											<div
