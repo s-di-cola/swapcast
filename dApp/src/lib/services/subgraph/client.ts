@@ -23,8 +23,8 @@ const CONFIG = {
 /**
  * Get subgraph URL and auth token from environment
  */
-const SUBGRAPH_URL = process.env.PUBLIC_SUBGRAPH_URL || CONFIG.defaultUrl;
-const SUBGRAPH_AUTH_TOKEN = process.env.SUBGRAPH_AUTH_TOKEN;
+const SUBGRAPH_URL = import.meta.env.VITE_PUBLIC_SUBGRAPH_URL || CONFIG.defaultUrl;
+const SUBGRAPH_AUTH_TOKEN = import.meta.env.VITE_SUBGRAPH_AUTH_TOKEN;
 
 // Debug log
 console.log('Subgraph URL:', SUBGRAPH_URL);
