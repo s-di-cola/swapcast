@@ -26,7 +26,7 @@ contract PythOracleResolverTest is Test {
     int32 constant DEFAULT_EXPECTED_EXPO = -8; // Standard USD pair exponent
     uint256 constant DEFAULT_MAX_STALENESS = 3600; // 1 hour
     bytes32 constant ETH_USD_PRICE_ID = 0xff61491a931112ddf1bd8147cd1b641375f79f5825126d665480874634fd0ace;
-    
+
     // Pyth price constants (raw format with exponent)
     int64 constant PYTH_PRICE_ABOVE_THRESHOLD = 200000000000; // $2000 with -8 exponent (2000 * 10^8)
     int64 constant PYTH_PRICE_BELOW_THRESHOLD = 199999999999; // $1999.99999999 with -8 exponent
@@ -65,11 +65,7 @@ contract PythOracleResolverTest is Test {
         // Official MockPyth constructor: (validTimePeriod, singleUpdateFeeInWei)
         mockPyth = new MockPyth(60, 1 wei); // 60 second valid time period, 1 wei fee
 
-        pythOracleResolver = new PythOracleResolver(
-            address(mockPredictionManager),
-            address(mockPyth),
-            owner
-        );
+        pythOracleResolver = new PythOracleResolver(address(mockPredictionManager), address(mockPyth), owner);
 
         // Set up default price in Pyth mock using createPriceFeedUpdateData
         _updateMockPythPrice(
@@ -85,11 +81,8 @@ contract PythOracleResolverTest is Test {
 
     /// @notice Tests that the constructor sets all addresses and values correctly.
     function test_constructor_successful_deployment() public {
-        PythOracleResolver newResolver = new PythOracleResolver(
-            address(mockPredictionManager),
-            address(mockPyth),
-            owner
-        );
+        PythOracleResolver newResolver =
+            new PythOracleResolver(address(mockPredictionManager), address(mockPyth), owner);
 
         assertEq(
             address(newResolver.predictionManager()),
@@ -120,17 +113,14 @@ contract PythOracleResolverTest is Test {
         vm.prank(owner);
         vm.expectEmit(true, true, true, true, address(pythOracleResolver));
         emit OracleRegistered(DEFAULT_MARKET_ID, ETH_USD_PRICE_ID, DEFAULT_PRICE_THRESHOLD);
-        
+
         pythOracleResolver.registerOracle(
-            DEFAULT_MARKET_ID,
-            ETH_USD_PRICE_ID,
-            DEFAULT_PRICE_THRESHOLD,
-            DEFAULT_EXPECTED_EXPO
+            DEFAULT_MARKET_ID, ETH_USD_PRICE_ID, DEFAULT_PRICE_THRESHOLD, DEFAULT_EXPECTED_EXPO
         );
 
         (bytes32 priceId, uint256 priceThreshold, int32 expectedExpo, bool isRegistered) =
             pythOracleResolver.marketOracles(DEFAULT_MARKET_ID);
-        
+
         assertTrue(isRegistered, "Oracle should be registered");
         assertEq(priceId, ETH_USD_PRICE_ID, "Price ID mismatch");
         assertEq(priceThreshold, DEFAULT_PRICE_THRESHOLD, "Price threshold mismatch");
@@ -142,10 +132,7 @@ contract PythOracleResolverTest is Test {
         vm.prank(user1);
         vm.expectRevert(abi.encodeWithSelector(Ownable.OwnableUnauthorizedAccount.selector, user1));
         pythOracleResolver.registerOracle(
-            DEFAULT_MARKET_ID,
-            ETH_USD_PRICE_ID,
-            DEFAULT_PRICE_THRESHOLD,
-            DEFAULT_EXPECTED_EXPO
+            DEFAULT_MARKET_ID, ETH_USD_PRICE_ID, DEFAULT_PRICE_THRESHOLD, DEFAULT_EXPECTED_EXPO
         );
     }
 
@@ -153,19 +140,13 @@ contract PythOracleResolverTest is Test {
     function test_register_oracle_reverts_if_oracle_already_registered() public {
         vm.prank(owner);
         pythOracleResolver.registerOracle(
-            DEFAULT_MARKET_ID,
-            ETH_USD_PRICE_ID,
-            DEFAULT_PRICE_THRESHOLD,
-            DEFAULT_EXPECTED_EXPO
+            DEFAULT_MARKET_ID, ETH_USD_PRICE_ID, DEFAULT_PRICE_THRESHOLD, DEFAULT_EXPECTED_EXPO
         );
 
         vm.prank(owner);
         vm.expectRevert(abi.encodeWithSelector(PythOracleResolver.OracleAlreadyRegistered.selector, DEFAULT_MARKET_ID));
         pythOracleResolver.registerOracle(
-            DEFAULT_MARKET_ID,
-            ETH_USD_PRICE_ID,
-            DEFAULT_PRICE_THRESHOLD + 1,
-            DEFAULT_EXPECTED_EXPO
+            DEFAULT_MARKET_ID, ETH_USD_PRICE_ID, DEFAULT_PRICE_THRESHOLD + 1, DEFAULT_EXPECTED_EXPO
         );
     }
 
@@ -194,7 +175,9 @@ contract PythOracleResolverTest is Test {
         emit MaxPriceStalenessSet(oldStaleness, newStaleness);
         pythOracleResolver.setMaxPriceStaleness(newStaleness);
 
-        assertEq(pythOracleResolver.maxPriceStalenessSeconds(), newStaleness, "MaxPriceStalenessSeconds should be updated");
+        assertEq(
+            pythOracleResolver.maxPriceStalenessSeconds(), newStaleness, "MaxPriceStalenessSeconds should be updated"
+        );
     }
 
     /// @notice Tests that only the owner can update max price staleness.
@@ -213,23 +196,16 @@ contract PythOracleResolverTest is Test {
         // Register oracle for the market
         vm.prank(owner);
         pythOracleResolver.registerOracle(
-            DEFAULT_MARKET_ID,
-            ETH_USD_PRICE_ID,
-            DEFAULT_PRICE_THRESHOLD,
-            DEFAULT_EXPECTED_EXPO
+            DEFAULT_MARKET_ID, ETH_USD_PRICE_ID, DEFAULT_PRICE_THRESHOLD, DEFAULT_EXPECTED_EXPO
         );
 
         // Create price update data using official MockPyth API
         bytes[] memory priceUpdateData = _createPriceUpdateData(
-            ETH_USD_PRICE_ID,
-            PYTH_PRICE_ABOVE_THRESHOLD,
-            PYTH_CONF_LOW,
-            DEFAULT_EXPECTED_EXPO,
-            block.timestamp + 10
+            ETH_USD_PRICE_ID, PYTH_PRICE_ABOVE_THRESHOLD, PYTH_CONF_LOW, DEFAULT_EXPECTED_EXPO, block.timestamp + 10
         );
 
         vm.deal(user1, 1 ether);
-        
+
         // Expect the MarketResolved event
         vm.expectEmit(true, true, true, true);
         emit MarketResolved(DEFAULT_MARKET_ID, PYTH_PRICE_ABOVE_THRESHOLD, PredictionTypes.Outcome.Bullish);
@@ -244,23 +220,16 @@ contract PythOracleResolverTest is Test {
         // Register oracle for the market
         vm.prank(owner);
         pythOracleResolver.registerOracle(
-            DEFAULT_MARKET_ID,
-            ETH_USD_PRICE_ID,
-            DEFAULT_PRICE_THRESHOLD,
-            DEFAULT_EXPECTED_EXPO
+            DEFAULT_MARKET_ID, ETH_USD_PRICE_ID, DEFAULT_PRICE_THRESHOLD, DEFAULT_EXPECTED_EXPO
         );
 
         // Create price update data using official MockPyth API
         bytes[] memory priceUpdateData = _createPriceUpdateData(
-            ETH_USD_PRICE_ID,
-            PYTH_PRICE_BELOW_THRESHOLD,
-            PYTH_CONF_LOW,
-            DEFAULT_EXPECTED_EXPO,
-            block.timestamp + 10
+            ETH_USD_PRICE_ID, PYTH_PRICE_BELOW_THRESHOLD, PYTH_CONF_LOW, DEFAULT_EXPECTED_EXPO, block.timestamp + 10
         );
 
         vm.deal(user1, 1 ether);
-        
+
         // Expect the MarketResolved event
         vm.expectEmit(true, true, true, true);
         emit MarketResolved(DEFAULT_MARKET_ID, PYTH_PRICE_BELOW_THRESHOLD, PredictionTypes.Outcome.Bearish);
@@ -286,33 +255,24 @@ contract PythOracleResolverTest is Test {
         // Register oracle for the market
         vm.prank(owner);
         pythOracleResolver.registerOracle(
-            DEFAULT_MARKET_ID,
-            ETH_USD_PRICE_ID,
-            DEFAULT_PRICE_THRESHOLD,
-            DEFAULT_EXPECTED_EXPO
+            DEFAULT_MARKET_ID, ETH_USD_PRICE_ID, DEFAULT_PRICE_THRESHOLD, DEFAULT_EXPECTED_EXPO
         );
 
         bytes[] memory priceUpdateData = new bytes[](1);
         priceUpdateData[0] = "";
 
         bytes[] memory validUpdateData = _createPriceUpdateData(
-            ETH_USD_PRICE_ID,
-            PYTH_PRICE_ABOVE_THRESHOLD,
-            PYTH_CONF_LOW,
-            DEFAULT_EXPECTED_EXPO,
-            block.timestamp
+            ETH_USD_PRICE_ID, PYTH_PRICE_ABOVE_THRESHOLD, PYTH_CONF_LOW, DEFAULT_EXPECTED_EXPO, block.timestamp
         );
-        
+
         uint256 requiredFee = pythOracleResolver.getUpdateFee(validUpdateData);
         uint256 insufficientFee = requiredFee - 1;
 
         vm.deal(user1, insufficientFee);
         vm.prank(user1);
-        vm.expectRevert(abi.encodeWithSelector(
-            PythOracleResolver.InsufficientUpdateFee.selector,
-            insufficientFee,
-            requiredFee
-        ));
+        vm.expectRevert(
+            abi.encodeWithSelector(PythOracleResolver.InsufficientUpdateFee.selector, insufficientFee, requiredFee)
+        );
         pythOracleResolver.resolveMarket{value: insufficientFee}(DEFAULT_MARKET_ID, validUpdateData);
     }
 
@@ -321,19 +281,12 @@ contract PythOracleResolverTest is Test {
         // Register oracle for the market
         vm.prank(owner);
         pythOracleResolver.registerOracle(
-            DEFAULT_MARKET_ID,
-            ETH_USD_PRICE_ID,
-            DEFAULT_PRICE_THRESHOLD,
-            DEFAULT_EXPECTED_EXPO
+            DEFAULT_MARKET_ID, ETH_USD_PRICE_ID, DEFAULT_PRICE_THRESHOLD, DEFAULT_EXPECTED_EXPO
         );
 
         // Create valid price update data
         bytes[] memory priceUpdateData = _createPriceUpdateData(
-            ETH_USD_PRICE_ID,
-            PYTH_PRICE_ABOVE_THRESHOLD,
-            PYTH_CONF_LOW,
-            DEFAULT_EXPECTED_EXPO,
-            block.timestamp
+            ETH_USD_PRICE_ID, PYTH_PRICE_ABOVE_THRESHOLD, PYTH_CONF_LOW, DEFAULT_EXPECTED_EXPO, block.timestamp
         );
 
         uint256 requiredFee = pythOracleResolver.getUpdateFee(priceUpdateData);
@@ -355,10 +308,7 @@ contract PythOracleResolverTest is Test {
         // Register oracle for the market
         vm.prank(owner);
         pythOracleResolver.registerOracle(
-            DEFAULT_MARKET_ID,
-            ETH_USD_PRICE_ID,
-            DEFAULT_PRICE_THRESHOLD,
-            DEFAULT_EXPECTED_EXPO
+            DEFAULT_MARKET_ID, ETH_USD_PRICE_ID, DEFAULT_PRICE_THRESHOLD, DEFAULT_EXPECTED_EXPO
         );
 
         // Create price update data with invalid price (0) and newer timestamp
@@ -371,7 +321,7 @@ contract PythOracleResolverTest is Test {
         );
 
         vm.deal(user1, 1 ether);
-        
+
         vm.prank(user1);
         vm.expectRevert(abi.encodeWithSelector(PythOracleResolver.InvalidPrice.selector));
         pythOracleResolver.resolveMarket{value: 1 wei}(DEFAULT_MARKET_ID, priceUpdateData);
@@ -382,30 +332,23 @@ contract PythOracleResolverTest is Test {
         // Register oracle for the market
         vm.prank(owner);
         pythOracleResolver.registerOracle(
-            DEFAULT_MARKET_ID,
-            ETH_USD_PRICE_ID,
-            DEFAULT_PRICE_THRESHOLD,
-            DEFAULT_EXPECTED_EXPO
+            DEFAULT_MARKET_ID, ETH_USD_PRICE_ID, DEFAULT_PRICE_THRESHOLD, DEFAULT_EXPECTED_EXPO
         );
 
         // Create price update data with wrong exponent
         int32 wrongExponent = -6; // Different from expected -8
         bytes[] memory priceUpdateData = _createPriceUpdateData(
-            ETH_USD_PRICE_ID,
-            PYTH_PRICE_ABOVE_THRESHOLD,
-            PYTH_CONF_LOW,
-            wrongExponent,
-            block.timestamp + 10
+            ETH_USD_PRICE_ID, PYTH_PRICE_ABOVE_THRESHOLD, PYTH_CONF_LOW, wrongExponent, block.timestamp + 10
         );
 
         vm.deal(user1, 1 ether);
-        
+
         vm.prank(user1);
-        vm.expectRevert(abi.encodeWithSelector(
-            PythOracleResolver.UnexpectedPriceExponent.selector,
-            DEFAULT_EXPECTED_EXPO,
-            wrongExponent
-        ));
+        vm.expectRevert(
+            abi.encodeWithSelector(
+                PythOracleResolver.UnexpectedPriceExponent.selector, DEFAULT_EXPECTED_EXPO, wrongExponent
+            )
+        );
         pythOracleResolver.resolveMarket{value: 1 wei}(DEFAULT_MARKET_ID, priceUpdateData);
     }
 
@@ -414,10 +357,7 @@ contract PythOracleResolverTest is Test {
         // Register oracle for the market
         vm.prank(owner);
         pythOracleResolver.registerOracle(
-            DEFAULT_MARKET_ID,
-            ETH_USD_PRICE_ID,
-            DEFAULT_PRICE_THRESHOLD,
-            DEFAULT_EXPECTED_EXPO
+            DEFAULT_MARKET_ID, ETH_USD_PRICE_ID, DEFAULT_PRICE_THRESHOLD, DEFAULT_EXPECTED_EXPO
         );
 
         // Create price update data with high confidence interval (low confidence)
@@ -430,13 +370,15 @@ contract PythOracleResolverTest is Test {
         );
 
         vm.deal(user1, 1 ether);
-        
+
         vm.prank(user1);
-        vm.expectRevert(abi.encodeWithSelector(
-            PythOracleResolver.PriceConfidenceTooLow.selector,
-            PYTH_CONF_HIGH,
-            uint256(uint64(PYTH_PRICE_ABOVE_THRESHOLD))
-        ));
+        vm.expectRevert(
+            abi.encodeWithSelector(
+                PythOracleResolver.PriceConfidenceTooLow.selector,
+                PYTH_CONF_HIGH,
+                uint256(uint64(PYTH_PRICE_ABOVE_THRESHOLD))
+            )
+        );
         pythOracleResolver.resolveMarket{value: 1 wei}(DEFAULT_MARKET_ID, priceUpdateData);
     }
 
@@ -445,27 +387,20 @@ contract PythOracleResolverTest is Test {
         // Register oracle for the market
         vm.prank(owner);
         pythOracleResolver.registerOracle(
-            DEFAULT_MARKET_ID,
-            ETH_USD_PRICE_ID,
-            DEFAULT_PRICE_THRESHOLD,
-            DEFAULT_EXPECTED_EXPO
+            DEFAULT_MARKET_ID, ETH_USD_PRICE_ID, DEFAULT_PRICE_THRESHOLD, DEFAULT_EXPECTED_EXPO
         );
 
         // Warp time forward to make any update data we create stale
         vm.warp(block.timestamp + 65); // Move past 60 second threshold
-        
+
         // Create price update data with old timestamp (will be rejected by getPriceNoOlderThan)
         uint256 staleTimestamp = block.timestamp - 65;
         bytes[] memory priceUpdateData = _createPriceUpdateData(
-            ETH_USD_PRICE_ID,
-            PYTH_PRICE_ABOVE_THRESHOLD,
-            PYTH_CONF_LOW,
-            DEFAULT_EXPECTED_EXPO,
-            staleTimestamp
+            ETH_USD_PRICE_ID, PYTH_PRICE_ABOVE_THRESHOLD, PYTH_CONF_LOW, DEFAULT_EXPECTED_EXPO, staleTimestamp
         );
 
         vm.deal(user1, 1 ether);
-        
+
         vm.prank(user1);
         // This should revert with Pyth's internal staleness check from getPriceNoOlderThan()
         vm.expectRevert(); // Generic revert since Pyth handles the specific error
@@ -477,10 +412,7 @@ contract PythOracleResolverTest is Test {
         // Register oracle for the market
         vm.prank(owner);
         pythOracleResolver.registerOracle(
-            DEFAULT_MARKET_ID,
-            ETH_USD_PRICE_ID,
-            DEFAULT_PRICE_THRESHOLD,
-            DEFAULT_EXPECTED_EXPO
+            DEFAULT_MARKET_ID, ETH_USD_PRICE_ID, DEFAULT_PRICE_THRESHOLD, DEFAULT_EXPECTED_EXPO
         );
 
         // Make the mock prediction manager revert
@@ -496,12 +428,11 @@ contract PythOracleResolverTest is Test {
         );
 
         vm.deal(user1, 1 ether);
-        
+
         vm.prank(user1);
-        vm.expectRevert(abi.encodeWithSelector(
-            PythOracleResolver.ResolutionFailedInManager.selector,
-            DEFAULT_MARKET_ID
-        ));
+        vm.expectRevert(
+            abi.encodeWithSelector(PythOracleResolver.ResolutionFailedInManager.selector, DEFAULT_MARKET_ID)
+        );
         pythOracleResolver.resolveMarket{value: 1 wei}(DEFAULT_MARKET_ID, priceUpdateData);
     }
 
@@ -519,7 +450,7 @@ contract PythOracleResolverTest is Test {
     /// @notice Tests getCurrentPrice function.
     function test_get_current_price() public view {
         PythStructs.Price memory price = pythOracleResolver.getCurrentPrice(ETH_USD_PRICE_ID);
-        
+
         assertEq(price.price, PYTH_PRICE_ABOVE_THRESHOLD, "Price should match mock");
         assertEq(price.conf, PYTH_CONF_LOW, "Confidence should match mock");
         assertEq(price.expo, DEFAULT_EXPECTED_EXPO, "Exponent should match mock");
@@ -555,84 +486,71 @@ contract PythOracleResolverTest is Test {
     function testFuzz_resolve_market_price_threshold_edge_cases(uint256 priceOffset) public {
         // Bound the offset to reasonable values
         priceOffset = bound(priceOffset, 0, 1000000000); // 0 to 10 USD with 8 decimals
-        
+
         // Register oracle
         vm.prank(owner);
         pythOracleResolver.registerOracle(
-            DEFAULT_MARKET_ID,
-            ETH_USD_PRICE_ID,
-            DEFAULT_PRICE_THRESHOLD,
-            DEFAULT_EXPECTED_EXPO
+            DEFAULT_MARKET_ID, ETH_USD_PRICE_ID, DEFAULT_PRICE_THRESHOLD, DEFAULT_EXPECTED_EXPO
         );
 
         // Set price exactly at threshold + offset
         int64 testPrice = PYTH_PRICE_ABOVE_THRESHOLD + int64(int256(priceOffset));
-        
+
         // Create price update data using official MockPyth API
         bytes[] memory priceUpdateData = _createPriceUpdateData(
-            ETH_USD_PRICE_ID,
-            testPrice,
-            PYTH_CONF_LOW,
-            DEFAULT_EXPECTED_EXPO,
-            block.timestamp + 10
+            ETH_USD_PRICE_ID, testPrice, PYTH_CONF_LOW, DEFAULT_EXPECTED_EXPO, block.timestamp + 10
         );
 
         vm.deal(user1, 1 ether);
         vm.prank(user1);
-        
+
         // Should always resolve to Bullish since we're above threshold
         vm.expectEmit(true, true, true, true);
         emit MarketResolved(DEFAULT_MARKET_ID, testPrice, PredictionTypes.Outcome.Bullish);
-        
+
         pythOracleResolver.resolveMarket{value: 1 wei}(DEFAULT_MARKET_ID, priceUpdateData);
     }
 
     // ===== Helper Functions =====
 
     /// @notice Helper function to update MockPyth price using the official API
-    function _updateMockPythPrice(
-        bytes32 priceId,
-        int64 price,
-        uint64 conf,
-        int32 expo,
-        uint256 publishTime
-    ) internal {
+    function _updateMockPythPrice(bytes32 priceId, int64 price, uint64 conf, int32 expo, uint256 publishTime)
+        internal
+    {
         bytes memory updateData = mockPyth.createPriceFeedUpdateData(
             priceId,
             price,
             conf,
             expo,
             price, // emaPrice (same as price for simplicity)
-            conf,  // emaConf (same as conf for simplicity)
+            conf, // emaConf (same as conf for simplicity)
             uint64(publishTime),
             uint64(publishTime - 1)
         );
-        
+
         bytes[] memory updateDataArray = new bytes[](1);
         updateDataArray[0] = updateData;
-        
+
         mockPyth.updatePriceFeeds{value: 1 wei}(updateDataArray);
     }
 
     /// @notice Helper function to create price update data for resolution tests
-    function _createPriceUpdateData(
-        bytes32 priceId,
-        int64 price,
-        uint64 conf,
-        int32 expo,
-        uint256 publishTime
-    ) internal view returns (bytes[] memory) {
+    function _createPriceUpdateData(bytes32 priceId, int64 price, uint64 conf, int32 expo, uint256 publishTime)
+        internal
+        view
+        returns (bytes[] memory)
+    {
         bytes memory updateData = mockPyth.createPriceFeedUpdateData(
             priceId,
             price,
             conf,
             expo,
             price, // emaPrice
-            conf,  // emaConf
+            conf, // emaConf
             uint64(publishTime),
             uint64(publishTime - 1) // prevPublishTime (one second earlier)
         );
-        
+
         bytes[] memory updateDataArray = new bytes[](1);
         updateDataArray[0] = updateData;
         return updateDataArray;
