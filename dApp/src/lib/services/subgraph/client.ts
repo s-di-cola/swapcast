@@ -26,6 +26,10 @@ const CONFIG = {
 const SUBGRAPH_URL = process.env.PUBLIC_SUBGRAPH_URL || CONFIG.defaultUrl;
 const SUBGRAPH_AUTH_TOKEN = process.env.SUBGRAPH_AUTH_TOKEN;
 
+// Debug log
+console.log('Subgraph URL:', SUBGRAPH_URL);
+console.log('Has auth token:', !!SUBGRAPH_AUTH_TOKEN);
+
 /**
  * Create GraphQL client instance
  */
