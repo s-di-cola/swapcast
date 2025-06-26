@@ -17,11 +17,11 @@ import {Hooks} from "v4-core/libraries/Hooks.sol";
 import {HookMiner} from "v4-periphery/src/utils/HookMiner.sol";
 
 /**
- * @title DeployEthSepolia
+ * @title DeployAndFixtures
  * @notice Combined deployment and fixtures script for Ethereum Sepolia testnet
  * @dev This script deploys all SwapCast contracts and sets up sample data
  */
-contract DeployEthSepolia is Script {
+contract DeployAndFixtures is Script {
     // Ethereum Sepolia Uniswap V4 addresses
     address constant POOL_MANAGER = 0xE03A1074c86CFeDd5C142C4F04F1a1536e203543;
     address constant UNIVERSAL_ROUTER = 0x3A9D48AB9751398BbFa63ad67599Bb04e4BdF98b;
@@ -268,20 +268,20 @@ contract DeployEthSepolia is Script {
     function _outputEnvironmentVariables() private view {
         console.log("Environment Variables for Frontend:");
         console.log("===================================");
-        console.log("NEXT_PUBLIC_NETWORK=eth-sepolia");
-        console.log("NEXT_PUBLIC_CHAIN_ID=11155111");
-        console.log("NEXT_PUBLIC_RPC_URL=https://sepolia.infura.io/v3/YOUR_INFURA_KEY");
-        console.log("NEXT_PUBLIC_TREASURY_ADDRESS=%s", address(treasury));
-        console.log("NEXT_PUBLIC_SWAPCAST_NFT_ADDRESS=%s", address(nft));
-        console.log("NEXT_PUBLIC_PREDICTION_MANAGER_ADDRESS=%s", address(predictionManager));
-        console.log("NEXT_PUBLIC_REWARD_DISTRIBUTOR_ADDRESS=%s", address(rewardDistributor));
-        console.log("NEXT_PUBLIC_ORACLE_RESOLVER_ADDRESS=%s", address(oracleResolver));
-        console.log("NEXT_PUBLIC_SWAPCAST_HOOK_ADDRESS=%s", address(hook));
-        console.log("NEXT_PUBLIC_POOL_MANAGER_ADDRESS=%s", POOL_MANAGER);
-        console.log("NEXT_PUBLIC_UNIVERSAL_ROUTER_ADDRESS=%s", UNIVERSAL_ROUTER);
-        console.log("NEXT_PUBLIC_POSITION_MANAGER_ADDRESS=%s", POSITION_MANAGER);
-        console.log("NEXT_PUBLIC_QUOTER_ADDRESS=%s", QUOTER);
-        console.log("NEXT_PUBLIC_PERMIT2_ADDRESS=%s", PERMIT2);
+        console.log("PUBLIC_NETWORK=eth-sepolia");
+        console.log("PUBLIC_CHAIN_ID=11155111");
+        console.log("PUBLIC_RPC_URL=https://sepolia.infura.io/v3/YOUR_INFURA_KEY");
+        console.log("PUBLIC_TREASURY_ADDRESS=%s", address(treasury));
+        console.log("PUBLIC_SWAPCAST_NFT_ADDRESS=%s", address(nft));
+        console.log("PUBLIC_PREDICTION_MANAGER_ADDRESS=%s", address(predictionManager));
+        console.log("PUBLIC_REWARD_DISTRIBUTOR_ADDRESS=%s", address(rewardDistributor));
+        console.log("PUBLIC_ORACLE_RESOLVER_ADDRESS=%s", address(oracleResolver));
+        console.log("PUBLIC_SWAPCAST_HOOK_ADDRESS=%s", address(hook));
+        console.log("PUBLIC_POOL_MANAGER_ADDRESS=%s", POOL_MANAGER);
+        console.log("PUBLIC_UNIVERSAL_ROUTER_ADDRESS=%s", UNIVERSAL_ROUTER);
+        console.log("PUBLIC_POSITION_MANAGER_ADDRESS=%s", POSITION_MANAGER);
+        console.log("PUBLIC_QUOTER_ADDRESS=%s", QUOTER);
+        console.log("PUBLIC_PERMIT2_ADDRESS=%s", PERMIT2);
         console.log("");
     }
 
