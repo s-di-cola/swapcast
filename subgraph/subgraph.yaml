@@ -6,9 +6,9 @@ dataSources:
     name: PredictionManager
     network: mainnet-fork
     source:
-      address: '0x93E05bA2d0683b61208AEC6D1f85e0991a02828e'
+      address: '0xddCF8c63f36eb83b72BAf6dA3AA799f9A08caa9A'
       abi: PredictionManager
-      startBlock: 22774126
+      startBlock: 22787810
     mapping:
       kind: ethereum/events
       apiVersion: 0.0.7
