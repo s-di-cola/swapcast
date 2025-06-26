@@ -6,6 +6,9 @@ This protocol enables traders to include market predictions alongside their swap
 
 Unlike standalone prediction markets that struggle with liquidity fragmentation, SwapCast leverages Uniswap's substantial trading volume to generate high-quality market sentiment data while rewarding accurate predictors.
 
+
+<iframe src="https://share.descript.com/embed/cOkK8N3Yaiq" width="640" height="360" frameborder="0" allowfullscreen></iframe>
+
 ---
 
 ## 🚀 Getting Started
