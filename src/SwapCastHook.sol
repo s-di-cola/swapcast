@@ -47,7 +47,6 @@ contract SwapCastHook is BaseHook, Ownable {
      */
     uint256 private constant PREDICTION_HOOK_DATA_LENGTH = 53; // 20 bytes for actualUser (address) + 32 bytes for marketId (uint256) + 1 byte for outcome (uint8)
 
-
     /// @notice Placeholder address for native ETH
     /// @dev This is used to identify when a transaction intends to use ETH rather than an ERC20 token
     // address constant NATIVE_ETH_PLACEHOLDER = address(0);
@@ -208,7 +207,7 @@ contract SwapCastHook is BaseHook, Ownable {
      */
     receive() external payable {}
 
-     /**
+    /**
      * @notice Allows the owner to recover ETH stuck in the contract in case of emergency.
      * @dev This function provides a safety mechanism to recover ETH that might get stuck in the contract
      *      due to failed prediction attempts or other unexpected scenarios. It includes the following
@@ -233,7 +232,6 @@ contract SwapCastHook is BaseHook, Ownable {
         (bool success,) = _to.call{value: _amount}("");
         if (!success) revert ETHTransferFailed();
     }
-
 
     /**
      * @notice Defines the permissions for this hook, indicating which hook points it will implement.
@@ -269,21 +267,17 @@ contract SwapCastHook is BaseHook, Ownable {
      * @param minAmountOut The minimum amount of ETH to receive.
      * @return The amount of ETH received from the swap.
      */
-    function _swapTokensForETH(
-        address tokenIn,
-        uint256 amountIn,
-        uint256 minAmountOut
-    ) internal returns (uint256) {
+    function _swapTokensForETH(address tokenIn, uint256 amountIn, uint256 minAmountOut) internal returns (uint256) {
         IERC20(tokenIn).forceApprove(UNIVERSAL_ROUTER, amountIn);
 
         // For simplicity, just do a V3 exactInput swap
         // Command 0x00: V3_SWAP_EXACT_IN
         // ToDo: Import commands library or define commands properly
         bytes memory commands = hex"00";
-        
+
         // Encode the swap parameters
         bytes[] memory inputs = new bytes[](1);
-        
+
         // Universal Router V3 exactInput parameters:
         // path, recipient, amountIn, amountOutMinimum
         bytes memory path;
@@ -294,26 +288,21 @@ contract SwapCastHook is BaseHook, Ownable {
         } else {
             // Otherwise, create a path from tokenIn to WETH
             path = abi.encodePacked(tokenIn, uint24(3000), WETH);
-            
-            inputs[0] = abi.encode(
-                path,
-                address(this),
-                amountIn,
-                minAmountOut
-            );
-            
+
+            inputs[0] = abi.encode(path, address(this), amountIn, minAmountOut);
+
             uint256 ethBalanceBefore = address(this).balance;
-            
+
             // Execute the swap
             IUniversalRouter(UNIVERSAL_ROUTER).execute(
                 commands,
                 inputs,
                 block.timestamp + 60 // deadline
             );
-            
+
             // Calculate how much ETH we received
             uint256 ethReceived = address(this).balance - ethBalanceBefore;
-            
+
             return ethReceived;
         }
     }
@@ -353,7 +342,7 @@ contract SwapCastHook is BaseHook, Ownable {
         address actualUser;
         uint256 marketId;
         uint8 outcome;
-        
+
         // Safe decoding with try/catch to handle malformed Universal Router data
         bool decodingSuccessful = _tryDecodePredictionData(hookData);
         if (!decodingSuccessful) {
@@ -361,25 +350,25 @@ contract SwapCastHook is BaseHook, Ownable {
             emit HookDataDebug(hookData.length, PREDICTION_HOOK_DATA_LENGTH, true);
             return (BaseHook.afterSwap.selector, 0);
         }
-        
+
         // If decoding succeeded, manually extract the packed values
         // Extract address from bytes 0-19 (need to shift right to get the address)
         assembly {
             let data := calldataload(hookData.offset)
             actualUser := shr(96, data) // Shift right 96 bits (12 bytes) to get address from left-aligned 32 bytes
         }
-        
+
         // Extract uint256 from bytes 20-51
         assembly {
             marketId := calldataload(add(hookData.offset, 20))
         }
-        
+
         // Extract uint8 from byte 52
         assembly {
             let data := calldataload(add(hookData.offset, 52))
             outcome := byte(0, data) // Get the first byte
         }
-        
+
         // Additional validation: marketId should be non-zero for valid predictions
         // and outcome should be 0 or 1
         if (marketId == 0 || outcome > 1) {
@@ -390,19 +379,19 @@ contract SwapCastHook is BaseHook, Ownable {
         // Calculate the swap amounts
         int128 amount0 = BalanceDeltaLibrary.amount0(delta);
         int128 amount1 = BalanceDeltaLibrary.amount1(delta);
-        
+
         // Determine which amount is the input (positive means tokens going out of pool to user)
         // For exactInput swaps: amount0 or amount1 will be positive (tokens user receives)
         // We want to take 1% of the input amount, which corresponds to the positive amount
         uint256 swapOutputAmount;
         Currency outputCurrency;
-        
+
         if (amount0 > 0 && amount1 <= 0) {
             // User is receiving currency0, so they input currency1
             swapOutputAmount = uint256(uint128(amount0));
             outputCurrency = key.currency0;
         } else if (amount1 > 0 && amount0 <= 0) {
-            // User is receiving currency1, so they input currency0  
+            // User is receiving currency1, so they input currency0
             swapOutputAmount = uint256(uint128(amount1));
             outputCurrency = key.currency1;
         } else {
@@ -412,7 +401,7 @@ contract SwapCastHook is BaseHook, Ownable {
 
         // Calculate 1% fee from the output amount
         uint256 feeAmount = swapOutputAmount / 100;
-        
+
         // Check if fee amount is sufficient for staking
         if (feeAmount == 0) {
             revert InsufficientSwapAmountForStake();
@@ -433,7 +422,7 @@ contract SwapCastHook is BaseHook, Ownable {
         }
 
         uint128 convictionStake = SafeCast.toUint128(stakeAmount);
-        
+
         // Calculate the total ETH needed (stake + protocol fee)
         // Get protocol fee basis points from prediction manager
         uint256 feeBasisPoints = predictionManager.protocolFeeBasisPoints();
@@ -442,18 +431,10 @@ contract SwapCastHook is BaseHook, Ownable {
 
         // Record the prediction with calculated stake and total ETH amount
         try predictionManager.recordPrediction{value: totalEthNeeded}(
-            actualUser,
-            marketId,
-            PredictionTypes.Outcome(outcome),
-            convictionStake
+            actualUser, marketId, PredictionTypes.Outcome(outcome), convictionStake
         ) {
             emit PredictionRecorded(
-                actualUser,
-                key.toId(),
-                marketId,
-                PredictionTypes.Outcome(outcome),
-                convictionStake,
-                swapOutputAmount
+                actualUser, key.toId(), marketId, PredictionTypes.Outcome(outcome), convictionStake, swapOutputAmount
             );
         } catch Error(string memory reason) {
             string memory errorMessage = string(abi.encode("PredictionManager Error: ", reason));
@@ -470,12 +451,12 @@ contract SwapCastHook is BaseHook, Ownable {
         } catch (bytes memory errorData) {
             bytes4 errorSelector;
             string memory errorMessage = "Unknown error";
-            
+
             if (errorData.length >= 4) {
                 errorSelector = bytes4(errorData);
                 errorMessage = _getCustomErrorMessage(errorSelector);
             }
-            
+
             emit PredictionFailed(
                 actualUser,
                 key.toId(),
@@ -490,7 +471,7 @@ contract SwapCastHook is BaseHook, Ownable {
 
         // For now, don't try to take any currency delta
         // Just return zero delta to avoid complex currency handling
-        
+
         return (BaseHook.afterSwap.selector, 0);
     }
 
@@ -504,24 +485,22 @@ contract SwapCastHook is BaseHook, Ownable {
         if (hookData.length < 53) {
             return false;
         }
-        
+
         // Check if we can safely decode the first 20 bytes as an address
         // and the next 32 bytes as uint256, and the last byte as uint8
         assembly {
             // Load the address (first 20 bytes)
             let addr := shr(96, calldataload(hookData.offset))
-            
+
             // Load the uint256 (next 32 bytes)
             let marketId := calldataload(add(hookData.offset, 20))
-            
+
             // Load the uint8 (last byte)
             let outcome := byte(0, calldataload(add(hookData.offset, 52)))
-            
+
             // Basic validation: address should not be zero, marketId should not be zero, outcome should be 0 or 1
             success := true
-            if or(or(iszero(addr), iszero(marketId)), gt(outcome, 1)) {
-                success := false
-            }
+            if or(or(iszero(addr), iszero(marketId)), gt(outcome, 1)) { success := false }
         }
     }
 

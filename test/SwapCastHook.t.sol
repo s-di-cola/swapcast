@@ -100,7 +100,7 @@ contract TestSwapCastHook is Test, Deployers {
             }),
             ZERO_BYTES
         );
-        
+
         // Fund the hook with ETH for testing
         vm.deal(address(hook), 10 ether);
     }
@@ -117,7 +117,7 @@ contract TestSwapCastHook is Test, Deployers {
 
         // Use abi.encodePacked to match the expected hookData format (53 bytes)
         bytes memory hookData = abi.encodePacked(address(this), marketId, uint8(predictedOutcome));
-        
+
         // Verify hookData length matches expected
         assertEq(hookData.length, 53, "HookData should be exactly 53 bytes");
 
@@ -190,12 +190,12 @@ contract TestSwapCastHook is Test, Deployers {
         SwapParams memory swapParams =
             SwapParams({zeroForOne: true, amountSpecified: -1 ether, sqrtPriceLimitX96: TickMath.MIN_SQRT_PRICE + 1});
         bytes memory badHookData = new bytes(10); // Malformed hookData (10 bytes instead of expected length)
-        
+
         // The swap should succeed but not record any prediction
         swapRouter.swap{value: 1 ether}(
             poolKey, swapParams, PoolSwapTest.TestSettings({takeClaims: false, settleUsingBurn: false}), badHookData
         );
-        
+
         // Verify no NFT was minted (should revert with ERC721NonexistentToken)
         vm.expectRevert();
         nft.ownerOf(0);
@@ -215,7 +215,7 @@ contract TestSwapCastHook is Test, Deployers {
 
         PredictionTypes.Outcome predictedOutcome = PredictionTypes.Outcome.Bullish;
         bytes memory hookData = abi.encodePacked(address(this), marketId, uint8(predictedOutcome));
-        
+
         // Use an extremely small swap amount that will result in zero 1% fee
         // With integer division, 99 wei / 100 = 0, which should trigger the revert
         SwapParams memory swapParams =
@@ -385,7 +385,7 @@ contract TestSwapCastHook is Test, Deployers {
 
         // Ensure the hook has enough ETH for the second prediction attempt
         vm.deal(address(hook), 20 ether);
-        
+
         // Fund the test contract sufficiently for the swap attempt
         vm.deal(address(this), 10 ether);
 
