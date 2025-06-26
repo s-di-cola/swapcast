@@ -12,7 +12,7 @@
 		"dev:with-contracts": "forge build && npm run generate:types && npm run dev:with-fixtures",
 		"env:start": "../scripts/local/start.sh",
 		"env:stop": "../scripts/local/stop.sh",
-		"postinstall": "curl -L https://foundry.paradigm.xyz | bash && ~/.foundry/bin/foundryup",
+		"postinstall": "curl -L https://foundry.paradigm.xyz | bash && export PATH=$PATH:~/.foundry/bin && ~/.foundry/bin/foundryup",
 		"preview": "vite preview",
 		"prepare": "svelte-kit sync && npm run generate:types",
 		"test": "playwright test",
