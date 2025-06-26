@@ -11,7 +11,6 @@ const abisDir = join(rootDir, 'src/generated/abis');
 
 // List of contracts to generate types for
 const TARGET_CONTRACTS = [
-    'Actions',
     'PredictionManager',
     'SwapCastHook',
     'SwapCastNFT',

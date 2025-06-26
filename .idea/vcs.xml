@@ -14,6 +14,7 @@
     <mapping directory="$PROJECT_DIR$/lib/openzeppelin-contracts/lib/erc4626-tests" vcs="Git" />
     <mapping directory="$PROJECT_DIR$/lib/openzeppelin-contracts/lib/forge-std" vcs="Git" />
     <mapping directory="$PROJECT_DIR$/lib/openzeppelin-contracts/lib/halmos-cheatcodes" vcs="Git" />
+    <mapping directory="$PROJECT_DIR$/lib/pyth-sdk-solidity" vcs="Git" />
     <mapping directory="$PROJECT_DIR$/lib/v4-periphery" vcs="Git" />
     <mapping directory="$PROJECT_DIR$/lib/v4-periphery/lib/permit2" vcs="Git" />
     <mapping directory="$PROJECT_DIR$/lib/v4-periphery/lib/permit2/lib/forge-gas-snapshot" vcs="Git" />

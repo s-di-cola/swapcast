@@ -150,9 +150,7 @@ contract PythOracleResolver is Ownable {
      * @custom:reverts PredictionManagerZeroAddress If the prediction manager address is zero.
      * @custom:reverts PythContractZeroAddress If the Pyth contract address is zero.
      */
-    constructor(address _predictionManagerAddress, address _pythContract, address initialOwner)
-        Ownable(initialOwner)
-    {
+    constructor(address _predictionManagerAddress, address _pythContract, address initialOwner) Ownable(initialOwner) {
         if (_predictionManagerAddress == address(0)) revert PredictionManagerZeroAddress();
         if (_pythContract == address(0)) revert PythContractZeroAddress();
 
@@ -241,11 +239,11 @@ contract PythOracleResolver is Ownable {
         uint256 maxStaleness = maxPriceStalenessSeconds;
 
         // Validate and handle update fee
-        uint fee = pyth.getUpdateFee(priceUpdateData);
+        uint256 fee = pyth.getUpdateFee(priceUpdateData);
         if (msg.value < fee) revert InsufficientUpdateFee(msg.value, fee);
-        
+
         pyth.updatePriceFeeds{value: fee}(priceUpdateData);
-        
+
         // Refund excess payment
         if (msg.value > fee) {
             payable(msg.sender).transfer(msg.value - fee);
@@ -255,17 +253,17 @@ contract PythOracleResolver is Ownable {
         // Use the stricter of maxStaleness or 60 seconds for market resolution
         uint256 maxPriceAge = 60; // 60 seconds max for market resolution
         uint256 effectiveMaxAge = maxStaleness < maxPriceAge ? maxStaleness : maxPriceAge;
-        
+
         PythStructs.Price memory pythPrice = pyth.getPriceNoOlderThan(priceId, effectiveMaxAge);
 
         // Validate price data
         if (pythPrice.price <= 0) revert InvalidPrice();
-        
+
         // Validate exponent matches expected
         if (pythPrice.expo != expectedExpo) {
             revert UnexpectedPriceExponent(expectedExpo, pythPrice.expo);
         }
-        
+
         // Check price confidence - reject if confidence is more than 1% of price
         uint256 confidenceInterval = pythPrice.conf;
         uint256 priceValue = uint256(uint64(pythPrice.price));
@@ -303,7 +301,7 @@ contract PythOracleResolver is Ownable {
      * @param priceUpdateData Array of price update data from Pyth Network.
      * @return fee The required fee in wei.
      */
-    function getUpdateFee(bytes[] calldata priceUpdateData) external view returns (uint fee) {
+    function getUpdateFee(bytes[] calldata priceUpdateData) external view returns (uint256 fee) {
         return pyth.getUpdateFee(priceUpdateData);
     }
 
