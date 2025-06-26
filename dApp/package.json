@@ -4,7 +4,7 @@
 	"version": "0.0.1",
 	"type": "module",
 	"scripts": {
-		"build": "cd .. && $HOME/.foundry/bin/forge build && cd dApp && npm run generate:types && vite build",
+		"build": "npm run generate:types && vite build",
 		"dev": "vite dev",
 		"dev:debug": "vite dev --debug",
 		"dev:with-fixtures": "npm run env:start && npm run generate:fixtures && vite dev",

@@ -1,0 +1,37 @@
+[
+  {
+    "type": "error",
+    "name": "InvalidAssetSymbol",
+    "inputs": []
+  },
+  {
+    "type": "error",
+    "name": "InvalidMarketId",
+    "inputs": []
+  },
+  {
+    "type": "error",
+    "name": "InvalidMarketName",
+    "inputs": []
+  },
+  {
+    "type": "error",
+    "name": "InvalidPriceAggregator",
+    "inputs": []
+  },
+  {
+    "type": "error",
+    "name": "InvalidPriceData",
+    "inputs": []
+  },
+  {
+    "type": "error",
+    "name": "PriceAtThreshold",
+    "inputs": []
+  },
+  {
+    "type": "error",
+    "name": "ValueMismatch",
+    "inputs": []
+  }
+]

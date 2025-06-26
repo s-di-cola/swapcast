@@ -27,8 +27,8 @@ Thumbs.db
 *.pw.png
 *.pw.zip
 
-# Generated ABIs
-/src/generated
+# Generated ABIs (now committed to avoid Foundry dependency in CI)
+# /src/generated
 
 # Vite
 vite.config.js.timestamp-*
