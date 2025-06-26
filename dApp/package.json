@@ -4,6 +4,7 @@
 	"version": "0.0.1",
 	"type": "module",
 	"scripts": {
+		"build": "forge build && npm run generate:types && vite build",
 		"dev": "vite dev",
 		"dev:debug": "vite dev --debug",
 		"dev:with-fixtures": "npm run env:start && npm run generate:fixtures && vite dev",
@@ -11,7 +12,7 @@
 		"dev:with-contracts": "forge build && npm run generate:types && npm run dev:with-fixtures",
 		"env:start": "../scripts/local/start.sh",
 		"env:stop": "../scripts/local/stop.sh",
-		"build": "npm run generate:types && vite build",
+		"postinstall": "curl -L https://foundry.paradigm.xyz | bash && ~/.foundry/bin/foundryup",
 		"preview": "vite preview",
 		"prepare": "svelte-kit sync && npm run generate:types",
 		"test": "playwright test",
