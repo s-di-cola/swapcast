@@ -5,7 +5,7 @@
  */
 
 import { GraphQLClient } from 'graphql-request';
-import type { QueryVariables, GraphQLResponse } from './types';
+import type { QueryVariables } from './types';
 
 /**
  * Environment configuration
@@ -21,104 +21,92 @@ const CONFIG = {
 } as const;
 
 /**
- * Get subgraph URL from environment or use default
+ * Get subgraph URL and auth token from environment
  */
-function getSubgraphUrl(): string {
-	// Try to get from environment variables
-	if (typeof process !== 'undefined' && process.env?.VITE_SUBGRAPH_URL) {
-		return process.env.VITE_SUBGRAPH_URL;
+const SUBGRAPH_URL = process.env.PUBLIC_SUBGRAPH_URL || CONFIG.defaultUrl;
+const SUBGRAPH_AUTH_TOKEN = process.env.SUBGRAPH_AUTH_TOKEN;
+
+/**
+ * Create GraphQL client instance
+ */
+function createGraphQLClient(authToken?: string): GraphQLClient {
+	const headers: Record<string, string> = {
+		'Content-Type': 'application/json',
+		'User-Agent': 'SwapCast-Frontend/1.0'
+	};
+
+	if (authToken) {
+		headers.authorization = `Bearer ${authToken}`;
 	}
 
-	if (typeof window !== 'undefined' && (window as any).env?.VITE_SUBGRAPH_URL) {
-		return (window as any).env.VITE_SUBGRAPH_URL;
-	}
-
-	return CONFIG.defaultUrl;
+	return new GraphQLClient(SUBGRAPH_URL, { headers });
 }
 
 /**
- * Create GraphQL client instance with configuration
- */
-function createGraphQLClient(): GraphQLClient {
-	const url = getSubgraphUrl();
-
-	// Create a simple client with just headers to avoid TypeScript errors
-	return new GraphQLClient(url, {
-		headers: {
-			'Content-Type': 'application/json',
-			'User-Agent': 'SwapCast-Frontend/1.0'
-		}
-	});
-}
-
-/**
- * Singleton GraphQL client instance
+ * Default client (no auth)
  */
 export const graphQLClient = createGraphQLClient();
 
 /**
  * Execute a GraphQL query with error handling and retries
- *
- * @param query - GraphQL query string
- * @param variables - Query variables
- * @param retryCount - Current retry attempt (internal use)
- * @returns Promise resolving to query result
  */
 export async function executeQuery<T>(
 	query: string,
 	variables?: QueryVariables,
-	retryCount: number = 0
+	retryCount: number = 0,
+	authToken?: string
 ): Promise<T | null> {
 	try {
-		const result = await graphQLClient.request<T>(query, variables);
+		const client = authToken ? createGraphQLClient(authToken) : graphQLClient;
+		const result = await client.request<T>(query, variables);
 		return result;
 	} catch (error) {
 		console.error(`GraphQL query failed (attempt ${retryCount + 1}):`, error);
 
 		// Retry logic for transient errors
 		if (retryCount < CONFIG.maxRetries && shouldRetry(error)) {
-			const delay = CONFIG.retryDelay * Math.pow(2, retryCount); // Exponential backoff
-			
+			const delay = CONFIG.retryDelay * Math.pow(2, retryCount);
+
 			await new Promise((resolve) => setTimeout(resolve, delay));
-			return executeQuery<T>(query, variables, retryCount + 1);
+			return executeQuery<T>(query, variables, retryCount + 1, authToken);
 		}
 
-		// Log final error and return null
 		console.error('GraphQL query failed after all retries:', error);
 		return null;
 	}
 }
 
 /**
+ * Execute authenticated query (server-side only)
+ */
+export function executeAuthQuery<T>(
+	query: string,
+	variables?: QueryVariables
+): Promise<T | null> {
+	return executeQuery<T>(query, variables, 0, SUBGRAPH_AUTH_TOKEN);
+}
+
+/**
  * Determine if an error is worth retrying
- *
- * @param error - Error object from GraphQL request
- * @returns True if the error might be transient
  */
 function shouldRetry(error: any): boolean {
-	// Retry on network errors or server errors (5xx)
 	if (error.code === 'NETWORK_ERROR' || error.code === 'ECONNRESET') {
 		return true;
 	}
 
-	// Retry on HTTP 5xx errors
 	if (error.response?.status >= 500) {
 		return true;
 	}
 
-	// Retry on timeout errors
 	if (error.code === 'TIMEOUT' || error.message?.includes('timeout')) {
 		return true;
 	}
 
-	// Don't retry on client errors (4xx) or GraphQL errors
 	return false;
 }
 
 /**
  * Health check for the subgraph endpoint
- *
- * @returns Promise resolving to true if subgraph is healthy
  */
 export async function checkSubgraphHealth(): Promise<boolean> {
 	const healthQuery = `
@@ -132,7 +120,11 @@ export async function checkSubgraphHealth(): Promise<boolean> {
 	`;
 
 	try {
-		const result = await executeQuery<{ _meta: { block: { number: number } } }>(healthQuery);
+		// Use auth if available (server-side), otherwise regular query
+		const result = SUBGRAPH_AUTH_TOKEN
+			? await executeAuthQuery<{ _meta: { block: { number: number } } }>(healthQuery)
+			: await executeQuery<{ _meta: { block: { number: number } } }>(healthQuery);
+
 		return result !== null && result._meta?.block?.number > 0;
 	} catch {
 		return false;
@@ -141,8 +133,6 @@ export async function checkSubgraphHealth(): Promise<boolean> {
 
 /**
  * Get subgraph metadata information
- *
- * @returns Promise resolving to subgraph metadata
  */
 export async function getSubgraphMeta(): Promise<{
 	blockNumber: number;
@@ -160,14 +150,24 @@ export async function getSubgraphMeta(): Promise<{
 	`;
 
 	try {
-		const result = await executeQuery<{
-			_meta: {
-				block: {
-					number: number;
-					hash: string;
+		// Use auth if available (server-side), otherwise regular query
+		const result = SUBGRAPH_AUTH_TOKEN
+			? await executeAuthQuery<{
+				_meta: {
+					block: {
+						number: number;
+						hash: string;
+					};
 				};
-			};
-		}>(metaQuery);
+			}>(metaQuery)
+			: await executeQuery<{
+				_meta: {
+					block: {
+						number: number;
+						hash: string;
+					};
+				};
+			}>(metaQuery);
 
 		if (result?._meta?.block) {
 			return {
