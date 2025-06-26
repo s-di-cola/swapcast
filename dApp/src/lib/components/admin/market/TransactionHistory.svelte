@@ -1,12 +1,10 @@
 <script lang="ts">
-	import { formatCurrency, formatEther, formatAddress } from '$lib/helpers/formatters';
-	import { onMount } from 'svelte';
-	import type { Market } from '$lib/services/market';
-	import { getAllMarketsFromSubgraph } from '$lib/services/subgraph';
+	import {formatAddress, formatEther} from '$lib/helpers/formatters';
+	import type {Market} from '$lib/services/market';
 	import {
-		getMarketPredictions,
 		formatPredictionOutcome,
 		formatTimestamp,
+		getMarketPredictions,
 		type SubgraphPrediction
 	} from '$lib/services/subgraph';
 
@@ -96,22 +94,7 @@
 		transactionState.isLoading = true;
 		transactionState.error = null;
 
-		// Try different ID formats to find the right one
-		const possibleIds = [
-			market.id.toString(),
-			String(market.id),
-			// If market.id is a hex string, try converting to decimal
-			true && market.id.startsWith('0x')
-				? parseInt(market.id, 16).toString()
-				: market.id.toString()
-		];
-
 		try {
-			// Use the subgraph service to fetch all markets
-			const { data: markets } = await getAllMarketsFromSubgraph({ limit: 100 });
-			const allMarketsData = { data: { markets } };
-
-			// Now try with the original ID
 			const data = await getMarketPredictions(
 				market.id.toString(),
 				transactionState.pageSize,
