@@ -9,7 +9,7 @@
 		"dev:debug": "vite dev --debug",
 		"dev:with-fixtures": "npm run env:start && npm run generate:fixtures && vite dev",
 		"dev:inspect": "node --inspect dev",
-		"dev:with-contracts": "cd .. && forge build && cd dApp && npm run generate:types && npm run dev:with-fixtures",
+		"dev:with-contracts": "npm run generate:types && npm run dev:with-fixtures",
 		"env:start": "../scripts/local/start.sh",
 		"env:stop": "../scripts/local/stop.sh",
 		"preview": "vite preview",
