@@ -5,6 +5,7 @@
  */
 
 import { GraphQLClient } from 'graphql-request';
+import { PUBLIC_SUBGRAPH_URL, PUBLIC_SUBGRAPH_TOKEN } from '$env/static/public';
 import type { QueryVariables } from './types';
 
 /**
@@ -23,8 +24,8 @@ const CONFIG = {
 /**
  * Get subgraph URL and auth token from environment
  */
-const SUBGRAPH_URL = import.meta.env.VITE_PUBLIC_SUBGRAPH_URL || CONFIG.defaultUrl;
-const SUBGRAPH_AUTH_TOKEN = import.meta.env.VITE_SUBGRAPH_AUTH_TOKEN;
+const SUBGRAPH_URL = PUBLIC_SUBGRAPH_URL || CONFIG.defaultUrl;
+const SUBGRAPH_AUTH_TOKEN = PUBLIC_SUBGRAPH_TOKEN;
 
 // Debug log
 console.log('Subgraph URL:', SUBGRAPH_URL);
