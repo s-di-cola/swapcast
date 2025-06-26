@@ -17,5 +17,6 @@ remappings = [
 
 [rpc_endpoints]
 ink_sepolia = "https://rpc-gel-sepolia.inkonchain.com/"
+eth_sepolia = "https://sepolia.infura.io/v3/${INFURA_API_KEY}"
 
 # See more config options https://github.com/foundry-rs/foundry/blob/master/crates/config/README.md#all-options
