@@ -34,7 +34,7 @@
 	>
 		<!-- Market header with pair name and status -->
 		<div class="mb-3 flex h-6 items-center justify-between">
-			<p class="text-sm font-medium text-gray-600">{market.name} Market</p>
+			<p class="text-sm font-medium text-gray-600">{market.name}</p>
 			<div class="flex items-center space-x-2">
 				<span
 						class="inline-flex items-center rounded-full bg-gray-100 px-2 py-0.5 text-xs font-medium text-gray-800"
