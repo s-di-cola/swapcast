@@ -37,3 +37,29 @@ export const ink_sepolia = {
     },
     testnet: true
 };
+
+export const eth_sepolia = {
+    id: 11155111,
+    name: 'Ethereum Sepolia',
+    network: 'eth_sepolia',
+    nativeCurrency: {
+        name: 'Ether',
+        symbol: 'ETH',
+        decimals: 18
+    },
+    rpcUrls: {
+        default: {
+            http: ['https://ethereum-sepolia-rpc.publicnode.com']
+        },
+        public: {
+            http: ['https://ethereum-sepolia-rpc.publicnode.com']
+        }
+    },
+    blockExplorers: {
+        default: {
+            name: 'Etherscan',
+            url: 'https://sepolia.etherscan.io'
+        }
+    },
+    testnet: true
+};

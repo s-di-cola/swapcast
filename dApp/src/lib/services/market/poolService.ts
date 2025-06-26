@@ -3,7 +3,6 @@ import { getTickSpacing } from '$lib/services/market/helpers';
 import { Token } from '@uniswap/sdk-core';
 import { getPoolManager } from '$generated/types/PoolManager';
 import { PUBLIC_SWAPCASTHOOK_ADDRESS, PUBLIC_UNIV4_POOLMANAGER_ADDRESS } from '$env/static/public';
-import { anvil } from '$lib/configs/networks';
 import { appKit } from '$lib/configs/wallet.config';
 import { getCurrentNetworkConfig } from '$lib/utils/network';
 
