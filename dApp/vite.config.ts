@@ -5,6 +5,14 @@ import { defineConfig } from 'vite';
 export default defineConfig({
 	plugins: [sveltekit(), tailwindcss()],
 	build: {
-		target: 'esnext'
+		target: 'esnext',
+		rollupOptions: {
+			output: {
+				manualChunks: {
+					vendor: ['svelte'],
+					ui: ['flowbite-svelte', 'lucide-svelte']
+				}
+			}
+		}
 	}
 });
