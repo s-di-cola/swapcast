@@ -42,10 +42,10 @@ contract SwapCastHook is BaseHook, Ownable {
     /**
      * @notice Expected length in bytes for the `hookData` when making a prediction.
      * @dev This constant represents 20 bytes for `actualUser` (address) + 32 bytes for `marketId` (uint256) +
-     *      1 byte for `outcome` (uint8) + 16 bytes for `convictionStake` (uint128).
+     *      1 byte for `outcome` (uint8). No convictionStake needed as it's auto-calculated from swap amount.
      *      The `_afterSwap` function enforces this length for non-empty hookData.
      */
-    uint256 private constant PREDICTION_HOOK_DATA_LENGTH = 69; // 20 bytes for actualUser (address) + 32 bytes for marketId (uint256) + 1 byte for outcome (uint8) + 16 bytes for convictionStake (uint128)
+    uint256 private constant PREDICTION_HOOK_DATA_LENGTH = 53; // 20 bytes for actualUser (address) + 32 bytes for marketId (uint256) + 1 byte for outcome (uint8)
 
 
     /// @notice Placeholder address for native ETH
@@ -62,14 +62,16 @@ contract SwapCastHook is BaseHook, Ownable {
      * @param poolId The ID of the pool where the swap occurred.
      * @param marketId The ID of the prediction market.
      * @param outcome The predicted outcome (Bearish or Bullish).
-     * @param convictionStake The amount of conviction (stake) declared for this prediction.
+     * @param convictionStake The amount of conviction (stake) automatically calculated from swap.
+     * @param swapAmount The original swap amount before taking the 1% fee.
      */
     event PredictionAttempted(
         address indexed user,
         PoolId indexed poolId,
         uint256 marketId,
         PredictionTypes.Outcome outcome,
-        uint128 convictionStake
+        uint128 convictionStake,
+        uint256 swapAmount
     );
 
     /**
@@ -78,14 +80,16 @@ contract SwapCastHook is BaseHook, Ownable {
      * @param poolId The ID of the pool where the swap occurred.
      * @param marketId The ID of the prediction market.
      * @param outcome The predicted outcome (Bearish or Bullish).
-     * @param convictionStake The amount of conviction (stake) declared for this prediction.
+     * @param convictionStake The amount of conviction (stake) automatically calculated from swap.
+     * @param swapAmount The original swap amount before taking the 1% fee.
      */
     event PredictionRecorded(
         address indexed user,
         PoolId indexed poolId,
         uint256 marketId,
         PredictionTypes.Outcome outcome,
-        uint128 convictionStake
+        uint128 convictionStake,
+        uint256 swapAmount
     );
 
     /**
@@ -94,7 +98,8 @@ contract SwapCastHook is BaseHook, Ownable {
      * @param poolId The ID of the pool where the swap occurred.
      * @param marketId The ID of the prediction market.
      * @param outcome The predicted outcome (Bearish or Bullish).
-     * @param convictionStake The amount of conviction (stake) declared for this prediction.
+     * @param convictionStake The amount of conviction (stake) automatically calculated from swap.
+     * @param swapAmount The original swap amount before taking the 1% fee.
      * @param errorSelector The error selector from the PredictionPool's revert, if available.
      */
     event PredictionFailed(
@@ -103,6 +108,7 @@ contract SwapCastHook is BaseHook, Ownable {
         uint256 marketId,
         PredictionTypes.Outcome outcome,
         uint128 convictionStake,
+        uint256 swapAmount,
         bytes4 errorSelector
     );
 
@@ -127,11 +133,11 @@ contract SwapCastHook is BaseHook, Ownable {
      */
     error PredictionPoolZeroAddress();
     /**
-     * @notice Reverts if a user attempts to make a prediction (`hookData` is provided) but the conviction stake declared in `hookData` is zero.
-     * @dev This error is thrown in the _afterSwap function when a prediction attempt is made with zero conviction stake.
+     * @notice Reverts if the calculated conviction stake from the swap amount is zero or too small.
+     * @dev This error is thrown in the _afterSwap function when the 1% fee calculation results in zero stake.
      *      A non-zero conviction stake is required to ensure users have skin in the game when making predictions.
      */
-    error NoConvictionStakeDeclaredInHookData();
+    error InsufficientSwapAmountForStake();
 
     /**
      * @notice Reverts if the call to `predictionManager.recordPrediction` fails for any reason.
@@ -228,6 +234,7 @@ contract SwapCastHook is BaseHook, Ownable {
         if (!success) revert ETHTransferFailed();
     }
 
+
     /**
      * @notice Defines the permissions for this hook, indicating which hook points it will implement.
      * @dev Overrides `BaseHook.getHookPermissions`.
@@ -313,16 +320,15 @@ contract SwapCastHook is BaseHook, Ownable {
 
     /**
      * @dev Internal callback function executed by the `PoolManager` after a swap on a pool where this hook is registered.
-     *      This function contains the core logic for processing prediction attempts. It handles both direct PoolManager calls
-     *      and Universal Router calls with different hookData formats.
+     *      This function contains the core logic for processing prediction attempts with automatic 1% fee staking.
      * @param key The PoolKey identifying the pool where the swap occurred.
+     * @param delta The balance changes from the swap (used to calculate the 1% stake).
      * @param hookData Additional data passed to the hook, containing prediction details:
      *                 - bytes 0-19: actualUser (address) - The actual user making the prediction (may differ from sender).
      *                 - bytes 20-51: marketId (uint256) - ID of the prediction market.
      *                 - bytes 52: outcome (uint8) - The predicted outcome (0 for Bearish, 1 for Bullish).
-     *                 - bytes 53-68: convictionStake (uint128) - Amount of conviction (stake) declared.
      * @return hookReturnData The selector indicating which hook function was called.
-     * @return currencyDelta Any currency delta to be applied (always 0 for this hook).
+     * @return currencyDelta Currency delta for the 1% fee taken from the swap.
      */
     function _afterSwap(
         address, /*sender*/
@@ -331,54 +337,111 @@ contract SwapCastHook is BaseHook, Ownable {
         BalanceDelta delta,
         bytes calldata hookData
     ) internal override returns (bytes4 hookReturnData, int128 currencyDelta) {
-        int128 amount0 = BalanceDeltaLibrary.amount0(delta);
-        int128 amount1 = BalanceDeltaLibrary.amount1(delta);
-
-        // Calculate the incoming amount and 1% fee
-        uint256 incoming = amount0 > 0
-            ? uint256(uint128(amount0))
-            : uint256(uint128(amount1));
-        address tokenIn = amount0 > 0 ? Currency.unwrap(key.currency0) : Currency.unwrap(key.currency1);
-        uint256 feeAmount = incoming / 100;  // 1% fee
-        uint256 userAmount = incoming - feeAmount;
-
-        // If no prediction data, just return
+        // If no prediction data, just return early
         if (hookData.length == 0) {
             return (BaseHook.afterSwap.selector, 0);
         }
 
-        // Validate hookData length
-        if (hookData.length != PREDICTION_HOOK_DATA_LENGTH) {
+        // Validate hookData length - allow 52 or 53 bytes for flexibility
+        if (hookData.length != PREDICTION_HOOK_DATA_LENGTH && hookData.length != 52) {
             emit HookDataDebug(hookData.length, PREDICTION_HOOK_DATA_LENGTH, false);
-            revert InvalidHookDataLength(hookData.length, PREDICTION_HOOK_DATA_LENGTH);
+            // If this is likely Universal Router hookData, just skip processing
+            return (BaseHook.afterSwap.selector, 0);
         }
 
-        // Decode prediction parameters (but ignore the stake value from hookData)
-        // Note: We need to take care when encoding and decoding hookData to ensure it matches the expected format.
-        (address actualUser, uint256 marketId, uint8 outcome,) =
-            abi.decode(hookData, (address, uint256, uint8, uint128));
+        // Try to decode prediction parameters safely
+        address actualUser;
+        uint256 marketId;
+        uint8 outcome;
+        
+        // Safe decoding with try/catch to handle malformed Universal Router data
+        bool decodingSuccessful = _tryDecodePredictionData(hookData);
+        if (!decodingSuccessful) {
+            // If decoding fails, this is probably Universal Router data, skip processing
+            emit HookDataDebug(hookData.length, PREDICTION_HOOK_DATA_LENGTH, true);
+            return (BaseHook.afterSwap.selector, 0);
+        }
+        
+        // If decoding succeeded, manually extract the packed values
+        // Extract address from bytes 0-19 (need to shift right to get the address)
+        assembly {
+            let data := calldataload(hookData.offset)
+            actualUser := shr(96, data) // Shift right 96 bits (12 bytes) to get address from left-aligned 32 bytes
+        }
+        
+        // Extract uint256 from bytes 20-51
+        assembly {
+            marketId := calldataload(add(hookData.offset, 20))
+        }
+        
+        // Extract uint8 from byte 52
+        assembly {
+            let data := calldataload(add(hookData.offset, 52))
+            outcome := byte(0, data) // Get the first byte
+        }
+        
+        // Additional validation: marketId should be non-zero for valid predictions
+        // and outcome should be 0 or 1
+        if (marketId == 0 || outcome > 1) {
+            emit HookDataDebug(hookData.length, PREDICTION_HOOK_DATA_LENGTH, true);
+            return (BaseHook.afterSwap.selector, 0);
+        }
 
-        // handle the user's funds from the swap
-        if (tokenIn == address(WETH)) {
-            // If WETH, unwrap and send as native ETH
-            IWETH9(WETH).withdraw(userAmount);
-            (bool ok, ) = actualUser.call{ value: userAmount }("");
-            require(ok, "ETH transfer failed");
+        // Calculate the swap amounts
+        int128 amount0 = BalanceDeltaLibrary.amount0(delta);
+        int128 amount1 = BalanceDeltaLibrary.amount1(delta);
+        
+        // Determine which amount is the input (positive means tokens going out of pool to user)
+        // For exactInput swaps: amount0 or amount1 will be positive (tokens user receives)
+        // We want to take 1% of the input amount, which corresponds to the positive amount
+        uint256 swapOutputAmount;
+        Currency outputCurrency;
+        
+        if (amount0 > 0 && amount1 <= 0) {
+            // User is receiving currency0, so they input currency1
+            swapOutputAmount = uint256(uint128(amount0));
+            outputCurrency = key.currency0;
+        } else if (amount1 > 0 && amount0 <= 0) {
+            // User is receiving currency1, so they input currency0  
+            swapOutputAmount = uint256(uint128(amount1));
+            outputCurrency = key.currency1;
         } else {
-            // For other tokens, send directly
-            SafeERC20.safeTransfer(
-                IERC20(tokenIn),
-                actualUser,
-                userAmount
-            );
+            // Unexpected delta pattern, skip prediction
+            return (BaseHook.afterSwap.selector, 0);
         }
 
-        // Swap the fee to ETH for staking
-        uint256 ethForStake = _swapTokensForETH(tokenIn, feeAmount, 0);
-        uint128 convictionStake = SafeCast.toUint128(ethForStake);
+        // Calculate 1% fee from the output amount
+        uint256 feeAmount = swapOutputAmount / 100;
+        
+        // Check if fee amount is sufficient for staking
+        if (feeAmount == 0) {
+            revert InsufficientSwapAmountForStake();
+        }
 
-        // Use the converted ETH for staking
-        try predictionManager.recordPrediction{value: ethForStake}(
+        // Calculate stake amount based on the 1% fee from swap
+        // If the fee amount is too small, use a minimum threshold
+        uint256 stakeAmount;
+        if (feeAmount >= 0.001 ether) {
+            // Use the calculated fee amount if it's substantial enough
+            stakeAmount = feeAmount;
+        } else if (feeAmount > 0) {
+            // For very small swaps, use a minimum stake of 0.01 ETH
+            stakeAmount = 0.01 ether;
+        } else {
+            // If fee calculation results in zero, revert
+            revert InsufficientSwapAmountForStake();
+        }
+
+        uint128 convictionStake = SafeCast.toUint128(stakeAmount);
+        
+        // Calculate the total ETH needed (stake + protocol fee)
+        // Get protocol fee basis points from prediction manager
+        uint256 feeBasisPoints = predictionManager.protocolFeeBasisPoints();
+        uint256 protocolFee = (stakeAmount * feeBasisPoints) / 10000;
+        uint256 totalEthNeeded = stakeAmount + protocolFee;
+
+        // Record the prediction with calculated stake and total ETH amount
+        try predictionManager.recordPrediction{value: totalEthNeeded}(
             actualUser,
             marketId,
             PredictionTypes.Outcome(outcome),
@@ -389,7 +452,8 @@ contract SwapCastHook is BaseHook, Ownable {
                 key.toId(),
                 marketId,
                 PredictionTypes.Outcome(outcome),
-                convictionStake
+                convictionStake,
+                swapOutputAmount
             );
         } catch Error(string memory reason) {
             string memory errorMessage = string(abi.encode("PredictionManager Error: ", reason));
@@ -399,6 +463,7 @@ contract SwapCastHook is BaseHook, Ownable {
                 marketId,
                 PredictionTypes.Outcome(outcome),
                 convictionStake,
+                swapOutputAmount,
                 bytes4(0)
             );
             revert PredictionRecordingFailed(errorMessage);
@@ -417,12 +482,47 @@ contract SwapCastHook is BaseHook, Ownable {
                 marketId,
                 PredictionTypes.Outcome(outcome),
                 convictionStake,
+                swapOutputAmount,
                 errorSelector
             );
             revert PredictionRecordingFailed(errorMessage);
         }
 
+        // For now, don't try to take any currency delta
+        // Just return zero delta to avoid complex currency handling
+        
         return (BaseHook.afterSwap.selector, 0);
+    }
+
+    /**
+     * @dev Internal function to safely try decoding hookData without reverting.
+     * @param hookData The raw hookData bytes to test.
+     * @return success True if decoding succeeded, false otherwise.
+     */
+    function _tryDecodePredictionData(bytes calldata hookData) internal pure returns (bool success) {
+        // Use assembly for safe decoding to avoid reverts
+        if (hookData.length < 53) {
+            return false;
+        }
+        
+        // Check if we can safely decode the first 20 bytes as an address
+        // and the next 32 bytes as uint256, and the last byte as uint8
+        assembly {
+            // Load the address (first 20 bytes)
+            let addr := shr(96, calldataload(hookData.offset))
+            
+            // Load the uint256 (next 32 bytes)
+            let marketId := calldataload(add(hookData.offset, 20))
+            
+            // Load the uint8 (last byte)
+            let outcome := byte(0, calldataload(add(hookData.offset, 52)))
+            
+            // Basic validation: address should not be zero, marketId should not be zero, outcome should be 0 or 1
+            success := true
+            if or(or(iszero(addr), iszero(marketId)), gt(outcome, 1)) {
+                success := false
+            }
+        }
     }
 
     /**

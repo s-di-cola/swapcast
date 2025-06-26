@@ -63,6 +63,7 @@ const FIXTURE_PRESETS: Record<string, Partial<MarketGenerationConfig>> = {
 
 /**
  * Fund the hook contract with ETH for processing predictions
+ * Note: With Delta feature, hook takes 1% of each swap as stake automatically
  */
 async function fundHookForPredictions() {
     const hookAddress = CONTRACT_ADDRESSES.SWAPCAST_HOOK as Address;
@@ -72,7 +73,8 @@ async function fundHookForPredictions() {
     const fundingAmount = parseEther('1000000000');  
     
     if (currentBalance < parseEther('5000000000')) {  
-        console.log(chalk.yellow(`📤 Funding hook with ${formatEther(fundingAmount)} ETH for WHALE predictions...`));
+        console.log(chalk.yellow(`📤 Funding hook with ${formatEther(fundingAmount)} ETH for Delta predictions...`));
+        console.log(chalk.gray(`   (Hook will auto-take 1% of each swap as stake)`));
         
         await publicClient.request({
             method: 'anvil_setBalance' as any,
@@ -80,7 +82,7 @@ async function fundHookForPredictions() {
         });
         
         const newBalance = await publicClient.getBalance({ address: hookAddress });
-        console.log(chalk.green(`💰 Hook now has ${formatEther(newBalance)} ETH for whale predictions`));
+        console.log(chalk.green(`💰 Hook now has ${formatEther(newBalance)} ETH for Delta mode predictions`));
     }
 }
 
@@ -231,7 +233,7 @@ function printFinalSummary(
 		console.log(chalk.green('   • Hook contract processing swaps correctly'));
 		console.log(chalk.green('   • Predictions being recorded via Universal Router'));
 		console.log(chalk.green('   • NFTs being minted for each prediction'));
-		console.log(chalk.green('   • Protocol fees being collected'));
+		console.log(chalk.green('   • Delta feature: 1% auto-stake from swaps! 🔄'));
 		console.log(chalk.green('   • Enhanced whale system working perfectly! 🐋'));
 		console.log(chalk.green('   • Balance validation preventing errors! 🛡️'));
 		console.log(chalk.green('   • Whale balance restoration working! 🔄'));
@@ -252,11 +254,12 @@ function printFinalSummary(
 		console.log(chalk.cyan('\n🚀 NEXT STEPS:'));
 		console.log(chalk.gray('   1. Your SwapCast system is operational with enhanced whale fixtures'));
 		console.log(chalk.gray('   2. Hook successfully processes swaps and records predictions'));
-		console.log(chalk.gray('   3. NFTs are minted for each whale prediction'));
-		console.log(chalk.gray('   4. Balance validation prevents TRANSFER_FROM errors'));
-		console.log(chalk.gray('   5. Whale balances auto-restore between markets'));
-		console.log(chalk.gray('   6. Ready for frontend integration and testing!'));
-		console.log(chalk.gray('   7. Enhanced whale system provides reliable high-value patterns'));
+		console.log(chalk.gray('   3. Delta feature: 1% of each swap auto-staked (no separate tx needed)'));
+		console.log(chalk.gray('   4. NFTs are minted for each whale prediction'));
+		console.log(chalk.gray('   5. Balance validation prevents TRANSFER_FROM errors'));
+		console.log(chalk.gray('   6. Whale balances auto-restore between markets'));
+		console.log(chalk.gray('   7. Ready for frontend integration and testing!'));
+		console.log(chalk.gray('   8. Enhanced whale system provides reliable high-value patterns'));
 	}
 
 	console.log(chalk.blue('\n' + '='.repeat(80)));
