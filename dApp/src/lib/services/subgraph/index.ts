@@ -16,57 +16,57 @@
 
 // Re-export all types
 export type {
-	SubgraphPaginationOptions,
-	SubgraphPaginatedResponse,
-	SubgraphUser,
-	SubgraphMarketRef,
-	SubgraphMarket,
-	SubgraphPrediction,
-	SubgraphUserPrediction,
-	SubgraphMarketStats,
-	PredictionOutcome,
-	OutcomeLabel,
-	QueryVariables,
-	GraphQLResponse
+    SubgraphPaginationOptions,
+    SubgraphPaginatedResponse,
+    SubgraphUser,
+    SubgraphMarketRef,
+    SubgraphMarket,
+    SubgraphPrediction,
+    SubgraphUserPrediction,
+    SubgraphMarketStats,
+    PredictionOutcome,
+    OutcomeLabel,
+    QueryVariables,
+    GraphQLResponse
 } from './types';
 
 // Re-export main operations
 export {
-	getMarketPredictions,
-	getMarketFromSubgraph,
-	getUserPredictions,
-	getRecentPredictions,
-	getAllMarketsFromSubgraph,
-	searchMarkets,
-	getMarketStatistics,
-	batchGetMarkets,
-	getGlobalStats
+    getMarketPredictions,
+    getMarketFromSubgraph,
+    getUserPredictions,
+    getRecentPredictions,
+    getAllMarketsFromSubgraph,
+    searchMarkets,
+    getMarketStatistics,
+    batchGetMarkets,
+    getGlobalStats
 } from './operations';
 
 // Re-export utility functions
 export {
-	formatPredictionOutcome,
-	formatTimestamp,
-	formatAmount,
-	calculatePagination,
-	calculateMarketStats,
-	isPredictionWinning,
-	isValidSubgraphUrl,
-	sanitizeGraphQLVariable,
-	serializeBigInts
+    formatPredictionOutcome,
+    formatTimestamp,
+    formatAmount,
+    calculatePagination,
+    calculateMarketStats,
+    isPredictionWinning,
+    isValidSubgraphUrl,
+    sanitizeGraphQLVariable,
+    serializeBigInts
 } from './utils';
 
 // Re-export client utilities
-export { graphQLClient, executeQuery, checkSubgraphHealth, getSubgraphMeta } from './client';
+export {graphQLClient, executeQuery, checkSubgraphHealth, getSubgraphMeta} from './client';
 
 // Re-export query constants (for advanced usage)
 export {
-	GET_MARKET_PREDICTIONS,
-	GET_MARKET_DETAILS,
-	GET_USER_PREDICTIONS,
-	GET_MARKET_STATS,
-	GET_RECENT_PREDICTIONS,
-	GET_ALL_MARKETS,
-	SEARCH_MARKETS,
-	GET_GLOBAL_STATS
+    GET_MARKET_PREDICTIONS,
+    GET_MARKET_DETAILS,
+    GET_USER_PREDICTIONS,
+    GET_MARKET_STATS,
+    GET_RECENT_PREDICTIONS,
+    GET_ALL_MARKETS,
+    SEARCH_MARKETS,
+    GET_GLOBAL_STATS
 } from './queries';
