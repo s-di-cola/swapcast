@@ -4,11 +4,11 @@ schema:
 dataSources:
   - kind: ethereum
     name: PredictionManager
-    network: mainnet-fork
+    network: sepolia
     source:
-      address: '0xddCF8c63f36eb83b72BAf6dA3AA799f9A08caa9A'
+      address: '0x82b3eca5e552808d97b37e71e580b245141d2e7b'
       abi: PredictionManager
-      startBlock: 22787810
+      startBlock: 8630600
     mapping:
       kind: ethereum/events
       apiVersion: 0.0.7
