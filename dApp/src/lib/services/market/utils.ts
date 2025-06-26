@@ -167,8 +167,9 @@ export function transformMarketDetails(details: MarketDetailsResult, assetPair: 
 		// Log the raw price threshold with its type
 		console.log(`Raw price threshold (type: ${typeof details.priceThreshold}, value: ${details.priceThreshold})`);
 
-		// The price threshold is now stored as a direct USD value (e.g., 3450 for $3450)
-		priceThreshold = Number(details.priceThreshold);
+		// The price threshold is stored in 8-decimal format (like Chainlink feeds)
+		// Convert from 8-decimal format to regular USD value
+		priceThreshold = Number(details.priceThreshold) / 1e8;
 		
 		console.log(`Price threshold (USD): $${priceThreshold.toLocaleString()}`);
 		
