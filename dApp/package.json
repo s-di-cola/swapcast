@@ -11,7 +11,7 @@
 		"dev:with-contracts": "forge build && npm run generate:types && npm run dev:with-fixtures",
 		"env:start": "../scripts/local/start.sh",
 		"env:stop": "../scripts/local/stop.sh",
-		"build": "vite build",
+		"build": "npm run generate:types && vite build",
 		"preview": "vite preview",
 		"prepare": "svelte-kit sync && npm run generate:types",
 		"test": "playwright test",
